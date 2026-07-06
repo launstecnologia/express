@@ -272,7 +272,17 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6" class="px-5 py-8 text-center text-sm text-gray-400">Nenhum usuário operacional cadastrado ainda.</td>
+                    <td colspan="6" class="px-5 py-10 text-center text-sm text-gray-500">
+                        <p>Nenhum usuário operacional cadastrado ainda.</p>
+                        @unless ($temSubUsuarioPrincipal ?? false)
+                            <form method="POST" action="{{ route('usuarios.subusuarios.garantir-principal', $usuario) }}" class="mt-4">
+                                @csrf
+                                <button type="submit" class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 shadow-sm hover:bg-amber-100">
+                                    <i class="fa-solid fa-link mr-1"></i> Criar acesso com e-mail comercial ({{ $usuario->email }})
+                                </button>
+                            </form>
+                        @endunless
+                    </td>
                 </tr>
             @endforelse
         </tbody>

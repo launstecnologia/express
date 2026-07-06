@@ -157,6 +157,15 @@ class UsuarioController extends Controller
             'planosHabilitados',
         ]);
 
+        if (
+            auth()->user()?->tipo === 'admin'
+            && in_array($usuario->tipo, ['master', 'marketplace', 'revenda'], true)
+            && $usuario->subUsuarios->isEmpty()
+        ) {
+            app(SubUsuarioPrincipalService::class)->garantirParaDono($usuario);
+            $usuario->load('subUsuarios.perfil');
+        }
+
         $whitelabel = null;
         $urlAcessoOperacional = null;
 
