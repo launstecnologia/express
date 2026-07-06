@@ -11,6 +11,7 @@ use App\Services\HierarquiaService;
 use App\Services\MarketplaceBrandingService;
 use App\Services\MarketplacePlanoService;
 use App\Services\NotificacaoEmailService;
+use App\Services\SubUsuarioPrincipalService;
 use App\Support\NotificacaoVars;
 use App\Support\UsuarioComercial;
 use Illuminate\Database\Eloquent\Builder;
@@ -129,6 +130,10 @@ class UsuarioController extends Controller
             }
         }
 
+        if (in_array($usuario->tipo, ['master', 'marketplace', 'revenda'], true)) {
+            app(SubUsuarioPrincipalService::class)->garantirParaDono($usuario, $dados['password']);
+        }
+
         app(NotificacaoEmailService::class)->enfileirar(
             'usuario.criado',
             $usuario->email,
@@ -184,6 +189,8 @@ class UsuarioController extends Controller
             'proximosNiveis' => $hierarquia->proximosNiveisPermitidos($usuario),
             'whitelabel' => $whitelabel,
             'urlAcessoOperacional' => $urlAcessoOperacional,
+            'temSubUsuarioPrincipal' => in_array($usuario->tipo, ['master', 'marketplace', 'revenda'], true)
+                && app(SubUsuarioPrincipalService::class)->donoTemPrincipal($usuario),
         ]);
     }
 

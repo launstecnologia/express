@@ -77,6 +77,7 @@ Route::middleware(['auth', 'trocar.senha', 'tenant.access'])->group(function () 
     });
     Route::get('usuarios/{usuario}/subusuarios/create', [SubUsuarioController::class, 'create'])->name('usuarios.subusuarios.create');
     Route::post('usuarios/{usuario}/subusuarios', [SubUsuarioController::class, 'store'])->name('usuarios.subusuarios.store');
+    Route::post('usuarios/{usuario}/subusuarios/garantir-principal', [SubUsuarioController::class, 'garantirPrincipal'])->name('usuarios.subusuarios.garantir-principal');
     Route::get('usuarios/{usuario}/subusuarios/{subUsuario}/senha', [SubUsuarioController::class, 'editPassword'])->name('usuarios.subusuarios.password.edit');
     Route::put('usuarios/{usuario}/subusuarios/{subUsuario}/senha', [SubUsuarioController::class, 'updatePassword'])->name('usuarios.subusuarios.password.update');
     Route::post('usuarios/{usuario}/subusuarios/{subUsuario}/resetar-senha', [SubUsuarioController::class, 'resetarSenha'])->name('usuarios.subusuarios.resetar-senha');

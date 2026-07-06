@@ -207,9 +207,19 @@
                 <h3 class="text-sm font-bold text-gray-800">Usuários operacionais</h3>
                 <p class="text-xs text-gray-400">Acessos internos vinculados a este {{ strtolower($tipoLabel[$usuario->tipo]) }}.</p>
             </div>
-            <a href="{{ route('usuarios.subusuarios.create', $usuario) }}" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">
-                + Cadastrar Usuário
-            </a>
+            <div class="flex flex-wrap gap-2">
+                @unless ($temSubUsuarioPrincipal ?? false)
+                    <form method="POST" action="{{ route('usuarios.subusuarios.garantir-principal', $usuario) }}">
+                        @csrf
+                        <button type="submit" class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 shadow-sm hover:bg-amber-100">
+                            <i class="fa-solid fa-link mr-1"></i> Criar acesso com e-mail comercial
+                        </button>
+                    </form>
+                @endunless
+                <a href="{{ route('usuarios.subusuarios.create', $usuario) }}" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">
+                    + Cadastrar Usuário
+                </a>
+            </div>
         </div>
     </div>
 

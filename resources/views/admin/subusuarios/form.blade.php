@@ -47,7 +47,8 @@
         </label>
         <label class="{{ $labelClass }} md:col-span-4">
             <span class="{{ $labelTextClass }}">E-mail</span>
-            <input name="email" type="email" value="{{ old('email') }}" placeholder="usuario@exemplo.com" class="{{ $inputClass }}">
+            <input name="email" type="email" value="{{ old('email', $dono->email) }}" placeholder="{{ $dono->email }}" class="{{ $inputClass }}">
+            <p class="text-[11px] text-slate-500">Pode ser o mesmo e-mail da conta comercial ({{ $dono->email }}).</p>
         </label>
         <label class="{{ $labelClass }} md:col-span-3">
             <span class="{{ $labelTextClass }}">Senha</span>

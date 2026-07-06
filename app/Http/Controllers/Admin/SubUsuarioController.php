@@ -7,6 +7,7 @@ use App\Models\PerfilPermissao;
 use App\Models\SubUsuario;
 use App\Models\Usuario;
 use App\Rules\EmailUnicoAutenticacao;
+use App\Services\SubUsuarioPrincipalService;
 use App\Support\UsuarioComercial;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -34,7 +35,7 @@ class SubUsuarioController extends Controller
 
         $dados = $request->validate([
             'nome' => ['required', 'string', 'max:200'],
-            'email' => ['required', 'email', 'max:150', new EmailUnicoAutenticacao],
+            'email' => ['required', 'email', 'max:150', new EmailUnicoAutenticacao(permitirEmailDonoId: $usuario->id)],
             'password' => ['required', 'string', 'min:8'],
             'perfil_id' => ['nullable', Rule::exists('perfis_permissao', 'id')->where('dono_id', $usuario->id)],
             'ativo' => ['boolean'],
@@ -46,6 +47,22 @@ class SubUsuarioController extends Controller
         SubUsuario::create($dados);
 
         return redirect()->route('usuarios.show', $usuario)->with('status', 'Usuário operacional cadastrado.');
+    }
+
+    public function garantirPrincipal(Usuario $usuario, SubUsuarioPrincipalService $service)
+    {
+        abort_if($usuario->tipo === 'admin', 404);
+        abort_unless(UsuarioComercial::podeGerenciar($usuario), 403);
+
+        $subUsuario = $service->garantirParaDono($usuario);
+
+        $mensagem = $subUsuario->wasRecentlyCreated
+            ? 'Usuário operacional criado com o mesmo e-mail da conta comercial.'
+            : 'Usuário operacional com o e-mail comercial já existia.';
+
+        return redirect()
+            ->route('usuarios.show', $usuario)
+            ->with('status', $mensagem.' Login: '.$subUsuario->email);
     }
 
     public function editPassword(Usuario $usuario, SubUsuario $subUsuario)
