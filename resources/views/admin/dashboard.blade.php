@@ -67,68 +67,155 @@
     </div>
 
     <div class="space-y-4">
-        <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
-            @forelse ($planosResumo as $planoResumo)
-                @php
-                    $totalPartes = max($planoResumo['debito'] + $planoResumo['credito'] + $planoResumo['parcelado'] + $planoResumo['pix'], 0.01);
-                    $debitoPct = round(($planoResumo['debito'] / $totalPartes) * 100, 2);
-                    $creditoPct = round(($planoResumo['credito'] / $totalPartes) * 100, 2);
-                    $parceladoPct = round(($planoResumo['parcelado'] / $totalPartes) * 100, 2);
-                    $pixPct = round(($planoResumo['pix'] / $totalPartes) * 100, 2);
-                    $debitoEnd = $debitoPct;
-                    $creditoEnd = $debitoEnd + $creditoPct;
-                    $parceladoEnd = $creditoEnd + $parceladoPct;
-                    $itensPlano = [
-                        ['label' => 'Débito', 'valor' => $planoResumo['debito'], 'percentual' => $debitoPct, 'cor' => 'bg-amber-400'],
-                        ['label' => 'Crédito à vista', 'valor' => $planoResumo['credito'], 'percentual' => $creditoPct, 'cor' => 'bg-emerald-500'],
-                        ['label' => 'Parcelado', 'valor' => $planoResumo['parcelado'], 'percentual' => $parceladoPct, 'cor' => 'bg-blue-500'],
-                        ['label' => 'PIX', 'valor' => $planoResumo['pix'], 'percentual' => $pixPct, 'cor' => 'bg-rose-500'],
-                    ];
-                @endphp
-
-                <div class="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm shadow-blue-100/60 dark:border-gray-700 dark:bg-gray-900 dark:shadow-none">
-                    <div class="flex items-start justify-between gap-3">
-                        <span class="rounded-full bg-blue-600 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
-                            {{ $planoResumo['nome'] }}
-                        </span>
-                        <div class="text-right">
-                            <p class="text-[11px] uppercase tracking-wide text-gray-400">Faturamento</p>
-                            <p class="text-lg font-bold text-gray-900 dark:text-gray-100">R$ {{ number_format($planoResumo['faturamento'], 2, ',', '.') }}</p>
+        @if (count($planosResumo) > 0)
+            <div
+                x-data="{
+                    current: 0,
+                    total: {{ count($planosResumo) }},
+                    scrollTo(index) {
+                        const track = this.$refs.track;
+                        const cards = track ? [...track.querySelectorAll('[data-carousel-card]')] : [];
+                        const card = cards[index];
+                        if (! card) return;
+                        card.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+                        this.current = index;
+                    },
+                    prev() { this.scrollTo(Math.max(0, this.current - 1)); },
+                    next() { this.scrollTo(Math.min(this.total - 1, this.current + 1)); },
+                    onScroll() {
+                        const track = this.$refs.track;
+                        if (! track) return;
+                        const cards = [...track.querySelectorAll('[data-carousel-card]')];
+                        const center = track.scrollLeft + track.clientWidth / 2;
+                        let closest = 0;
+                        let minDist = Infinity;
+                        cards.forEach((card, i) => {
+                            const cardCenter = card.offsetLeft + card.offsetWidth / 2;
+                            const dist = Math.abs(cardCenter - center);
+                            if (dist < minDist) { minDist = dist; closest = i; }
+                        });
+                        this.current = closest;
+                    },
+                }"
+                class="relative"
+            >
+                @if (count($planosResumo) > 1)
+                    <div class="mb-3 flex items-center justify-between gap-2">
+                        <p class="text-xs text-gray-500 dark:text-gray-400">
+                            <span x-text="current + 1"></span> / {{ count($planosResumo) }} planos
+                        </p>
+                        <div class="flex items-center gap-2">
+                            <button
+                                type="button"
+                                @click="prev()"
+                                :disabled="current === 0"
+                                :class="current === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-blue-100 dark:hover:bg-gray-700'"
+                                class="flex h-9 w-9 items-center justify-center rounded-full border border-blue-200 bg-white text-blue-600 shadow-sm transition dark:border-gray-600 dark:bg-gray-800 dark:text-blue-400"
+                                aria-label="Plano anterior"
+                            >
+                                <i class="fa-solid fa-chevron-left text-sm"></i>
+                            </button>
+                            <button
+                                type="button"
+                                @click="next()"
+                                :disabled="current >= total - 1"
+                                :class="current >= total - 1 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-blue-100 dark:hover:bg-gray-700'"
+                                class="flex h-9 w-9 items-center justify-center rounded-full border border-blue-200 bg-white text-blue-600 shadow-sm transition dark:border-gray-600 dark:bg-gray-800 dark:text-blue-400"
+                                aria-label="Próximo plano"
+                            >
+                                <i class="fa-solid fa-chevron-right text-sm"></i>
+                            </button>
                         </div>
                     </div>
+                @endif
 
-                    <div class="my-6 flex justify-center">
-                        <div class="relative h-36 w-36 rounded-full shadow-inner" style="background: conic-gradient(#f59e0b 0 {{ $debitoEnd }}%, #10b981 {{ $debitoEnd }}% {{ $creditoEnd }}%, #3b82f6 {{ $creditoEnd }}% {{ $parceladoEnd }}%, #f43f5e {{ $parceladoEnd }}% 100%);">
-                            <div class="absolute inset-9 rounded-full border border-blue-50 bg-white dark:border-gray-600 dark:bg-gray-900"></div>
-                            <div class="absolute inset-0 flex items-center justify-center">
-                                <div class="text-center">
-                                    <p class="text-[10px] uppercase tracking-wide text-gray-400">Comissão</p>
-                                    <p class="text-sm font-bold text-blue-700 dark:text-blue-400">R$ {{ number_format($planoResumo['comissao'], 2, ',', '.') }}</p>
+                <div
+                    x-ref="track"
+                    @scroll.debounce.50ms="onScroll()"
+                    class="dashboard-planos-carousel flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-1"
+                >
+                    @foreach ($planosResumo as $planoResumo)
+                        @php
+                            $totalPartes = max($planoResumo['debito'] + $planoResumo['credito'] + $planoResumo['parcelado'] + $planoResumo['pix'], 0.01);
+                            $debitoPct = round(($planoResumo['debito'] / $totalPartes) * 100, 2);
+                            $creditoPct = round(($planoResumo['credito'] / $totalPartes) * 100, 2);
+                            $parceladoPct = round(($planoResumo['parcelado'] / $totalPartes) * 100, 2);
+                            $pixPct = round(($planoResumo['pix'] / $totalPartes) * 100, 2);
+                            $debitoEnd = $debitoPct;
+                            $creditoEnd = $debitoEnd + $creditoPct;
+                            $parceladoEnd = $creditoEnd + $parceladoPct;
+                            $itensPlano = [
+                                ['label' => 'Débito', 'valor' => $planoResumo['debito'], 'percentual' => $debitoPct, 'cor' => 'bg-amber-400'],
+                                ['label' => 'Crédito à vista', 'valor' => $planoResumo['credito'], 'percentual' => $creditoPct, 'cor' => 'bg-emerald-500'],
+                                ['label' => 'Parcelado', 'valor' => $planoResumo['parcelado'], 'percentual' => $parceladoPct, 'cor' => 'bg-blue-500'],
+                                ['label' => 'PIX', 'valor' => $planoResumo['pix'], 'percentual' => $pixPct, 'cor' => 'bg-rose-500'],
+                            ];
+                        @endphp
+
+                        <div
+                            data-carousel-card="{{ $loop->index }}"
+                            class="w-full shrink-0 snap-start sm:w-[calc(50%-0.5rem)] xl:w-[calc(33.333%-0.67rem)]"
+                        >
+                            <div class="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm shadow-blue-100/60 dark:border-gray-700 dark:bg-gray-900 dark:shadow-none">
+                                <div class="flex items-start justify-between gap-3">
+                                    <span class="rounded-full bg-blue-600 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
+                                        {{ $planoResumo['nome'] }}
+                                    </span>
+                                    <div class="text-right">
+                                        <p class="text-[11px] uppercase tracking-wide text-gray-400">Faturamento</p>
+                                        <p class="text-lg font-bold text-gray-900 dark:text-gray-100">R$ {{ number_format($planoResumo['faturamento'], 2, ',', '.') }}</p>
+                                    </div>
+                                </div>
+
+                                <div class="my-6 flex justify-center">
+                                    <div class="relative h-36 w-36 rounded-full shadow-inner" style="background: conic-gradient(#f59e0b 0 {{ $debitoEnd }}%, #10b981 {{ $debitoEnd }}% {{ $creditoEnd }}%, #3b82f6 {{ $creditoEnd }}% {{ $parceladoEnd }}%, #f43f5e {{ $parceladoEnd }}% 100%);">
+                                        <div class="absolute inset-9 rounded-full border border-blue-50 bg-white dark:border-gray-600 dark:bg-gray-900"></div>
+                                        <div class="absolute inset-0 flex items-center justify-center">
+                                            <div class="text-center">
+                                                <p class="text-[10px] uppercase tracking-wide text-gray-400">Comissão</p>
+                                                <p class="text-sm font-bold text-blue-700 dark:text-blue-400">R$ {{ number_format($planoResumo['comissao'], 2, ',', '.') }}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-3">
+                                    @foreach ($itensPlano as $item)
+                                        <div class="grid grid-cols-[1fr_auto_auto] items-center gap-3 text-sm">
+                                            <span class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                                                <span class="h-2.5 w-2.5 rounded-full {{ $item['cor'] }}"></span>
+                                                {{ $item['label'] }}
+                                            </span>
+                                            <span class="font-semibold text-gray-900 dark:text-gray-100">R$ {{ number_format($item['valor'], 2, ',', '.') }}</span>
+                                            <span class="w-12 text-right text-xs text-gray-400">{{ number_format($item['percentual'], 2, ',', '.') }}%</span>
+                                        </div>
+                                    @endforeach
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    @endforeach
+                </div>
 
-                    <div class="space-y-3">
-                        @foreach ($itensPlano as $item)
-                            <div class="grid grid-cols-[1fr_auto_auto] items-center gap-3 text-sm">
-                                <span class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-                                    <span class="h-2.5 w-2.5 rounded-full {{ $item['cor'] }}"></span>
-                                    {{ $item['label'] }}
-                                </span>
-                                <span class="font-semibold text-gray-900 dark:text-gray-100">R$ {{ number_format($item['valor'], 2, ',', '.') }}</span>
-                                <span class="w-12 text-right text-xs text-gray-400">{{ number_format($item['percentual'], 2, ',', '.') }}%</span>
-                            </div>
+                @if (count($planosResumo) > 1)
+                    <div class="mt-3 flex justify-center gap-1.5">
+                        @foreach ($planosResumo as $planoResumo)
+                            <button
+                                type="button"
+                                @click="scrollTo({{ $loop->index }})"
+                                :class="current === {{ $loop->index }} ? 'w-6 bg-blue-600' : 'w-2 bg-gray-300 dark:bg-gray-600'"
+                                class="h-2 rounded-full transition-all"
+                                aria-label="Ir para {{ $planoResumo['nome'] }}"
+                            ></button>
                         @endforeach
                     </div>
-                </div>
-            @empty
-                <div class="col-span-full rounded-2xl border border-dashed border-blue-200 bg-white px-6 py-12 text-center dark:border-gray-600 dark:bg-gray-900">
-                    <p class="text-sm font-medium text-gray-600 dark:text-gray-300">Nenhuma transação EDI no período selecionado.</p>
-                    <p class="mt-1 text-xs text-gray-400">Os totais são calculados no banco por plano, sem carregar transação a transação.</p>
-                </div>
-            @endforelse
-        </div>
+                @endif
+            </div>
+        @else
+            <div class="rounded-2xl border border-dashed border-blue-200 bg-white px-6 py-12 text-center dark:border-gray-600 dark:bg-gray-900">
+                <p class="text-sm font-medium text-gray-600 dark:text-gray-300">Nenhuma transação EDI no período selecionado.</p>
+                <p class="mt-1 text-xs text-gray-400">Os totais são calculados no banco por plano, sem carregar transação a transação.</p>
+            </div>
+        @endif
 
         <div class="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm shadow-blue-100/60 dark:border-gray-700 dark:bg-gray-900 dark:shadow-none">
             <div class="mb-4 flex items-center gap-2">
@@ -223,4 +310,17 @@
     </div>
 </div>
 
+@endsection
+
+@section('scripts')
+<style>
+    .dashboard-planos-carousel {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .dashboard-planos-carousel::-webkit-scrollbar {
+        display: none;
+    }
+</style>
 @endsection
