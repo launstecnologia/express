@@ -25,12 +25,6 @@
             <i class="fa-solid fa-hand-holding-dollar w-5 text-center text-[15px]"></i>
             <span>Comissão</span>
         </a>
-        @if ($ehAdmin)
-            <a href="{{ route('admin.conciliacoes.index') }}" class="{{ $navClass('admin.conciliacoes.*') }}">
-                <i class="fa-solid fa-scale-balanced w-5 text-center text-[15px]"></i>
-                <span>Conciliação</span>
-            </a>
-        @endif
         @if (\App\Support\UsuarioComercial::ehAdmin() || $ehMaster)
             <a href="{{ route('comissoes.configuracoes.index') }}" class="{{ $navClass('comissoes.configuracoes.*') }}">
                 <i class="fa-solid fa-sliders w-5 text-center text-[15px]"></i>
@@ -126,6 +120,10 @@
                 <a href="{{ route('admin.email-templates.index') }}" class="{{ $navClass('admin.email-templates.*') }}">
                     <i class="fa-solid fa-envelope-open-text w-5 text-center text-[15px]"></i>
                     <span>Templates E-mail</span>
+                </a>
+                <a href="{{ route('admin.conciliacoes.index') }}" class="{{ $navClass('admin.conciliacoes.*') }}">
+                    <i class="fa-solid fa-scale-balanced w-5 text-center text-[15px]"></i>
+                    <span>Conciliação</span>
                 </a>
                 <a href="{{ route('admin.configuracoes.edit') }}" class="{{ $navClass('admin.configuracoes.*') }}">
                     <i class="fa-solid fa-gear w-5 text-center text-[15px]"></i>
