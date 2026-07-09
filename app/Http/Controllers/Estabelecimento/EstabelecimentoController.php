@@ -48,18 +48,6 @@ class EstabelecimentoController extends Controller
         $listarSemVinculoComercial = in_array($marketplaceFiltro, ['sem_marketplace', 'sem_vinculo'], true)
             || ($request->filled('vinculo') && $request->string('vinculo') === 'sem');
 
-        // "Sem marketplace/vínculo": começa SEM global scopes. O withoutGlobalScope no meio
-        // da query não estava surtindo efeito em produção (só vinham os 2 inativos).
-        $query = $listarSemVinculoComercial
-            ? Estabelecimento::withoutGlobalScopes()->with(['marketplace', 'revenda'])->latest()
-            : Estabelecimento::query()->with(['marketplace', 'revenda'])->latest();
-
-        if (! $listarSemVinculoComercial && $this->deveIncluirInativosNaListagem($request)) {
-            $query->withoutGlobalScope(ExcluirInativoSistemaScope::class);
-        }
-
-        $this->aplicarFiltrosIndex($query, $request);
-
         $filtros = $request->only([
             'busca',
             'codigo_edi',
@@ -76,6 +64,43 @@ class EstabelecimentoController extends Controller
             'data_inicio',
             'data_fim',
         ]);
+
+        // Caminho isolado: não passa por aplicarFiltrosIndex para o vínculo comercial,
+        // evitando qualquer where residual de ativo/status/escopo.
+        if ($listarSemVinculoComercial) {
+            $query = Estabelecimento::withoutGlobalScopes()
+                ->with(['marketplace', 'revenda'])
+                ->latest('estabelecimentos.id');
+
+            if ($marketplaceFiltro === 'sem_vinculo' || ($request->filled('vinculo') && $request->string('vinculo') === 'sem')) {
+                $query->whereNull('estabelecimentos.marketplace_id')
+                    ->whereNull('estabelecimentos.revenda_id');
+            } else {
+                $query->whereNull('estabelecimentos.marketplace_id');
+            }
+
+            // Aplica só filtros "seguros" (busca/documento/datas), nunca o filtro de ativo implícito.
+            $this->aplicarFiltrosIndexSemVinculo($query, $request);
+
+            return view('estabelecimento.index', [
+                'estabelecimentos' => $query->paginate(20)->withQueryString(),
+                'filtros' => $filtros,
+                'filtrosResumo' => $this->resumoFiltrosAplicados($filtros),
+                'masters' => $this->usuariosPorTipo('master'),
+                'marketplaces' => $this->usuariosPorTipo('marketplace'),
+                'revendas' => $this->usuariosPorTipo('revenda'),
+                'planos' => $this->marketplacePlano->planosDisponiveis(),
+                'segmentos' => Segmento::where('ativo', true)->orderBy('nome')->get(['id', 'nome']),
+            ]);
+        }
+
+        $query = Estabelecimento::query()->with(['marketplace', 'revenda'])->latest();
+
+        if ($this->deveIncluirInativosNaListagem($request)) {
+            $query->withoutGlobalScope(ExcluirInativoSistemaScope::class);
+        }
+
+        $this->aplicarFiltrosIndex($query, $request);
 
         return view('estabelecimento.index', [
             'estabelecimentos' => $query->paginate(20)->withQueryString(),
@@ -616,6 +641,92 @@ class EstabelecimentoController extends Controller
             'marketplace_id' => $dados['marketplace_id'] ?? null,
             'revenda_id' => $dados['revenda_id'] ?? null,
         ]);
+    }
+
+    /**
+     * Filtros auxiliares quando a listagem já está restrita a sem marketplace/vínculo.
+     * Não reaplica marketplace_id nem o filtro "ativo" (que estava escondendo os 16 ativos).
+     */
+    private function aplicarFiltrosIndexSemVinculo(Builder $query, Request $request): void
+    {
+        if ($request->filled('codigo_edi')) {
+            $codigo = trim((string) $request->input('codigo_edi'));
+            $query->where('token_pagseguro', 'like', '%'.$codigo.'%');
+        }
+
+        if ($request->filled('busca')) {
+            $termo = trim((string) $request->input('busca'));
+            $like = '%'.mb_strtolower($termo).'%';
+            $digitos = DocumentoBrasil::apenasDigitos($termo);
+            $idBusca = ltrim($termo, '#');
+            $buscaPorId = $idBusca !== '' && ctype_digit($idBusca);
+
+            $query->where(function (Builder $q) use ($like, $digitos, $termo, $buscaPorId, $idBusca) {
+                $q->whereRaw('LOWER(COALESCE(nome_fantasia, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(razao_social, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(nome_completo, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(cidade, "")) LIKE ?', [$like])
+                    ->orWhere('token_pagseguro', $termo);
+
+                if ($buscaPorId) {
+                    $q->orWhere('estabelecimentos.id', (int) $idBusca);
+                }
+
+                if ($digitos !== '') {
+                    $q->orWhereRaw(
+                        "REPLACE(REPLACE(REPLACE(COALESCE(cnpj, ''), '.', ''), '/', ''), '-', '') LIKE ?",
+                        ['%'.$digitos.'%'],
+                    )->orWhereRaw(
+                        "REPLACE(REPLACE(COALESCE(cpf, ''), '.', ''), '-', '') LIKE ?",
+                        ['%'.$digitos.'%'],
+                    );
+                }
+            });
+        }
+
+        if ($request->filled('master_id')) {
+            $query->where('master_id', $request->integer('master_id'));
+        }
+
+        if ($request->filled('revenda_id')) {
+            $query->where('revenda_id', $request->integer('revenda_id'));
+        }
+
+        $this->aplicarFiltrosSituacao($query, $request);
+
+        if ($request->filled('risco')) {
+            $query->where('risco', $request->string('risco'));
+        }
+
+        if ($request->filled('plano_id')) {
+            $planoFiltro = (string) $request->input('plano_id');
+            if ($planoFiltro === 'sem_plano') {
+                $query->whereNull('plano_id');
+            } elseif (ctype_digit($planoFiltro)) {
+                $query->where('plano_id', (int) $planoFiltro);
+            }
+        }
+
+        if ($request->filled('segmento')) {
+            $query->where('segmento', $request->string('segmento'));
+        }
+
+        if ($request->filled('pessoa_tipo')) {
+            $query->where('pessoa_tipo', $request->string('pessoa_tipo'));
+        }
+
+        // Só aplica "ativo" se o usuário escolheu explicitamente Sim/Não.
+        if ($request->filled('ativo') && in_array((string) $request->input('ativo'), ['0', '1'], true)) {
+            $query->where('estabelecimentos.ativo', $request->boolean('ativo'));
+        }
+
+        if ($request->filled('data_inicio')) {
+            $query->whereDate('created_at', '>=', $request->date('data_inicio'));
+        }
+
+        if ($request->filled('data_fim')) {
+            $query->whereDate('created_at', '<=', $request->date('data_fim'));
+        }
     }
 
     private function aplicarFiltrosIndex(Builder $query, Request $request): void
