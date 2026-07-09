@@ -43,6 +43,8 @@ class EmailUnicoAutenticacao implements ValidationRule
         $subUsuarioConflito = SubUsuario::query()
             ->whereRaw('LOWER(email) = ?', [$email])
             ->when($this->ignoreSubUsuarioId, fn ($query) => $query->whereKeyNot($this->ignoreSubUsuarioId))
+            // Na edição do dono, o SubUsuario principal reutiliza o mesmo e-mail.
+            ->when($this->ignoreUsuarioId, fn ($query) => $query->where('dono_id', '!=', $this->ignoreUsuarioId))
             ->when(
                 $this->permitirEmailDonoId,
                 fn ($query) => $query->where('dono_id', '!=', $this->permitirEmailDonoId)
