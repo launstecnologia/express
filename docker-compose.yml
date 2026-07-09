@@ -41,6 +41,7 @@ services:
       - .:/var/www/html
       - vendor:/var/www/html/vendor
       - storage:/var/www/html/storage
+      - ./docker/php/opcache.ini:/usr/local/etc/php/conf.d/opcache.ini:ro
     env_file: .env
     depends_on:
       mysql:
@@ -62,6 +63,7 @@ services:
       - .:/var/www/html
       - vendor:/var/www/html/vendor
       - storage:/var/www/html/storage
+      - ./docker/php/opcache.ini:/usr/local/etc/php/conf.d/opcache.ini:ro
     env_file: .env
     depends_on:
       mysql:
@@ -85,6 +87,7 @@ services:
       - .:/var/www/html
       - vendor:/var/www/html/vendor
       - storage:/var/www/html/storage
+      - ./docker/php/opcache.ini:/usr/local/etc/php/conf.d/opcache.ini:ro
     env_file: .env
     depends_on:
       mysql:

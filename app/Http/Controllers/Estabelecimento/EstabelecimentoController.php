@@ -35,7 +35,10 @@ use App\Support\PlatformSettings;
 use App\Scopes\ExcluirInativoSistemaScope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log as LogFacade;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -65,33 +68,53 @@ class EstabelecimentoController extends Controller
             'data_fim',
         ]);
 
-        // Caminho isolado: não passa por aplicarFiltrosIndex para o vínculo comercial,
-        // evitando qualquer where residual de ativo/status/escopo.
+        // Caminho isolado: Query Builder puro (sem Eloquent/global scopes) + hydrate.
+        // Evita OPcache/escopo antigo que deixava só os 2 inativos na tela.
         if ($listarSemVinculoComercial) {
-            $query = Estabelecimento::withoutGlobalScopes()
-                ->with(['marketplace', 'revenda'])
-                ->latest('estabelecimentos.id');
+            $base = DB::table('estabelecimentos')->orderByDesc('id');
 
             if ($marketplaceFiltro === 'sem_vinculo' || ($request->filled('vinculo') && $request->string('vinculo') === 'sem')) {
-                $query->whereNull('estabelecimentos.marketplace_id')
-                    ->whereNull('estabelecimentos.revenda_id');
+                $base->whereNull('marketplace_id')->whereNull('revenda_id');
             } else {
-                $query->whereNull('estabelecimentos.marketplace_id');
+                $base->whereNull('marketplace_id');
             }
 
-            // Aplica só filtros "seguros" (busca/documento/datas), nunca o filtro de ativo implícito.
-            $this->aplicarFiltrosIndexSemVinculo($query, $request);
+            $this->aplicarFiltrosIndexSemVinculoQuery($base, $request);
 
-            return view('estabelecimento.index', [
-                'estabelecimentos' => $query->paginate(20)->withQueryString(),
-                'filtros' => $filtros,
-                'filtrosResumo' => $this->resumoFiltrosAplicados($filtros),
-                'masters' => $this->usuariosPorTipo('master'),
-                'marketplaces' => $this->usuariosPorTipo('marketplace'),
-                'revendas' => $this->usuariosPorTipo('revenda'),
-                'planos' => $this->marketplacePlano->planosDisponiveis(),
-                'segmentos' => Segmento::where('ativo', true)->orderBy('nome')->get(['id', 'nome']),
+            $paginator = $base->paginate(20)->withQueryString();
+            $ids = collect($paginator->items())->pluck('id')->all();
+
+            $models = $ids === []
+                ? collect()
+                : Estabelecimento::withoutGlobalScopes()
+                    ->with(['marketplace', 'revenda'])
+                    ->whereIn('id', $ids)
+                    ->get()
+                    ->sortBy(fn (Estabelecimento $e) => array_search($e->id, $ids, true))
+                    ->values();
+
+            $paginator->setCollection($models);
+
+            LogFacade::info('estab.filtro_sem_vinculo', [
+                'versao' => 'qb-v1',
+                'marketplace_filtro' => $marketplaceFiltro,
+                'total' => $paginator->total(),
+                'query' => $request->query(),
             ]);
+
+            return response()
+                ->view('estabelecimento.index', [
+                    'estabelecimentos' => $paginator,
+                    'filtros' => $filtros,
+                    'filtrosResumo' => $this->resumoFiltrosAplicados($filtros),
+                    'masters' => $this->usuariosPorTipo('master'),
+                    'marketplaces' => $this->usuariosPorTipo('marketplace'),
+                    'revendas' => $this->usuariosPorTipo('revenda'),
+                    'planos' => $this->marketplacePlano->planosDisponiveis(),
+                    'segmentos' => Segmento::where('ativo', true)->orderBy('nome')->get(['id', 'nome']),
+                ])
+                ->header('X-Estab-Filtro', 'sem-vinculo-qb-v1')
+                ->header('X-Estab-Total', (string) $paginator->total());
         }
 
         $query = Estabelecimento::query()->with(['marketplace', 'revenda'])->latest();
@@ -644,10 +667,10 @@ class EstabelecimentoController extends Controller
     }
 
     /**
-     * Filtros auxiliares quando a listagem já está restrita a sem marketplace/vínculo.
-     * Não reaplica marketplace_id nem o filtro "ativo" (que estava escondendo os 16 ativos).
+     * Filtros auxiliares no Query Builder (sem Eloquent/global scopes).
+     * Não reaplica marketplace_id nem o filtro "ativo" implícito.
      */
-    private function aplicarFiltrosIndexSemVinculo(Builder $query, Request $request): void
+    private function aplicarFiltrosIndexSemVinculoQuery(QueryBuilder $query, Request $request): void
     {
         if ($request->filled('codigo_edi')) {
             $codigo = trim((string) $request->input('codigo_edi'));
@@ -661,7 +684,7 @@ class EstabelecimentoController extends Controller
             $idBusca = ltrim($termo, '#');
             $buscaPorId = $idBusca !== '' && ctype_digit($idBusca);
 
-            $query->where(function (Builder $q) use ($like, $digitos, $termo, $buscaPorId, $idBusca) {
+            $query->where(function (QueryBuilder $q) use ($like, $digitos, $termo, $buscaPorId, $idBusca) {
                 $q->whereRaw('LOWER(COALESCE(nome_fantasia, "")) LIKE ?', [$like])
                     ->orWhereRaw('LOWER(COALESCE(razao_social, "")) LIKE ?', [$like])
                     ->orWhereRaw('LOWER(COALESCE(nome_completo, "")) LIKE ?', [$like])
@@ -669,7 +692,7 @@ class EstabelecimentoController extends Controller
                     ->orWhere('token_pagseguro', $termo);
 
                 if ($buscaPorId) {
-                    $q->orWhere('estabelecimentos.id', (int) $idBusca);
+                    $q->orWhere('id', (int) $idBusca);
                 }
 
                 if ($digitos !== '') {
@@ -692,7 +715,13 @@ class EstabelecimentoController extends Controller
             $query->where('revenda_id', $request->integer('revenda_id'));
         }
 
-        $this->aplicarFiltrosSituacao($query, $request);
+        // Situação via Eloquent helper exige Builder Eloquent — aplica só status/pagbank simples aqui.
+        if ($request->filled('status') || $request->filled('pagbank')) {
+            $eloquent = Estabelecimento::withoutGlobalScopes()->whereNull('marketplace_id');
+            $this->aplicarFiltrosSituacao($eloquent, $request);
+            $idsSituacao = $eloquent->pluck('id');
+            $query->whereIn('id', $idsSituacao);
+        }
 
         if ($request->filled('risco')) {
             $query->where('risco', $request->string('risco'));
@@ -717,7 +746,7 @@ class EstabelecimentoController extends Controller
 
         // Só aplica "ativo" se o usuário escolheu explicitamente Sim/Não.
         if ($request->filled('ativo') && in_array((string) $request->input('ativo'), ['0', '1'], true)) {
-            $query->where('estabelecimentos.ativo', $request->boolean('ativo'));
+            $query->where('ativo', $request->boolean('ativo'));
         }
 
         if ($request->filled('data_inicio')) {
