@@ -1,0 +1,17 @@
+# Opcional — habilita SSL automático pelo painel admin (Docker no container app).
+# Uso: docker compose -f docker-compose.yml -f docker-compose.ssl.yml up -d
+#
+# Requer no .env:
+#   TENANT_SSL_AUTO_PROVISION=true
+#   DOCKER_GID=<stat -c '%g' /var/run/docker.sock>
+
+services:
+  app:
+    build:
+      dockerfile: Dockerfile.ssl
+    group_add:
+      - "${DOCKER_GID:?Defina DOCKER_GID no .env}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      COMPOSE_PROJECT_NAME: express

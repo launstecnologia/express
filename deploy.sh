@@ -12,6 +12,7 @@ set -euo pipefail
 
 COMPOSE="docker compose"
 APP_SERVICE="app"
+APP_CONTAINER="express-app"
 BLUE='\033[0;34m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -67,6 +68,36 @@ ensure_storage_dirs() {
 }
 
 # ----------------------------------------------------------------
+# Executa comando no container PHP (serviço app / express-app)
+# ----------------------------------------------------------------
+wait_for_app() {
+    local tentativa
+    for tentativa in $(seq 1 30); do
+        if $COMPOSE ps --status running "$APP_SERVICE" 2>/dev/null | grep -q "$APP_SERVICE"; then
+            return 0
+        fi
+        sleep 2
+    done
+
+    warn "Container PHP não ficou pronto. Últimos logs:"
+    $COMPOSE logs --tail 50 "$APP_SERVICE" 2>/dev/null || docker logs --tail 50 "$APP_CONTAINER" 2>/dev/null || true
+
+    return 1
+}
+
+exec_app() {
+    if $COMPOSE exec -T "$APP_SERVICE" "$@"; then
+        return 0
+    fi
+
+    docker exec "$APP_CONTAINER" "$@"
+}
+
+exec_artisan() {
+    exec_app php artisan "$@"
+}
+
+# ----------------------------------------------------------------
 # Primeiro deploy (build + migrate + seed)
 # ----------------------------------------------------------------
 cmd_install() {
@@ -80,29 +111,30 @@ cmd_install() {
     log "Subindo containers..."
     $COMPOSE up -d
 
-    log "Aguardando MySQL ficar pronto..."
+    log "Aguardando MySQL e PHP ficarem prontos..."
     sleep 10
+    wait_for_app || err "Container app não está rodando — veja: bash deploy.sh logs app"
 
     log "Rodando migrations..."
-    $COMPOSE exec -T $APP_SERVICE php artisan migrate --force
+    exec_artisan migrate --force
 
     log "Rodando seeders (admin padrão)..."
-    $COMPOSE exec -T $APP_SERVICE php artisan db:seed --force
+    exec_artisan db:seed --force
 
     log "Criando link de storage..."
-    $COMPOSE exec -T $APP_SERVICE php artisan storage:link
+    exec_artisan storage:link
 
     log "Gerando chave de aplicação (se vazia)..."
     APP_KEY=$(grep "^APP_KEY=" .env | cut -d'=' -f2-)
     if [ -z "$APP_KEY" ]; then
-        $COMPOSE exec -T $APP_SERVICE php artisan key:generate --force
+        exec_artisan key:generate --force
     fi
 
     log "Otimizando para produção..."
     ensure_storage_dirs
-    $COMPOSE exec -T $APP_SERVICE php artisan config:cache
-    $COMPOSE exec -T $APP_SERVICE php artisan route:cache
-    $COMPOSE exec -T $APP_SERVICE php artisan view:cache
+    exec_artisan config:cache
+    exec_artisan route:cache
+    exec_artisan view:cache
 
     ok "Deploy concluído!"
     cmd_status
@@ -119,7 +151,7 @@ check_docker_gid() {
         gid_host=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || true)
 
         if [ -n "$gid_host" ] && [ "$gid_atual" != "$gid_host" ]; then
-            warn "Para SSL automático no painel admin, defina DOCKER_GID=$gid_host no .env e rode deploy.sh update"
+            warn "SSL automático: defina DOCKER_GID=$gid_host no .env e use docker-compose.ssl.yml"
         fi
     fi
 }
@@ -145,17 +177,17 @@ cmd_update() {
     $COMPOSE restart app queue scheduler 2>/dev/null || $COMPOSE restart app 2>/dev/null || true
 
     log "Aguardando app subir..."
-    sleep 5
+    wait_for_app || err "Container app não está rodando — veja: bash deploy.sh logs app"
 
     log "Rodando migrations..."
-    $COMPOSE exec -T $APP_SERVICE php artisan migrate --force
+    exec_artisan migrate --force
 
     log "Limpando e recriando caches..."
     ensure_storage_dirs
-    $COMPOSE exec -T $APP_SERVICE php artisan optimize:clear
-    $COMPOSE exec -T $APP_SERVICE php artisan config:cache
-    $COMPOSE exec -T $APP_SERVICE php artisan route:cache
-    $COMPOSE exec -T $APP_SERVICE php artisan view:cache
+    exec_artisan optimize:clear
+    exec_artisan config:cache
+    exec_artisan route:cache
+    exec_artisan view:cache
 
     ok "Atualização concluída!"
     cmd_status
@@ -166,7 +198,8 @@ cmd_update() {
 # ----------------------------------------------------------------
 cmd_migrate() {
     log "Rodando migrations..."
-    $COMPOSE exec -T $APP_SERVICE php artisan migrate --force
+    wait_for_app || err "Container app não está rodando"
+    exec_artisan migrate --force
     ok "Migrations concluídas"
 }
 
@@ -256,7 +289,7 @@ cmd_provision_ssl() {
 # ----------------------------------------------------------------
 cmd_artisan() {
     shift
-    $COMPOSE exec $APP_SERVICE php artisan "$@"
+    exec_artisan "$@"
 }
 
 # ----------------------------------------------------------------

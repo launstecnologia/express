@@ -37,15 +37,10 @@ services:
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    group_add:
-      - "${DOCKER_GID:-999}"
     volumes:
       - .:/var/www/html
       - vendor:/var/www/html/vendor
       - storage:/var/www/html/storage
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      COMPOSE_PROJECT_NAME: express
     env_file: .env
     depends_on:
       mysql:
