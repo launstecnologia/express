@@ -1,1 +1,4 @@
-Couldn't find the requested file /icons/cabal.svg in simple-icons.
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 40" role="img" aria-label="Cabal">
+  <rect width="64" height="40" rx="6" fill="#005EB8"/>
+  <text x="32" y="26" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#FFFFFF">CABAL</text>
+</svg>

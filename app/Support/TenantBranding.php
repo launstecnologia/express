@@ -14,11 +14,15 @@ class TenantBranding
     /** host = subdomínio/domínio custom; preview = ?tenant= em local */
     private static ?string $scope = null;
 
+    /** @var array<string, mixed>|null */
+    private static ?array $paraViewsCache = null;
+
     public static function reset(): void
     {
         self::$tenant = null;
         self::$resolved = false;
         self::$scope = null;
+        self::$paraViewsCache = null;
     }
 
     public static function set(?MarketplaceBranding $branding, string $scope = 'host'): void
@@ -149,7 +153,11 @@ class TenantBranding
      */
     public static function paraViews(): array
     {
-        return [
+        if (self::$paraViewsCache !== null) {
+            return self::$paraViewsCache;
+        }
+
+        self::$paraViewsCache = [
             'appName' => self::appName(),
             'metaDescription' => self::metaDescription(),
             'metaKeywords' => self::metaKeywords(),
@@ -164,5 +172,7 @@ class TenantBranding
             'tenantSlug' => self::$tenant?->slug,
             'tenantHost' => self::$tenant?->dominioAtivo(),
         ];
+
+        return self::$paraViewsCache;
     }
 }

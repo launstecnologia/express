@@ -46,15 +46,26 @@ class InstituicaoFinanceira
         }
 
         $arquivoLocal = public_path('images/bandeiras/'.$meta['slug'].'.svg');
-        if (is_file($arquivoLocal) && filesize($arquivoLocal) > 200) {
+        if (self::svgLocalValido($arquivoLocal)) {
             return asset('images/bandeiras/'.$meta['slug'].'.svg');
         }
 
-        if ($meta['tipo'] === 'simpleicons' || $meta['tipo'] === 'cdn') {
+        if ($meta['tipo'] === 'simpleicons') {
             return 'https://cdn.jsdelivr.net/npm/simple-icons@11.14.0/icons/'.$meta['slug'].'.svg';
         }
 
         return null;
+    }
+
+    private static function svgLocalValido(string $caminho): bool
+    {
+        if (! is_file($caminho) || filesize($caminho) < 80) {
+            return false;
+        }
+
+        $conteudo = file_get_contents($caminho, false, null, 0, 200);
+
+        return is_string($conteudo) && str_contains($conteudo, '<svg');
     }
 
     public static function nome(?string $codigo): string

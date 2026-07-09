@@ -11,15 +11,41 @@ class PlatformSettings
 {
     private const CACHE_KEY = 'platform_settings';
 
-    public static function get(): PlatformSetting
+    private static ?bool $tabelaExiste = null;
+
+    private static ?PlatformSetting $instancia = null;
+
+    /** @var array<string, mixed>|null */
+    private static ?array $paraViewsCache = null;
+
+    private static function tabelaExiste(): bool
     {
-        if (! Schema::hasTable('platform_settings')) {
-            return self::fallback();
+        if (self::$tabelaExiste !== null) {
+            return self::$tabelaExiste;
         }
 
-        return Cache::remember(self::CACHE_KEY, 3600, function () {
+        self::$tabelaExiste = Schema::hasTable('platform_settings');
+
+        return self::$tabelaExiste;
+    }
+
+    public static function get(): PlatformSetting
+    {
+        if (self::$instancia !== null) {
+            return self::$instancia;
+        }
+
+        if (! self::tabelaExiste()) {
+            self::$instancia = self::fallback();
+
+            return self::$instancia;
+        }
+
+        self::$instancia = Cache::remember(self::CACHE_KEY, 3600, function () {
             return PlatformSetting::query()->firstOrCreate([], self::defaultAttributes());
         });
+
+        return self::$instancia;
     }
 
     /**
@@ -44,6 +70,8 @@ class PlatformSettings
     public static function forget(): void
     {
         Cache::forget(self::CACHE_KEY);
+        self::$instancia = null;
+        self::$paraViewsCache = null;
     }
 
     public static function appName(): string
@@ -344,8 +372,11 @@ class PlatformSettings
 
     public static function logoUrl(string $variant = 'default'): ?string
     {
-        $setting = self::get();
+        return self::logoUrlDe(self::get(), $variant);
+    }
 
+    private static function logoUrlDe(PlatformSetting $setting, string $variant): ?string
+    {
         $path = match ($variant) {
             'white' => $setting->logo_white_path ?: $setting->logo_path,
             'favicon' => $setting->favicon_path,
@@ -368,7 +399,15 @@ class PlatformSettings
      */
     public static function dadosEmpresa(): array
     {
-        $s = self::get();
+        return self::dadosEmpresaDe(self::get());
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function dadosEmpresaDe(PlatformSetting $s): array
+    {
+        $appName = $s->app_name ?: config('app.name', 'Express Payments');
 
         $enderecoLinhas = array_filter([
             trim(collect([$s->endereco, $s->numero])->filter()->join(', ')),
@@ -378,10 +417,10 @@ class PlatformSettings
         ]);
 
         return [
-            'app_name' => self::appName(),
+            'app_name' => $appName,
             'razao_social' => $s->razao_social,
             'nome_fantasia' => $s->nome_fantasia,
-            'nome_exibicao' => $s->nome_fantasia ?: $s->razao_social ?: self::appName(),
+            'nome_exibicao' => $s->nome_fantasia ?: $s->razao_social ?: $appName,
             'cnpj' => $s->cnpj,
             'inscricao_estadual' => $s->inscricao_estadual,
             'email' => $s->email,
@@ -400,9 +439,9 @@ class PlatformSettings
             'responsavel_nome' => $s->responsavel_nome,
             'responsavel_cpf' => $s->responsavel_cpf,
             'observacoes_relatorio' => $s->observacoes_relatorio,
-            'logo_url' => self::logoUrl('default'),
-            'logo_white_url' => self::logoUrl('white'),
-            'favicon_url' => self::logoUrl('favicon'),
+            'logo_url' => self::logoUrlDe($s, 'default'),
+            'logo_white_url' => self::logoUrlDe($s, 'white'),
+            'favicon_url' => self::logoUrlDe($s, 'favicon'),
         ];
     }
 
@@ -411,17 +450,26 @@ class PlatformSettings
      */
     public static function paraViews(): array
     {
-        return [
-            'appName' => self::appName(),
-            'metaDescription' => self::metaDescription(),
-            'metaKeywords' => self::metaKeywords(),
-            'metaRobots' => self::metaRobots(),
-            'themeColor' => self::themeColor(),
-            'primaryColor' => self::themeColor(),
-            'logoUrl' => self::logoUrl('default'),
-            'logoWhiteUrl' => self::logoUrl('white'),
-            'faviconUrl' => self::logoUrl('favicon'),
-            'empresa' => self::dadosEmpresa(),
+        if (self::$paraViewsCache !== null) {
+            return self::$paraViewsCache;
+        }
+
+        $s = self::get();
+        $themeColor = $s->theme_color ?: '#2563eb';
+
+        self::$paraViewsCache = [
+            'appName' => $s->app_name ?: config('app.name', 'Express Payments'),
+            'metaDescription' => $s->meta_description ?: (string) config('app.description', ''),
+            'metaKeywords' => $s->meta_keywords ?: (string) config('app.keywords', ''),
+            'metaRobots' => $s->meta_robots ?: (string) config('app.robots', 'noindex, nofollow'),
+            'themeColor' => $themeColor,
+            'primaryColor' => $themeColor,
+            'logoUrl' => self::logoUrlDe($s, 'default'),
+            'logoWhiteUrl' => self::logoUrlDe($s, 'white'),
+            'faviconUrl' => self::logoUrlDe($s, 'favicon'),
+            'empresa' => self::dadosEmpresaDe($s),
         ];
+
+        return self::$paraViewsCache;
     }
 }

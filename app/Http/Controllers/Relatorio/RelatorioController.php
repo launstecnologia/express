@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class RelatorioController extends Controller
@@ -199,15 +200,17 @@ class RelatorioController extends Controller
 
     private function usuariosPorTipo(string $tipo)
     {
-        return Usuario::query()
-            ->where('tipo', $tipo)
-            ->where('ativo', true)
-            ->orderByRaw('COALESCE(nome_fantasia, razao_social, nome_completo, email)')
-            ->get()
-            ->map(fn (Usuario $usuario) => [
-                'id' => $usuario->id,
-                'nome' => $usuario->nomeExibicao(),
-            ]);
+        return Cache::remember("relatorio.usuarios.{$tipo}", 300, function () use ($tipo) {
+            return Usuario::query()
+                ->where('tipo', $tipo)
+                ->where('ativo', true)
+                ->orderByRaw('COALESCE(nome_fantasia, razao_social, nome_completo, email)')
+                ->get()
+                ->map(fn (Usuario $usuario) => [
+                    'id' => $usuario->id,
+                    'nome' => $usuario->nomeExibicao(),
+                ]);
+        });
     }
 
     private function comissaoExibida(AggregatedRevenue $linha, Usuario|SubUsuario|null $usuario): float

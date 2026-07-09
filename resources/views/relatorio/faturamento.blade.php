@@ -334,7 +334,8 @@
                 <p x-show="carregando" class="py-10 text-center text-sm text-gray-500">Carregando transações...</p>
                 <p x-show="erro" x-text="erro" class="py-10 text-center text-sm text-red-600"></p>
 
-                <div x-show="!carregando && !erro && dados">
+                <template x-if="dados">
+                    <div>
                     <div class="mb-6 grid grid-cols-2 gap-3 rounded-xl bg-gray-50 p-4 text-sm md:grid-cols-4">
                         <div>
                             <p class="text-xs text-gray-500">Estabelecimento</p>
@@ -360,8 +361,8 @@
 
                     <p x-show="!dados?.movimentos?.length" class="mb-4 text-sm text-gray-500">Nenhuma transação encontrada para este agrupamento.</p>
 
-                    <div x-show="dados?.movimentos?.length">
-                        <template x-for="mov in dados.movimentos" :key="mov.id">
+                    <div x-show="(dados?.movimentos ?? []).length">
+                        <template x-for="mov in (dados?.movimentos ?? [])" :key="mov.id">
                             <div class="mb-6 rounded-xl border border-gray-200 p-4">
                                 <div class="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-3">
                                     <div>
@@ -373,7 +374,7 @@
 
                                 <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Dados completos do EDI</p>
                                 <div class="mb-4 grid grid-cols-1 gap-3 rounded-lg bg-gray-50 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                                    <template x-for="campo in mov.campos_edi" :key="mov.id + '-' + campo.campo">
+                                    <template x-for="campo in (mov.campos_edi ?? [])" :key="mov.id + '-' + campo.campo">
                                         <div class="min-w-0">
                                             <p class="text-xs text-gray-500" x-text="campo.rotulo"></p>
                                             <p class="break-all text-sm font-medium text-gray-800" x-text="campo.valor"></p>
@@ -405,7 +406,7 @@
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <template x-for="com in mov.comissoes" :key="mov.id + '-' + com.usuario + '-' + com.nivel">
+                                            <template x-for="com in (mov.comissoes ?? [])" :key="mov.id + '-' + com.usuario + '-' + com.nivel">
                                                 <tr class="border-b border-gray-50">
                                                     <td class="py-2 pr-3 font-medium text-gray-700" x-text="com.usuario"></td>
                                                     <td class="py-2 pr-3 capitalize text-gray-600" x-text="com.nivel"></td>
@@ -419,7 +420,8 @@
                             </div>
                         </template>
                     </div>
-                </div>
+                    </div>
+                </template>
             </div>
         </div>
     </div>

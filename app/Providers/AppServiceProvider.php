@@ -41,7 +41,7 @@ class AppServiceProvider extends ServiceProvider
 
         Auth::provider('multi_users', fn ($app) => new MultiUserProvider($app['hash']));
 
-        View::composer('*', function ($view) {
+        View::composer(['layouts.app', 'auth.*', 'publico.*'], function ($view) {
             $view->with(
                 TenantBranding::deveExibirMarcaTenant()
                     ? TenantBranding::paraViews()
