@@ -33,7 +33,9 @@
     $paiAtual = old('pai_id', $paiSelecionado?->id ?: $usuario->hierarquia?->pai?->usuario_id);
     $exibeRetencaoPai = UsuarioComercial::podeDefinirRetencaoPai($tipoAtual);
     $rotuloRetencaoPai = match ($tipoAtual) {
-        'marketplace' => 'Retenção do Admin (% sobre a comissão do marketplace)',
+        'marketplace' => UsuarioComercial::ehMaster()
+            ? 'Retenção do Master (% sobre a comissão do marketplace)'
+            : 'Retenção do Admin (% sobre a comissão do marketplace)',
         'revenda' => 'Retenção do Marketplace (% sobre a comissão da revenda)',
         default => 'Retenção do pai (%)',
     };
@@ -273,13 +275,13 @@
         </label>
     </div>
 
-    @if ($tipoAtual === 'marketplace' && \App\Support\UsuarioComercial::ehAdmin() && ($todosPlanos ?? collect())->isNotEmpty())
+    @if ($tipoAtual === 'marketplace' && UsuarioComercial::podeLiberarPlanosMarketplace($usuario->exists ? $usuario : null) && ($todosPlanos ?? collect())->isNotEmpty())
         @php
             $planosSelecionados = collect(old('planos_habilitados', $usuario->exists ? $usuario->planosHabilitados->pluck('id')->all() : []))->map(fn ($id) => (int) $id);
         @endphp
         <h2 class="{{ $sectionTitleClass }}">Planos e taxas disponíveis</h2>
         <div class="px-3 py-4">
-            <p class="mb-3 text-[11px] text-slate-500">Selecione quais planos este marketplace poderá usar ao cadastrar estabelecimentos. Apenas os marcados aparecerão no acesso dele.</p>
+            <p class="mb-3 text-[11px] text-slate-500">Selecione quais planos este marketplace poderá usar ao cadastrar estabelecimentos. A revenda do marketplace herda automaticamente esses planos.</p>
             <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 @foreach ($todosPlanos as $plano)
                     <label class="flex items-center gap-2 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">

@@ -30,6 +30,11 @@ class UsuarioComercial
         return self::tipo() === 'admin';
     }
 
+    public static function ehMaster(): bool
+    {
+        return self::tipo() === 'master';
+    }
+
     public static function ehMarketplace(): bool
     {
         return self::tipo() === 'marketplace';
@@ -48,6 +53,27 @@ class UsuarioComercial
     public static function podeGerirPlanos(): bool
     {
         return self::ehAdmin();
+    }
+
+    /**
+     * Admin ou master da rede: libera quais planos o marketplace pode usar.
+     * Revenda herda os planos do marketplace pai (não há liberação direta).
+     */
+    public static function podeLiberarPlanosMarketplace(?Usuario $marketplace = null): bool
+    {
+        if (self::ehAdmin()) {
+            return true;
+        }
+
+        if (! self::ehMaster()) {
+            return false;
+        }
+
+        if (! $marketplace) {
+            return true;
+        }
+
+        return $marketplace->tipo === 'marketplace' && self::podeGerenciar($marketplace);
     }
 
     public static function podeCadastrarEstabelecimento(): bool
@@ -82,14 +108,28 @@ class UsuarioComercial
     public static function podeDefinirRetencaoPai(string $tipoFilho): bool
     {
         if ($tipoFilho === 'marketplace') {
-            return self::ehAdmin();
+            return self::ehAdmin() || self::ehMaster();
         }
 
         if ($tipoFilho === 'revenda') {
-            return self::ehAdmin() || self::ehMarketplace();
+            return self::ehAdmin() || self::ehMaster() || self::ehMarketplace();
         }
 
         return false;
+    }
+
+    public static function marketplacesDo(Usuario $master): Builder
+    {
+        $master->loadMissing('hierarquia');
+        $noId = $master->hierarquia?->id;
+
+        return Usuario::query()
+            ->where('tipo', 'marketplace')
+            ->when(
+                $noId,
+                fn (Builder $q) => $q->whereHas('hierarquia', fn (Builder $h) => $h->where('pai_id', $noId)),
+                fn (Builder $q) => $q->whereRaw('1 = 0')
+            );
     }
 
     public static function podeGerenciar(Usuario $alvo): bool
@@ -129,6 +169,7 @@ class UsuarioComercial
 
     public static function revendasDo(Usuario $marketplace): Builder
     {
+        $marketplace->loadMissing('hierarquia');
         $noId = $marketplace->hierarquia?->id;
 
         return Usuario::query()

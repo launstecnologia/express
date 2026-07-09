@@ -7,6 +7,8 @@ use App\Models\PlanoTaxa;
 use App\Models\PlanoTaxaRoyalty;
 use App\Models\Usuario;
 use App\Services\RoyaltyCalculadorService;
+use App\Support\UsuarioComercial;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -14,8 +16,11 @@ class ComissaoConfiguracaoController extends Controller
 {
     public function index()
     {
+        $query = PlanoTaxaRoyalty::with(['taxa.plano', 'usuario'])->latest();
+        $this->restringirConfiguracoesDaRede($query);
+
         return view('comissao.configuracoes.index', [
-            'configuracoes' => PlanoTaxaRoyalty::with(['taxa.plano', 'usuario'])->latest()->paginate(30),
+            'configuracoes' => $query->paginate(30),
         ]);
     }
 
@@ -40,6 +45,8 @@ class ComissaoConfiguracaoController extends Controller
 
     public function edit(PlanoTaxaRoyalty $configuracao)
     {
+        $this->autorizarConfiguracao($configuracao);
+
         return view('comissao.configuracoes.form', [
             'configuracao' => $configuracao,
             'taxas' => PlanoTaxa::with('plano')->orderBy('instituicao')->get(),
@@ -49,6 +56,8 @@ class ComissaoConfiguracaoController extends Controller
 
     public function update(Request $request, PlanoTaxaRoyalty $configuracao, RoyaltyCalculadorService $calculador)
     {
+        $this->autorizarConfiguracao($configuracao);
+
         $dados = $this->validar($request, $configuracao);
         $this->validarLimite($dados, $calculador);
         $configuracao->update($dados);
@@ -58,6 +67,7 @@ class ComissaoConfiguracaoController extends Controller
 
     public function destroy(PlanoTaxaRoyalty $configuracao)
     {
+        $this->autorizarConfiguracao($configuracao);
         $configuracao->delete();
 
         return redirect()->route('comissoes.configuracoes.index')->with('status', 'Configuração de comissão removida.');
@@ -79,6 +89,7 @@ class ComissaoConfiguracaoController extends Controller
 
         $usuario = Usuario::findOrFail($dados['usuario_id']);
         abort_if($usuario->tipo === 'revenda', 422, 'Revenda não repassa comissão para níveis abaixo.');
+        abort_unless($this->podeConfigurarUsuario($usuario), 403, 'Usuário fora da sua hierarquia.');
 
         $dados['nivel'] = $usuario->tipo;
 
@@ -96,11 +107,61 @@ class ComissaoConfiguracaoController extends Controller
 
     private function usuariosConfiguraveis()
     {
-        return Usuario::with('hierarquia.pai.usuario')
+        $query = Usuario::with('hierarquia.pai.usuario')
             ->whereIn('tipo', ['admin', 'master', 'marketplace'])
             ->where('ativo', true)
             ->orderBy('tipo')
-            ->orderBy('nome_fantasia')
-            ->get();
+            ->orderBy('nome_fantasia');
+
+        if (UsuarioComercial::ehMaster()) {
+            $master = UsuarioComercial::principal();
+            abort_unless($master, 403);
+
+            $marketplaceIds = UsuarioComercial::marketplacesDo($master)->pluck('id');
+
+            $query->where(function (Builder $q) use ($master, $marketplaceIds) {
+                $q->whereKey($master->id)
+                    ->orWhereIn('id', $marketplaceIds);
+            });
+        }
+
+        return $query->get();
+    }
+
+    private function restringirConfiguracoesDaRede(Builder $query): void
+    {
+        if (! UsuarioComercial::ehMaster()) {
+            return;
+        }
+
+        $master = UsuarioComercial::principal();
+        abort_unless($master, 403);
+
+        $ids = UsuarioComercial::marketplacesDo($master)->pluck('id')
+            ->push($master->id)
+            ->unique()
+            ->values();
+
+        $query->whereIn('usuario_id', $ids);
+    }
+
+    private function autorizarConfiguracao(PlanoTaxaRoyalty $configuracao): void
+    {
+        $usuario = $configuracao->usuario ?? Usuario::find($configuracao->usuario_id);
+        abort_unless($usuario && $this->podeConfigurarUsuario($usuario), 403);
+    }
+
+    private function podeConfigurarUsuario(Usuario $usuario): bool
+    {
+        if (UsuarioComercial::ehAdmin()) {
+            return true;
+        }
+
+        if (! UsuarioComercial::ehMaster()) {
+            return false;
+        }
+
+        return UsuarioComercial::podeGerenciar($usuario)
+            && in_array($usuario->tipo, ['master', 'marketplace'], true);
     }
 }

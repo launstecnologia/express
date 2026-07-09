@@ -100,7 +100,7 @@ class UsuarioController extends Controller
             'tipoFixo' => $tipo && ! $paiSelecionado ? $tipo : null,
             'paiSelecionado' => $paiSelecionado,
             'segmentos' => Segmento::where('ativo', true)->orderBy('nome')->get(),
-            'todosPlanos' => $tipo === 'marketplace' && UsuarioComercial::ehAdmin()
+            'todosPlanos' => $tipo === 'marketplace' && UsuarioComercial::podeLiberarPlanosMarketplace()
                 ? Plano::where('ativo', true)->orderBy('nome')->get()
                 : collect(),
         ]);
@@ -125,7 +125,7 @@ class UsuarioController extends Controller
         if ($usuario->tipo === 'marketplace') {
             app(MarketplaceBrandingService::class)->criarPara($usuario, $request->input('marketplace_slug'));
 
-            if (UsuarioComercial::ehAdmin()) {
+            if (UsuarioComercial::podeLiberarPlanosMarketplace($usuario)) {
                 $marketplacePlano->sincronizar($usuario, $request->input('planos_habilitados', []));
             }
         }
@@ -214,7 +214,7 @@ class UsuarioController extends Controller
             'tipoFixo' => $usuario->tipo,
             'paiSelecionado' => $usuario->hierarquia?->pai?->usuario,
             'segmentos' => Segmento::where('ativo', true)->orderBy('nome')->get(),
-            'todosPlanos' => $usuario->tipo === 'marketplace' && UsuarioComercial::ehAdmin()
+            'todosPlanos' => $usuario->tipo === 'marketplace' && UsuarioComercial::podeLiberarPlanosMarketplace($usuario)
                 ? Plano::where('ativo', true)->orderBy('nome')->get()
                 : collect(),
         ]);
@@ -249,7 +249,7 @@ class UsuarioController extends Controller
 
         $hierarquia->criarNo($usuario, $pai);
 
-        if ($usuario->tipo === 'marketplace' && UsuarioComercial::ehAdmin()) {
+        if ($usuario->tipo === 'marketplace' && UsuarioComercial::podeLiberarPlanosMarketplace($usuario)) {
             $marketplacePlano->sincronizar($usuario, $request->input('planos_habilitados', []));
         }
 
@@ -259,8 +259,7 @@ class UsuarioController extends Controller
     private function validar(Request $request, ?Usuario $usuario = null): array
     {
         $tipoInformado = $request->input('tipo', $usuario?->tipo);
-        $exigeRetencao = ($tipoInformado === 'marketplace' && UsuarioComercial::ehAdmin())
-            || ($tipoInformado === 'revenda' && (UsuarioComercial::ehMarketplace() || UsuarioComercial::ehAdmin()));
+        $exigeRetencao = UsuarioComercial::podeDefinirRetencaoPai((string) $tipoInformado);
 
         $dados = $request->validate([
             'tipo' => [

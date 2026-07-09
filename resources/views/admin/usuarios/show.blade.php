@@ -88,7 +88,7 @@
         @endif
     </div>
 
-    @if ($usuario->tipo === 'marketplace' && auth()->user()?->tipo === 'admin')
+    @if ($usuario->tipo === 'marketplace' && \App\Support\UsuarioComercial::podeLiberarPlanosMarketplace($usuario))
         @php $planosHabilitados = $usuario->planosHabilitados; @endphp
         <div class="mt-4 border-t border-dashed border-gray-200 pt-4" @if ($planosHabilitados->count() > 6) x-data="{ verTodos: false }" @endif>
             <div class="flex flex-wrap items-center justify-between gap-2">
