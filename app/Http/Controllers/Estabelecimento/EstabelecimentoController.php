@@ -34,7 +34,9 @@ use App\Support\AutomacaoErroInterpretador;
 use App\Support\PlatformSettings;
 use App\Scopes\ExcluirInativoSistemaScope;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -61,7 +63,19 @@ class EstabelecimentoController extends Controller
             'data_fim',
         ]);
 
-        // Remove só o escopo de ativo; mantém HierarquiaScope para master/mkt/revenda.
+        $marketplaceFiltro = (string) ($request->input('marketplace_id') ?? '');
+        $revendaFiltro = (string) ($request->input('revenda_id') ?? '');
+        $planoFiltro = (string) ($request->input('plano_id') ?? '');
+        $filtroSemVinculoEspecial = in_array($marketplaceFiltro, ['sem_marketplace', 'sem_vinculo'], true)
+            || $revendaFiltro === 'sem_revenda'
+            || $planoFiltro === 'sem_plano'
+            || ($request->filled('vinculo') && $request->string('vinculo') === 'sem');
+
+        // Filtros "sem X": Query Builder puro (igual ao artisan), sem escopos de ativo.
+        if ($filtroSemVinculoEspecial) {
+            return $this->indexSemVinculoEspecial($request, $filtros, $marketplaceFiltro, $revendaFiltro, $planoFiltro);
+        }
+
         $query = Estabelecimento::withoutGlobalScope(ExcluirInativoSistemaScope::class)
             ->with(['marketplace', 'revenda'])
             ->latest('estabelecimentos.id');
@@ -74,6 +88,70 @@ class EstabelecimentoController extends Controller
 
         return view('estabelecimento.index', [
             'estabelecimentos' => $query->paginate(20)->withQueryString(),
+            'filtros' => $filtros,
+            'filtrosResumo' => $this->resumoFiltrosAplicados($filtros),
+            'masters' => $this->usuariosPorTipo('master'),
+            'marketplaces' => $this->usuariosPorTipo('marketplace'),
+            'revendas' => $this->usuariosPorTipo('revenda'),
+            'planos' => $this->marketplacePlano->planosDisponiveis(),
+            'segmentos' => Segmento::where('ativo', true)->orderBy('nome')->get(['id', 'nome']),
+        ]);
+    }
+
+    /**
+     * Listagem à prova de escopo para Sem marketplace / Sem revenda / Sem plano.
+     */
+    private function indexSemVinculoEspecial(
+        Request $request,
+        array $filtros,
+        string $marketplaceFiltro,
+        string $revendaFiltro,
+        string $planoFiltro,
+    ) {
+        $base = DB::table('estabelecimentos')->orderByDesc('id');
+
+        if ($marketplaceFiltro === 'sem_vinculo' || ($request->filled('vinculo') && $request->string('vinculo') === 'sem')) {
+            $base->whereNull('marketplace_id')->whereNull('revenda_id');
+        } elseif ($marketplaceFiltro === 'sem_marketplace') {
+            $base->whereNull('marketplace_id');
+        }
+
+        if ($revendaFiltro === 'sem_revenda') {
+            $base->whereNull('revenda_id');
+        }
+
+        if ($planoFiltro === 'sem_plano') {
+            $base->whereNull('plano_id');
+        }
+
+        $actor = UsuarioComercial::principal();
+        if ($actor && $actor->tipo !== 'admin') {
+            match ($actor->tipo) {
+                'master' => $base->where('master_id', $actor->id),
+                'marketplace' => $base->where('marketplace_id', $actor->id),
+                'revenda' => $base->where('revenda_id', $actor->id),
+                default => null,
+            };
+        }
+
+        $this->aplicarFiltrosIndexSemVinculoQuery($base, $request);
+
+        $paginator = $base->paginate(20)->withQueryString();
+        $ids = collect($paginator->items())->pluck('id')->all();
+
+        $models = $ids === []
+            ? collect()
+            : Estabelecimento::withoutGlobalScopes()
+                ->with(['marketplace', 'revenda'])
+                ->whereIn('id', $ids)
+                ->get()
+                ->sortBy(fn (Estabelecimento $e) => array_search($e->id, $ids, true))
+                ->values();
+
+        $paginator->setCollection($models);
+
+        return view('estabelecimento.index', [
+            'estabelecimentos' => $paginator,
             'filtros' => $filtros,
             'filtrosResumo' => $this->resumoFiltrosAplicados($filtros),
             'masters' => $this->usuariosPorTipo('master'),
@@ -611,6 +689,89 @@ class EstabelecimentoController extends Controller
             'marketplace_id' => $dados['marketplace_id'] ?? null,
             'revenda_id' => $dados['revenda_id'] ?? null,
         ]);
+    }
+
+    /**
+     * Filtros auxiliares no Query Builder (sem Eloquent/global scopes).
+     * Não reaplica marketplace/revenda/plano especiais (já aplicados no caminho isolado).
+     */
+    private function aplicarFiltrosIndexSemVinculoQuery(QueryBuilder $query, Request $request): void
+    {
+        if ($request->filled('codigo_edi')) {
+            $codigo = trim((string) $request->input('codigo_edi'));
+            $query->where('token_pagseguro', 'like', '%'.$codigo.'%');
+        }
+
+        if ($request->filled('busca')) {
+            $termo = trim((string) $request->input('busca'));
+            $like = '%'.mb_strtolower($termo).'%';
+            $digitos = DocumentoBrasil::apenasDigitos($termo);
+            $idBusca = ltrim($termo, '#');
+            $buscaPorId = $idBusca !== '' && ctype_digit($idBusca);
+
+            $query->where(function (QueryBuilder $q) use ($like, $digitos, $termo, $buscaPorId, $idBusca) {
+                $q->whereRaw('LOWER(COALESCE(nome_fantasia, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(razao_social, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(nome_completo, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(cidade, "")) LIKE ?', [$like])
+                    ->orWhere('token_pagseguro', $termo);
+
+                if ($buscaPorId) {
+                    $q->orWhere('id', (int) $idBusca);
+                }
+
+                if ($digitos !== '') {
+                    $q->orWhereRaw(
+                        "REPLACE(REPLACE(REPLACE(COALESCE(cnpj, ''), '.', ''), '/', ''), '-', '') LIKE ?",
+                        ['%'.$digitos.'%'],
+                    )->orWhereRaw(
+                        "REPLACE(REPLACE(COALESCE(cpf, ''), '.', ''), '-', '') LIKE ?",
+                        ['%'.$digitos.'%'],
+                    );
+                }
+            });
+        }
+
+        if ($request->filled('master_id')) {
+            $query->where('master_id', $request->integer('master_id'));
+        }
+
+        if ($request->filled('status') || $request->filled('pagbank')) {
+            $eloquent = Estabelecimento::withoutGlobalScopes()->newQuery();
+            $this->aplicarFiltrosSituacao($eloquent, $request);
+            $query->whereIn('id', $eloquent->select('id'));
+        }
+
+        if ($request->filled('risco')) {
+            $query->where('risco', $request->string('risco'));
+        }
+
+        if ($request->filled('plano_id')) {
+            $planoFiltro = (string) $request->input('plano_id');
+            if ($planoFiltro !== 'sem_plano' && ctype_digit($planoFiltro)) {
+                $query->where('plano_id', (int) $planoFiltro);
+            }
+        }
+
+        if ($request->filled('segmento')) {
+            $query->where('segmento', $request->string('segmento'));
+        }
+
+        if ($request->filled('pessoa_tipo')) {
+            $query->where('pessoa_tipo', $request->string('pessoa_tipo'));
+        }
+
+        if ($request->filled('ativo') && in_array((string) $request->input('ativo'), ['0', '1'], true)) {
+            $query->where('ativo', $request->boolean('ativo'));
+        }
+
+        if ($request->filled('data_inicio')) {
+            $query->whereDate('created_at', '>=', $request->date('data_inicio'));
+        }
+
+        if ($request->filled('data_fim')) {
+            $query->whereDate('created_at', '<=', $request->date('data_fim'));
+        }
     }
 
     private function aplicarFiltrosIndex(Builder $query, Request $request): void
