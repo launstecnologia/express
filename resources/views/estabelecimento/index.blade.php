@@ -225,10 +225,12 @@
 
                     <div>
                         <label for="filtro-revenda" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Revenda</label>
+                        @php $revendaFiltro = (string) ($filtros['revenda_id'] ?? ''); @endphp
                         <select id="filtro-revenda" name="revenda_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" @disabled($filtroSemVinculoTotal)>
                             <option value="">Todos</option>
+                            <option value="sem_revenda" @selected($revendaFiltro === 'sem_revenda')>— Sem revenda —</option>
                             @foreach ($revendas as $revenda)
-                                <option value="{{ $revenda['id'] }}" @selected(($filtros['revenda_id'] ?? '') == $revenda['id'])>{{ $revenda['nome'] }}</option>
+                                <option value="{{ $revenda['id'] }}" @selected($revendaFiltro === (string) $revenda['id'])>{{ $revenda['nome'] }}</option>
                             @endforeach
                         </select>
                     </div>
