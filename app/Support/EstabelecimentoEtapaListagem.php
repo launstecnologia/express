@@ -145,10 +145,11 @@ class EstabelecimentoEtapaListagem
             }),
             self::NEGADO => $query->whereIn('fv_status', ['erro', 'timeout']),
             default => $query->where(function (Builder $q) {
-                $q->where(function (Builder $pendente) {
-                    $pendente->whereNull('fv_status')
-                        ->orWhereIn('fv_status', ['pendente', 'em_andamento']);
-                })->whereNull('pagbank_account_id');
+                $q->whereNull('pagbank_account_id')
+                    ->where(function (Builder $fv) {
+                        $fv->whereNull('fv_status')
+                            ->orWhereNotIn('fv_status', ['erro', 'timeout', 'concluido']);
+                    });
             }),
         };
     }
