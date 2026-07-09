@@ -69,6 +69,63 @@
     </div>
 </div>
 
+<div class="mb-5 grid gap-3 md:grid-cols-2">
+    @php
+        $com = $resumoEstabelecimentos['com_estabelecimento'];
+        $sem = $resumoEstabelecimentos['sem_estabelecimento'];
+    @endphp
+    <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+        <p class="text-xs font-bold uppercase text-emerald-700">Com estabelecimento</p>
+        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+                <p class="text-xs text-emerald-600">Linhas</p>
+                <p class="text-xl font-bold text-emerald-900">{{ number_format($com['linhas'], 0, ',', '.') }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-emerald-600">Clientes</p>
+                <p class="text-xl font-bold text-emerald-900">{{ number_format($com['clientes'], 0, ',', '.') }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-emerald-600">TPV</p>
+                <p class="text-lg font-bold text-emerald-900">R$ {{ number_format($com['tpv'], 2, ',', '.') }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-emerald-600">Comissão</p>
+                <p class="text-lg font-bold text-emerald-900">R$ {{ number_format($com['comissao'], 2, ',', '.') }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="rounded-xl border border-red-200 bg-red-50 p-4">
+        <div class="flex flex-wrap items-start justify-between gap-2">
+            <p class="text-xs font-bold uppercase text-red-700">Sem estabelecimento</p>
+            @if ($sem['clientes'] > 0)
+                <a href="{{ route('admin.conciliacoes.relatorio-sem-estabelecimento', $conciliacao) }}"
+                   class="inline-flex items-center gap-1 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100">
+                    <i class="fa-solid fa-download"></i> Baixar relatório CSV
+                </a>
+            @endif
+        </div>
+        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+                <p class="text-xs text-red-600">Linhas</p>
+                <p class="text-xl font-bold text-red-900">{{ number_format($sem['linhas'], 0, ',', '.') }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-red-600">Clientes</p>
+                <p class="text-xl font-bold text-red-900">{{ number_format($sem['clientes'], 0, ',', '.') }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-red-600">TPV</p>
+                <p class="text-lg font-bold text-red-900">R$ {{ number_format($sem['tpv'], 2, ',', '.') }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-red-600">Comissão</p>
+                <p class="text-lg font-bold text-red-900">R$ {{ number_format($sem['comissao'], 2, ',', '.') }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="mb-5 grid gap-3 md:grid-cols-4">
     <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
         <p class="text-xs font-bold uppercase text-emerald-700">OK</p>
@@ -81,7 +138,7 @@
     <div class="rounded-xl border border-red-200 bg-red-50 p-4">
         <p class="text-xs font-bold uppercase text-red-700">Sem estabelecimento</p>
         <p class="mt-1 text-2xl font-bold text-red-800">{{ $conciliacao->linhas_sem_estabelecimento }}</p>
-        <p class="mt-1 text-xs text-red-600">{{ $clientesSemCadastro }} clientes distintos</p>
+        <p class="mt-1 text-xs text-red-600">{{ $sem['clientes'] }} clientes distintos</p>
     </div>
     <div class="rounded-xl border border-orange-200 bg-orange-50 p-4">
         <p class="text-xs font-bold uppercase text-orange-700">Sem EDI</p>

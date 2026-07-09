@@ -162,6 +162,53 @@ class ConciliacaoConfrontoService
 
     /**
      * @return array{
+     *     com_estabelecimento: array{linhas: int, clientes: int, tpv: float, comissao: float},
+     *     sem_estabelecimento: array{linhas: int, clientes: int, tpv: float, comissao: float}
+     * }
+     */
+    public function resumoEstabelecimentos(Conciliacao $conciliacao): array
+    {
+        $vazio = ['linhas' => 0, 'clientes' => 0, 'tpv' => 0.0, 'comissao' => 0.0];
+        $resumo = [
+            'com_estabelecimento' => $vazio,
+            'sem_estabelecimento' => $vazio,
+        ];
+
+        $rows = ConciliacaoLinha::query()
+            ->where('conciliacao_id', $conciliacao->id)
+            ->selectRaw('sem_estabelecimento, COUNT(*) as linhas, COUNT(DISTINCT id_cliente) as clientes, SUM(tpv) as tpv, SUM(ms_comissao) as comissao')
+            ->groupBy('sem_estabelecimento')
+            ->get();
+
+        foreach ($rows as $row) {
+            $chave = $row->sem_estabelecimento ? 'sem_estabelecimento' : 'com_estabelecimento';
+            $resumo[$chave] = [
+                'linhas' => (int) $row->linhas,
+                'clientes' => (int) $row->clientes,
+                'tpv' => (float) $row->tpv,
+                'comissao' => (float) $row->comissao,
+            ];
+        }
+
+        return $resumo;
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, object{id_cliente: string, linhas: int, tpv: float, comissao: float}>
+     */
+    public function clientesSemEstabelecimento(Conciliacao $conciliacao): Collection
+    {
+        return ConciliacaoLinha::query()
+            ->where('conciliacao_id', $conciliacao->id)
+            ->where('sem_estabelecimento', true)
+            ->selectRaw('id_cliente, COUNT(*) as linhas, SUM(tpv) as tpv, SUM(ms_comissao) as comissao')
+            ->groupBy('id_cliente')
+            ->orderByDesc('tpv')
+            ->get();
+    }
+
+    /**
+     * @return array{
      *     edi_tpv: float,
      *     edi_comissao: float,
      *     edi_clientes: int,

@@ -8,6 +8,7 @@ use App\Models\ConciliacaoLinha;
 use App\Services\ConciliacaoConfrontoService;
 use App\Services\ConciliacaoImportService;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ConciliacaoController extends Controller
 {
@@ -70,20 +71,41 @@ class ConciliacaoController extends Controller
             ->withQueryString();
 
         $resumo = $confronto->resumoMensal($conciliacao);
-
-        $clientesSemCadastro = ConciliacaoLinha::query()
-            ->where('conciliacao_id', $conciliacao->id)
-            ->where('sem_estabelecimento', true)
-            ->distinct('id_cliente')
-            ->count('id_cliente');
+        $resumoEstabelecimentos = $confronto->resumoEstabelecimentos($conciliacao);
 
         return view('admin.conciliacoes.show', compact(
             'conciliacao',
             'linhas',
             'resumo',
+            'resumoEstabelecimentos',
             'filtros',
-            'clientesSemCadastro',
         ));
+    }
+
+    public function relatorioSemEstabelecimento(Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto): StreamedResponse
+    {
+        $clientes = $confronto->clientesSemEstabelecimento($conciliacao);
+        $mes = $conciliacao->referencia_mes?->format('Y-m') ?? 'conciliacao';
+        $nomeArquivo = "clientes-sem-estabelecimento-{$mes}.csv";
+
+        return response()->streamDownload(function () use ($clientes) {
+            $handle = fopen('php://output', 'w');
+            fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
+            fputcsv($handle, ['id_cliente', 'linhas', 'tpv', 'comissao'], ';');
+
+            foreach ($clientes as $cliente) {
+                fputcsv($handle, [
+                    $cliente->id_cliente,
+                    $cliente->linhas,
+                    number_format((float) $cliente->tpv, 2, '.', ''),
+                    number_format((float) $cliente->comissao, 4, '.', ''),
+                ], ';');
+            }
+
+            fclose($handle);
+        }, $nomeArquivo, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
     }
 
     public function confrontar(Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto)
