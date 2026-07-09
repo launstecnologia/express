@@ -65,7 +65,11 @@ class AutomacaoRetentarEmailJob implements ShouldQueue
             for ($i = 0; $i < $maxTentativas; $i++) {
                 sleep($intervalo);
 
-                $status = $service->consultarStatusESincronizarLogs($estab, $jobId);
+                $status = $service->consultarStatusParaPolling($estab, $jobId);
+                if ($status === null) {
+                    continue;
+                }
+
                 $statusFinal = $status['status'] ?? 'desconhecido';
 
                 Log::debug("AutomacaoRetentarEmailJob: poll {$i}/{$maxTentativas}", [

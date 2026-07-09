@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\Estabelecimento;
 use App\Support\DocumentoBrasil;
 use App\Support\PlatformSettings;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -111,9 +113,7 @@ class AutomacaoPagBankService
     // ----------------------------------------------------------------
     public function consultarStatus(string $jobId): array
     {
-        $response = Http::timeout(10)
-            ->withHeaders(['X-Api-Key' => $this->apiKey])
-            ->get("{$this->apiUrl}/status/{$jobId}");
+        $response = $this->http(10)->get("{$this->apiUrl}/status/{$jobId}");
 
         if (! $response->successful()) {
             throw new RuntimeException(
@@ -135,6 +135,46 @@ class AutomacaoPagBankService
         );
 
         return $status;
+    }
+
+    /**
+     * Consulta status durante o polling do job Laravel.
+     * Falhas transitórias de rede não abortam a automação — retorna null para tentar de novo no próximo ciclo.
+     */
+    public function consultarStatusParaPolling(Estabelecimento $estab, string $jobId): ?array
+    {
+        try {
+            return $this->consultarStatusESincronizarLogs($estab, $jobId);
+        } catch (\Throwable $e) {
+            if (! self::erroRedeTransitario($e)) {
+                throw $e;
+            }
+
+            Log::warning('AutomacaoPagBank: falha transitória ao consultar status — tentará novamente', [
+                'estabelecimento_id' => $estab->id,
+                'job_id' => $jobId,
+                'erro' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    public static function erroRedeTransitario(\Throwable $e): bool
+    {
+        if ($e instanceof ConnectionException) {
+            return true;
+        }
+
+        $msg = strtolower($e->getMessage());
+
+        return str_contains($msg, 'could not resolve host')
+            || str_contains($msg, 'curl error')
+            || str_contains($msg, 'connection refused')
+            || str_contains($msg, 'connection timed out')
+            || str_contains($msg, 'failed to connect')
+            || str_contains($msg, 'operation timed out')
+            || str_contains($msg, 'name or service not known');
     }
 
     public function listarScreenshots(string $jobId): array
@@ -486,6 +526,16 @@ class AutomacaoPagBankService
     // ----------------------------------------------------------------
     // Helpers
     // ----------------------------------------------------------------
+    private function http(int $timeout = 15): PendingRequest
+    {
+        $retries = (int) config('automacao.api_retry_times', 3);
+        $sleepMs = (int) config('automacao.api_retry_sleep_ms', 1000);
+
+        return Http::timeout($timeout)
+            ->withHeaders(['X-Api-Key' => $this->apiKey])
+            ->retry($retries, $sleepMs, fn (\Throwable $e) => self::erroRedeTransitario($e));
+    }
+
     private function formatarCpf(?string $cpf): string
     {
         $n = preg_replace('/\D/', '', $cpf ?? '');

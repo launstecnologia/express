@@ -195,6 +195,18 @@
         default => ['bg-gray-100 text-gray-500 border-gray-200', 'fa-circle-minus', 'Não iniciada'],
     };
     $fvPodeIniciar = $fvPodeGerenciarAutomacao && ! in_array($fvStatus, ['em_andamento', 'concluido']) && ! $fvCadastroConcluido;
+    $fvCadastroFvConcluidoNosLogs = \App\Support\AutomacaoSchema::cadastroFvConcluidoNosLogs($automacaoLogs);
+    $fvPodeRetentarEmail = $fvPodeGerenciarAutomacao
+        && \App\Support\AutomacaoSchema::podeRetentarApenasEmail($estabelecimento, $automacaoLogs);
+    $fvPodeIniciarCompleto = $fvPodeIniciar && ! $fvPodeRetentarEmail;
+    $fvPodeRetentar = $fvPodeGerenciarAutomacao
+        && ! in_array($fvStatus, ['em_andamento', 'pendente'], true)
+        && ($estabelecimento->fv_proposta_status ?? null) !== 'em_andamento'
+        && ! session('proposta_aceitando');
+    $ultimoLogErroId = $automacaoLogs
+        ->filter(fn ($log) => \App\Support\AutomacaoErroInterpretador::logPareceErro($log))
+        ->last()
+        ?->id;
 @endphp
 <section id="automacao" data-tab-panel="automacao" class="mt-8 hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
     <div class="border-b border-gray-100 bg-gray-50/80 px-6 py-4">
@@ -243,8 +255,8 @@
         {{-- Status atual + botões de ação --}}
         <div class="flex flex-col gap-4">
 
-            {{-- Etapas detalhadas quando é erro_email --}}
-            @if ($fvStatus === 'erro_email')
+            {{-- Etapas detalhadas quando cadastro FV ok e falha no e-mail --}}
+            @if ($fvStatus === 'erro_email' || ($fvCadastroFvConcluidoNosLogs && in_array($fvStatus, ['erro', 'timeout'], true)))
                 <div class="flex flex-wrap items-center gap-3">
                     <span class="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-bold text-emerald-700">
                         <i class="fa-solid fa-circle-check"></i> Cadastro PagBank: Concluído
@@ -295,25 +307,25 @@
 
             {{-- Botões de ação --}}
             <div class="flex flex-wrap items-center gap-3">
-                @if ($fvStatus === 'erro_email' && $fvPodeGerenciarAutomacao)
-                    {{-- Opção 1: retentar apenas o e-mail --}}
+                @if ($fvPodeRetentarEmail)
                     <form method="POST"
                           action="{{ route('admin.estabelecimentos.automacao.retentar-email', $estabelecimento) }}"
-                          onsubmit="return confirm('Retentar apenas a etapa de e-mail/senha para este estabelecimento?')">
+                          onsubmit="return confirm('Continuar pela etapa de e-mail e senha? O cadastro no portal FV não será refeito.')">
                         @csrf
                         <button type="submit"
                                 class="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-orange-700">
-                            <i class="fa-solid fa-envelope-circle-check"></i> Retentar E-mail
+                            <i class="fa-solid fa-envelope-circle-check"></i> Continuar (e-mail e senha)
                         </button>
                     </form>
-                    {{-- Opção 2: refazer tudo --}}
-                    <button type="button"
-                            data-modal-open="automacao-confirmar"
-                            data-automacao-label="Confirmar e refazer tudo"
-                            class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50">
-                        <i class="fa-solid fa-rotate-right"></i> Refazer Tudo
-                    </button>
-                @elseif ($fvPodeIniciar)
+                    @if ($fvPodeIniciar)
+                        <button type="button"
+                                data-modal-open="automacao-confirmar"
+                                data-automacao-label="Confirmar e refazer tudo"
+                                class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50">
+                            <i class="fa-solid fa-rotate-right"></i> Refazer tudo
+                        </button>
+                    @endif
+                @elseif ($fvPodeIniciarCompleto)
                     <button type="button"
                             data-modal-open="automacao-confirmar"
                             data-automacao-label="{{ in_array($fvStatus, ['erro','timeout']) ? 'Confirmar e retentar' : 'Confirmar e iniciar' }}"
@@ -485,6 +497,13 @@
                             </p>
                         @endif
                         <p class="text-sm leading-relaxed text-red-900">{{ $erroAuto['resumo'] }}</p>
+                        @if ($fvCadastroFvConcluidoNosLogs && in_array($fvStatus, ['erro', 'timeout'], true))
+                            <p class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                                <i class="fa-solid fa-circle-info mr-1"></i>
+                                O cadastro no portal Força de Vendas já foi concluído. Os passos do log (webmail, e-mail do PagBank) são da
+                                <strong>criação da senha</strong>. Use <strong>Continuar (e-mail e senha)</strong> para retomar dessa etapa — não é necessário refazer o cadastro no PagBank.
+                            </p>
+                        @endif
                         @if (filled($erroAuto['tecnico']) && $erroAuto['tecnico'] !== $erroAuto['resumo'])
                             <details class="mt-3">
                                 <summary class="cursor-pointer text-xs font-medium text-red-700">Ver detalhes técnicos</summary>
@@ -492,14 +511,17 @@
                             </details>
                         @endif
                     </div>
-                    @if ($estabelecimento->fv_job_id)
-                        <button type="button"
-                                data-abrir-screenshots-automacao
-                                class="inline-flex shrink-0 items-center gap-2 rounded-lg border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 shadow-sm hover:bg-red-100">
-                            <i class="fa-solid fa-images"></i>
-                            Ver screenshots do processo
-                        </button>
-                    @endif
+                    <div class="flex shrink-0 flex-col items-end gap-2">
+                        @if ($estabelecimento->fv_job_id)
+                            <button type="button"
+                                    data-abrir-screenshots-automacao
+                                    class="inline-flex items-center gap-2 rounded-lg border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 shadow-sm hover:bg-red-100">
+                                <i class="fa-solid fa-images"></i>
+                                Ver screenshots do processo
+                            </button>
+                        @endif
+                        @include('estabelecimento.partials.automacao-retentar-botoes')
+                    </div>
                 </div>
             </div>
         @endif
@@ -609,14 +631,19 @@
                                     @if ($erroLog)
                                         <p class="font-medium text-red-900">{{ $erroLog['titulo'] }}</p>
                                         <p class="mt-0.5 text-gray-700">{{ $erroLog['resumo'] }}</p>
-                                        @if ($estabelecimento->fv_job_id)
-                                            <button type="button"
-                                                    data-abrir-screenshots-automacao
-                                                    class="mt-2 inline-flex items-center gap-1 rounded border border-red-200 bg-white px-2 py-1 text-[10px] font-semibold text-red-700 hover:bg-red-50">
-                                                <i class="fa-solid fa-images"></i>
-                                                Ver screenshots
-                                            </button>
-                                        @endif
+                                        <div class="mt-2 flex flex-wrap items-center gap-2">
+                                            @if ($estabelecimento->fv_job_id)
+                                                <button type="button"
+                                                        data-abrir-screenshots-automacao
+                                                        class="inline-flex items-center gap-1 rounded border border-red-200 bg-white px-2 py-1 text-[10px] font-semibold text-red-700 hover:bg-red-50">
+                                                    <i class="fa-solid fa-images"></i>
+                                                    Ver screenshots
+                                                </button>
+                                            @endif
+                                            @if ($fvPodeRetentar && $alog->id === $ultimoLogErroId)
+                                                @include('estabelecimento.partials.automacao-retentar-botoes', ['compact' => true])
+                                            @endif
+                                        </div>
                                         @if (filled($erroLog['tecnico']) && $erroLog['tecnico'] !== $erroLog['resumo'])
                                             <details class="mt-2">
                                                 <summary class="cursor-pointer text-[10px] text-gray-400">detalhes técnicos</summary>

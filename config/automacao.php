@@ -36,6 +36,12 @@ return [
     'polling_max_tentativas' => (int) env('AUTOMACAO_POLLING_MAX', 50), // 50 * 20s ≈ 16 minutos
 
     /*
+    | Retentativas em falhas transitórias de rede (DNS, timeout, connection refused)
+    */
+    'api_retry_times' => (int) env('AUTOMACAO_API_RETRY_TIMES', 3),
+    'api_retry_sleep_ms' => (int) env('AUTOMACAO_API_RETRY_SLEEP_MS', 1000),
+
+    /*
     | Rodar Chrome em modo headless (true em produção, false para debug)
     */
     'headless' => (bool) env('AUTOMACAO_HEADLESS', true),

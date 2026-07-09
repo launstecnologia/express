@@ -51,10 +51,12 @@ class EstabelecimentoAutomacaoController extends Controller
     {
         $this->autorizarAutomacao($estabelecimento);
 
-        if ($estabelecimento->fv_status !== 'erro_email') {
+        $logs = app(AutomacaoLogService::class)->listarParaEstabelecimento($estabelecimento->id);
+
+        if (! AutomacaoSchema::podeRetentarApenasEmail($estabelecimento, $logs)) {
             return redirect()
                 ->route('estabelecimentos.show', $estabelecimento)
-                ->with('aviso', 'Esta ação só está disponível quando o status é "Erro no e-mail".');
+                ->with('aviso', 'Esta ação só está disponível quando o cadastro no portal FV já foi concluído e a falha é na etapa de e-mail/senha.');
         }
 
         if (! PlatformSettings::automacaoConfigurado()) {
@@ -77,7 +79,7 @@ class EstabelecimentoAutomacaoController extends Controller
 
             return redirect()
                 ->route('estabelecimentos.show', $estabelecimento)
-                ->with('status', 'Retentando etapa de e-mail. Acompanhe o status nesta página.');
+                ->with('status', 'Retentando etapa de e-mail e senha. O cadastro no portal FV não será refeito.');
 
         } catch (\Throwable $e) {
             return redirect()
