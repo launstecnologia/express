@@ -3,33 +3,38 @@
 @section('title', 'Dashboard')
 
 @section('content')
-<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
     <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Estabelecimentos</p>
-        <div class="mt-2 flex items-center justify-between">
-            <span class="text-3xl font-bold text-gray-800 dark:text-gray-100">{{ $totalEstabelecimentos }}</span>
-            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">▣</div>
+        <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Estabelecimentos</p>
+                <p class="mt-2 text-2xl font-bold tabular-nums text-gray-800 sm:text-3xl dark:text-gray-100">{{ number_format($totalEstabelecimentos, 0, ',', '.') }}</p>
+            </div>
+            <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
+                <i class="fa-solid fa-store text-lg"></i>
+            </div>
         </div>
     </div>
     <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Faturamento do mês</p>
-        <div class="mt-2 flex items-center justify-between">
-            <span class="text-3xl font-bold text-green-600 dark:text-green-400">R$ {{ number_format($faturamentoMes, 2, ',', '.') }}</span>
-            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-400">✓</div>
+        <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Faturamento do mês</p>
+                <p class="mt-2 text-lg font-bold tabular-nums leading-tight text-green-600 sm:text-xl lg:text-2xl dark:text-green-400">R$ {{ number_format($faturamentoMes, 2, ',', '.') }}</p>
+            </div>
+            <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-400">
+                <i class="fa-solid fa-chart-line text-lg"></i>
+            </div>
         </div>
     </div>
     <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Comissões do mês</p>
-        <div class="mt-2 flex items-center justify-between">
-            <span class="text-3xl font-bold text-yellow-600 dark:text-yellow-400">R$ {{ number_format($royaltiesMes, 2, ',', '.') }}</span>
-            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-yellow-50 text-yellow-600 dark:bg-yellow-950 dark:text-yellow-400">◷</div>
-        </div>
-    </div>
-    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Satisfação</p>
-        <div class="mt-2 flex items-center justify-between">
-            <span class="text-3xl font-bold text-gray-800 dark:text-gray-100">0/5</span>
-            <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50 text-sky-600 dark:bg-sky-950 dark:text-sky-400">★</div>
+        <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Comissões do mês</p>
+                <p class="mt-2 text-lg font-bold tabular-nums leading-tight text-yellow-600 sm:text-xl lg:text-2xl dark:text-yellow-400">R$ {{ number_format($royaltiesMes, 2, ',', '.') }}</p>
+            </div>
+            <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-yellow-50 text-yellow-600 dark:bg-yellow-950 dark:text-yellow-400">
+                <i class="fa-solid fa-hand-holding-dollar text-lg"></i>
+            </div>
         </div>
     </div>
 </div>
@@ -154,36 +159,43 @@
 
                         <div
                             data-carousel-card="{{ $loop->index }}"
-                            class="w-full shrink-0 snap-start sm:w-[calc(50%-0.5rem)] xl:w-[calc(33.333%-0.67rem)]"
+                            class="w-[min(100%,22rem)] shrink-0 snap-start sm:w-[24rem] lg:w-[26rem] xl:w-[28rem]"
                         >
-                            <div class="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm shadow-blue-100/60 dark:border-gray-700 dark:bg-gray-900 dark:shadow-none">
-                                <div class="flex items-start justify-between gap-3">
-                                    <span class="rounded-full bg-blue-600 px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
+                            <div class="flex h-full flex-col rounded-2xl border border-blue-100 bg-white p-4 shadow-sm shadow-blue-100/60 dark:border-gray-700 dark:bg-gray-900 dark:shadow-none">
+                                <div class="space-y-3 border-b border-gray-100 pb-3 dark:border-gray-700">
+                                    <p
+                                        class="line-clamp-2 text-xs font-bold uppercase leading-snug tracking-wide text-blue-700 dark:text-blue-300"
+                                        title="{{ $planoResumo['nome'] }}"
+                                    >
                                         {{ $planoResumo['nome'] }}
-                                    </span>
-                                    <div class="text-right">
-                                        <p class="text-[11px] uppercase tracking-wide text-gray-400">Faturamento</p>
-                                        <p class="text-lg font-bold text-gray-900 dark:text-gray-100">R$ {{ number_format($planoResumo['faturamento'], 2, ',', '.') }}</p>
-                                        <p class="mt-2 text-[11px] uppercase tracking-wide text-gray-400">Comissão</p>
-                                        <p class="text-base font-bold text-blue-700 dark:text-blue-400">R$ {{ number_format($planoResumo['comissao'], 2, ',', '.') }}</p>
+                                    </p>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div class="min-w-0">
+                                            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Faturamento</p>
+                                            <p class="mt-0.5 text-sm font-bold tabular-nums leading-tight text-gray-900 sm:text-base dark:text-gray-100">R$ {{ number_format($planoResumo['faturamento'], 2, ',', '.') }}</p>
+                                        </div>
+                                        <div class="min-w-0 text-right">
+                                            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Comissão</p>
+                                            <p class="mt-0.5 text-sm font-bold tabular-nums leading-tight text-blue-700 sm:text-base dark:text-blue-400">R$ {{ number_format($planoResumo['comissao'], 2, ',', '.') }}</p>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div class="my-6 flex justify-center">
-                                    <div class="relative h-36 w-36 rounded-full shadow-inner" style="background: conic-gradient(#f59e0b 0 {{ $debitoEnd }}%, #10b981 {{ $debitoEnd }}% {{ $creditoEnd }}%, #3b82f6 {{ $creditoEnd }}% {{ $parceladoEnd }}%, #f43f5e {{ $parceladoEnd }}% 100%);">
-                                        <div class="absolute inset-9 rounded-full border border-blue-50 bg-white dark:border-gray-600 dark:bg-gray-900"></div>
+                                <div class="my-5 flex justify-center">
+                                    <div class="relative h-32 w-32 shrink-0 rounded-full shadow-inner sm:h-36 sm:w-36" style="background: conic-gradient(#f59e0b 0 {{ $debitoEnd }}%, #10b981 {{ $debitoEnd }}% {{ $creditoEnd }}%, #3b82f6 {{ $creditoEnd }}% {{ $parceladoEnd }}%, #f43f5e {{ $parceladoEnd }}% 100%);">
+                                        <div class="absolute inset-8 rounded-full border border-blue-50 bg-white dark:border-gray-600 dark:bg-gray-900 sm:inset-9"></div>
                                     </div>
                                 </div>
 
-                                <div class="space-y-3">
+                                <div class="mt-auto space-y-2.5">
                                     @foreach ($itensPlano as $item)
-                                        <div class="grid grid-cols-[1fr_auto_auto] items-center gap-3 text-sm">
-                                            <span class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-                                                <span class="h-2.5 w-2.5 rounded-full {{ $item['cor'] }}"></span>
-                                                {{ $item['label'] }}
+                                        <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 text-xs sm:text-sm">
+                                            <span class="flex min-w-0 items-center gap-2 text-gray-500 dark:text-gray-400">
+                                                <span class="h-2.5 w-2.5 shrink-0 rounded-full {{ $item['cor'] }}"></span>
+                                                <span class="truncate">{{ $item['label'] }}</span>
                                             </span>
-                                            <span class="font-semibold text-gray-900 dark:text-gray-100">R$ {{ number_format($item['valor'], 2, ',', '.') }}</span>
-                                            <span class="w-12 text-right text-xs text-gray-400">{{ number_format($item['percentual'], 2, ',', '.') }}%</span>
+                                            <span class="shrink-0 font-semibold tabular-nums text-gray-900 dark:text-gray-100">R$ {{ number_format($item['valor'], 2, ',', '.') }}</span>
+                                            <span class="w-10 shrink-0 text-right text-[11px] tabular-nums text-gray-400 sm:w-12">{{ number_format($item['percentual'], 1, ',', '.') }}%</span>
                                         </div>
                                     @endforeach
                                 </div>
