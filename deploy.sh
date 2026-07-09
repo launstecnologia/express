@@ -58,7 +58,7 @@ check_api_keys() {
 ensure_storage_dirs() {
     log "Verificando pastas e permissões do storage..."
     $COMPOSE exec -T -u root $APP_SERVICE sh -c '
-        mkdir -p storage/app/private/chamados storage/app/public \
+        mkdir -p storage/app/private/chamados storage/app/private/conciliacoes storage/app/public \
                  storage/framework/cache storage/framework/sessions \
                  storage/framework/views storage/logs bootstrap/cache
         chown -R www-data:www-data storage bootstrap/cache
@@ -166,6 +166,7 @@ cmd_update() {
 
     log "Baixando código mais recente..."
     git pull origin main 2>/dev/null || warn "git pull falhou — verifique manualmente"
+    log "Versão no servidor: $(git log -1 --oneline 2>/dev/null || echo 'desconhecida')"
 
     log "Reconstruindo imagens alteradas..."
     $COMPOSE build

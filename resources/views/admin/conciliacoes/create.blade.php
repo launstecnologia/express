@@ -11,8 +11,8 @@
     <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
         <h2 class="text-lg font-bold text-gray-800">Importar relatório PagSeguro</h2>
         <p class="mt-2 text-sm text-gray-500">
-            Envie o arquivo mensal da PagSeguro. Apenas a aba <strong>Validação V2</strong> será importada.
-            O sistema vincula cada linha pelo <code class="text-xs">id_cliente</code> ao estabelecimento (<code class="text-xs">token_pagseguro</code>).
+            Envie o arquivo mensal da PagSeguro <strong>sem alterar</strong> — use o XLSX original com a aba <strong>Validação V2</strong>.
+            O sistema lê automaticamente as colunas (id_cliente, TPV, comissão, bandeira, etc.) e vincula ao estabelecimento pelo <code class="text-xs">token_pagseguro</code>.
         </p>
 
         <form method="POST" action="{{ route('admin.conciliacoes.store') }}" enctype="multipart/form-data" class="mt-6 space-y-4">

@@ -10,6 +10,7 @@ use App\Support\XlsxReader;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 class ConciliacaoImportService
@@ -54,11 +55,9 @@ class ConciliacaoImportService
         $pathSalvo = null;
 
         if ($arquivo instanceof UploadedFile) {
-            $pathSalvo = $arquivo->storeAs(
-                'conciliacoes/'. $referenciaMes->format('Y-m'),
-                $nomeArquivo,
-                'local',
-            );
+            $pasta = 'conciliacoes/'.$referenciaMes->format('Y-m');
+            Storage::disk('local')->makeDirectory($pasta);
+            $pathSalvo = $arquivo->storeAs($pasta, $nomeArquivo, 'local');
         }
 
         return DB::transaction(function () use ($rows, $meta, $referenciaMes, $estabelecimentos, $usuarioId, $nomeArquivo, $pathSalvo, $confrontar) {
