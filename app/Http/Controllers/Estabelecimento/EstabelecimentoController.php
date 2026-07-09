@@ -68,6 +68,7 @@ class EstabelecimentoController extends Controller
         return view('estabelecimento.index', [
             'estabelecimentos' => $query->paginate(20)->withQueryString(),
             'filtros' => $filtros,
+            'filtrosResumo' => $this->resumoFiltrosAplicados($filtros),
             'masters' => $this->usuariosPorTipo('master'),
             'marketplaces' => $this->usuariosPorTipo('marketplace'),
             'revendas' => $this->usuariosPorTipo('revenda'),
@@ -657,13 +658,7 @@ class EstabelecimentoController extends Controller
 
         $this->aplicarFiltroMarketplaceRevenda($query, $request);
 
-        if ($request->filled('status') && in_array($request->string('status'), ['pendente', 'aprovado', 'negado'], true)) {
-            EstabelecimentoEtapaListagem::aplicarFiltroStatus($query, $request->string('status'));
-        }
-
-        if ($request->filled('pagbank') && in_array($request->string('pagbank'), ['pendente', 'aprovado', 'negado'], true)) {
-            EstabelecimentoEtapaListagem::aplicarFiltroPagBank($query, $request->string('pagbank'));
-        }
+        $this->aplicarFiltrosSituacao($query, $request);
 
         if ($request->filled('risco')) {
             $query->where('risco', $request->string('risco'));
@@ -719,6 +714,146 @@ class EstabelecimentoController extends Controller
         if ($request->filled('revenda_id')) {
             $query->where('revenda_id', $request->integer('revenda_id'));
         }
+    }
+
+    private function aplicarFiltrosSituacao(Builder $query, Request $request): void
+    {
+        $status = $request->filled('status') && in_array($request->string('status'), ['pendente', 'aprovado', 'negado'], true)
+            ? $request->string('status')->toString()
+            : null;
+        $pagbank = $request->filled('pagbank') && in_array($request->string('pagbank'), ['pendente', 'aprovado', 'negado'], true)
+            ? $request->string('pagbank')->toString()
+            : null;
+
+        if ($status === 'negado' || $pagbank === 'negado') {
+            $query->withoutGlobalScope(ExcluirInativoSistemaScope::class);
+        }
+
+        if ($status && $pagbank) {
+            EstabelecimentoEtapaListagem::aplicarFiltroStatus($query, $status);
+            EstabelecimentoEtapaListagem::aplicarFiltroPagBank($query, $pagbank);
+
+            return;
+        }
+
+        if ($status) {
+            if (in_array($status, ['pendente', 'negado'], true)) {
+                EstabelecimentoEtapaListagem::aplicarFiltroEtapaCombinada($query, $status);
+
+                return;
+            }
+
+            EstabelecimentoEtapaListagem::aplicarFiltroStatus($query, $status);
+
+            return;
+        }
+
+        if ($pagbank) {
+            EstabelecimentoEtapaListagem::aplicarFiltroPagBank($query, $pagbank);
+        }
+    }
+
+    /**
+     * @return list<array{chave: string, label: string, url: string}>
+     */
+    private function resumoFiltrosAplicados(array $filtros): array
+    {
+        $rotulos = [
+            'status' => [
+                'pendente' => 'Situação pendente (cadastro ou PagBank)',
+                'aprovado' => 'Cadastro aprovado',
+                'negado' => 'Situação negada (cadastro ou PagBank)',
+            ],
+            'pagbank' => [
+                'pendente' => 'PagBank pendente',
+                'aprovado' => 'PagBank aprovado',
+                'negado' => 'PagBank negado',
+            ],
+        ];
+
+        $resumo = [];
+
+        foreach (['busca', 'codigo_edi', 'status', 'pagbank', 'risco', 'segmento', 'pessoa_tipo', 'ativo', 'data_inicio', 'data_fim'] as $chave) {
+            $valor = $filtros[$chave] ?? null;
+            if ($valor === null || $valor === '') {
+                continue;
+            }
+
+            $label = match ($chave) {
+                'busca' => 'Busca: '.$valor,
+                'codigo_edi' => 'EDI: '.$valor,
+                'status' => $rotulos['status'][$valor] ?? 'Status: '.$valor,
+                'pagbank' => $rotulos['pagbank'][$valor] ?? 'PagBank: '.$valor,
+                'risco' => 'Risco: '.$valor,
+                'segmento' => 'Segmento: '.$valor,
+                'pessoa_tipo' => 'Pessoa: '.($valor === 'juridica' ? 'Jurídica' : 'Física'),
+                'ativo' => 'Cadastro ativo: '.($valor === '1' || $valor === 1 || $valor === true ? 'Sim' : 'Não'),
+                'data_inicio' => 'Desde: '.$valor,
+                'data_fim' => 'Até: '.$valor,
+                default => $chave.': '.$valor,
+            };
+
+            $resumo[] = [
+                'chave' => $chave,
+                'label' => $label,
+                'url' => $this->urlSemFiltro($filtros, $chave),
+            ];
+        }
+
+        $marketplaceFiltro = (string) ($filtros['marketplace_id'] ?? '');
+        if ($marketplaceFiltro === 'sem_marketplace') {
+            $resumo[] = [
+                'chave' => 'marketplace_id',
+                'label' => 'Sem marketplace',
+                'url' => $this->urlSemFiltro($filtros, 'marketplace_id'),
+            ];
+        } elseif ($marketplaceFiltro === 'sem_vinculo') {
+            $resumo[] = [
+                'chave' => 'marketplace_id',
+                'label' => 'Sem marketplace e sem revenda',
+                'url' => $this->urlSemFiltro($filtros, 'marketplace_id'),
+            ];
+        } elseif ($marketplaceFiltro !== '' && ctype_digit($marketplaceFiltro)) {
+            $nome = Usuario::query()->find((int) $marketplaceFiltro)?->nomeExibicao() ?? '#'.$marketplaceFiltro;
+            $resumo[] = [
+                'chave' => 'marketplace_id',
+                'label' => 'Marketplace: '.$nome,
+                'url' => $this->urlSemFiltro($filtros, 'marketplace_id'),
+            ];
+        }
+
+        foreach (['master_id' => 'Master', 'revenda_id' => 'Revenda', 'plano_id' => 'Plano'] as $chave => $prefixo) {
+            $valor = $filtros[$chave] ?? null;
+            if ($valor === null || $valor === '') {
+                continue;
+            }
+
+            $nome = match ($chave) {
+                'plano_id' => Plano::query()->find((int) $valor)?->nome ?? '#'.$valor,
+                default => Usuario::query()->find((int) $valor)?->nomeExibicao() ?? '#'.$valor,
+            };
+
+            $resumo[] = [
+                'chave' => $chave,
+                'label' => $prefixo.': '.$nome,
+                'url' => $this->urlSemFiltro($filtros, $chave),
+            ];
+        }
+
+        return $resumo;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function urlSemFiltro(array $filtros, string $chave): string
+    {
+        $params = collect($filtros)
+            ->except($chave)
+            ->filter(fn ($valor) => $valor !== null && $valor !== '')
+            ->all();
+
+        return route('estabelecimentos.index', $params);
     }
 
     private function aplicarBuscaUsuarioRelacionado(Builder $query, string $relation, string $like): void

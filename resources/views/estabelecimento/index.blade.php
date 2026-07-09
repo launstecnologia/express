@@ -23,6 +23,21 @@
             <div class="min-w-0">
                 <h3 class="text-sm font-semibold text-gray-700">Estabelecimentos encontrados</h3>
                 <p class="text-xs text-gray-400">{{ $estabelecimentos->total() }} resultado(s)</p>
+                @if (! empty($filtrosResumo))
+                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                        @foreach ($filtrosResumo as $filtroResumo)
+                            <a
+                                href="{{ $filtroResumo['url'] }}"
+                                class="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-800 hover:bg-blue-100"
+                                title="Remover filtro"
+                            >
+                                {{ $filtroResumo['label'] }}
+                                <i class="fa-solid fa-xmark text-[10px] opacity-70"></i>
+                            </a>
+                        @endforeach
+                        <a href="{{ route('estabelecimentos.index') }}" class="text-[11px] font-semibold text-gray-500 underline hover:text-gray-700">Limpar todos</a>
+                    </div>
+                @endif
             </div>
             <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                 <form method="GET" action="{{ route('estabelecimentos.index') }}" class="flex min-w-0 flex-1 items-center gap-2 sm:max-w-md sm:flex-none">
@@ -225,6 +240,7 @@
                                 <option value="{{ $valor }}" @selected(($filtros['status'] ?? '') === $valor)>{{ $rotulo }}</option>
                             @endforeach
                         </select>
+                        <p class="mt-1 text-xs text-gray-400">Pendente/negado considera cadastro <strong>ou</strong> PagBank, se o outro filtro não estiver preenchido.</p>
                     </div>
 
                     <div>
