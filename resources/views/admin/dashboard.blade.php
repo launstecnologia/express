@@ -164,18 +164,14 @@
                                     <div class="text-right">
                                         <p class="text-[11px] uppercase tracking-wide text-gray-400">Faturamento</p>
                                         <p class="text-lg font-bold text-gray-900 dark:text-gray-100">R$ {{ number_format($planoResumo['faturamento'], 2, ',', '.') }}</p>
+                                        <p class="mt-2 text-[11px] uppercase tracking-wide text-gray-400">Comissão</p>
+                                        <p class="text-base font-bold text-blue-700 dark:text-blue-400">R$ {{ number_format($planoResumo['comissao'], 2, ',', '.') }}</p>
                                     </div>
                                 </div>
 
                                 <div class="my-6 flex justify-center">
                                     <div class="relative h-36 w-36 rounded-full shadow-inner" style="background: conic-gradient(#f59e0b 0 {{ $debitoEnd }}%, #10b981 {{ $debitoEnd }}% {{ $creditoEnd }}%, #3b82f6 {{ $creditoEnd }}% {{ $parceladoEnd }}%, #f43f5e {{ $parceladoEnd }}% 100%);">
                                         <div class="absolute inset-9 rounded-full border border-blue-50 bg-white dark:border-gray-600 dark:bg-gray-900"></div>
-                                        <div class="absolute inset-0 flex items-center justify-center">
-                                            <div class="text-center">
-                                                <p class="text-[10px] uppercase tracking-wide text-gray-400">Comissão</p>
-                                                <p class="text-sm font-bold text-blue-700 dark:text-blue-400">R$ {{ number_format($planoResumo['comissao'], 2, ',', '.') }}</p>
-                                            </div>
-                                        </div>
                                     </div>
                                 </div>
 
