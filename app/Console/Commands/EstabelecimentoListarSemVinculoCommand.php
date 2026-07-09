@@ -11,14 +11,15 @@ use Illuminate\Support\Facades\Storage;
 class EstabelecimentoListarSemVinculoCommand extends Command
 {
     protected $signature = 'estabelecimento:listar-sem-vinculo
-                            {--status=pendente,negado : Etapas de status do cadastro (pendente,aprovado,negado) separadas por vírgula}
+                            {--status= : Etapas (pendente,aprovado,negado). Vazio = qualquer status}
                             {--somente-sem-marketplace : Só exige marketplace_id nulo (revenda pode existir)}
                             {--somente-sem-revenda : Só exige revenda_id nulo (marketplace pode existir)}
-                            {--incluir-aprovados : Inclui também status aprovado}
+                            {--com-marketplace : Exige marketplace_id preenchido (útil com --somente-sem-revenda)}
+                            {--incluir-aprovados : Inclui também status aprovado (quando --status estiver preenchido)}
                             {--csv : Gera CSV em storage/app}
                             {--limit=0 : Limita quantidade (0 = todos)}';
 
-    protected $description = 'Lista estabelecimentos sem marketplace/revenda com status pendente ou negado';
+    protected $description = 'Lista estabelecimentos sem vínculo comercial (marketplace/revenda)';
 
     public function handle(): int
     {
@@ -34,6 +35,10 @@ class EstabelecimentoListarSemVinculoCommand extends Command
             $query->whereNull('revenda_id');
         } else {
             $query->whereNull('marketplace_id')->whereNull('revenda_id');
+        }
+
+        if ($this->option('com-marketplace')) {
+            $query->whereNotNull('marketplace_id');
         }
 
         $this->aplicarFiltroStatus($query);
@@ -105,7 +110,12 @@ class EstabelecimentoListarSemVinculoCommand extends Command
 
     private function aplicarFiltroStatus(Builder $query): void
     {
-        $raw = (string) $this->option('status');
+        $raw = trim((string) $this->option('status'));
+
+        if ($raw === '') {
+            return;
+        }
+
         $etapas = collect(explode(',', $raw))
             ->map(fn ($s) => strtolower(trim($s)))
             ->filter()
@@ -121,7 +131,7 @@ class EstabelecimentoListarSemVinculoCommand extends Command
         )->values();
 
         if ($etapas->isEmpty()) {
-            $etapas = collect(['pendente', 'negado']);
+            return;
         }
 
         $query->where(function (Builder $outer) use ($etapas) {
@@ -141,7 +151,14 @@ class EstabelecimentoListarSemVinculoCommand extends Command
             default => 'sem marketplace e sem revenda',
         };
 
-        return "Filtro: {$vinculo} | status={$this->option('status')}";
+        if ($this->option('com-marketplace')) {
+            $vinculo .= ' + com marketplace';
+        }
+
+        $status = trim((string) $this->option('status'));
+        $statusLabel = $status !== '' ? $status : 'qualquer';
+
+        return "Filtro: {$vinculo} | status={$statusLabel}";
     }
 
     /**
