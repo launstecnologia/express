@@ -46,6 +46,10 @@ class EstabelecimentoController extends Controller
     {
         $query = Estabelecimento::query()->with(['marketplace', 'revenda'])->latest();
 
+        if ($this->deveIncluirInativosNaListagem($request)) {
+            $query->withoutGlobalScope(ExcluirInativoSistemaScope::class);
+        }
+
         $this->aplicarFiltrosIndex($query, $request);
 
         $filtros = $request->only([
@@ -682,10 +686,6 @@ class EstabelecimentoController extends Controller
         }
 
         if ($request->has('ativo') && $request->input('ativo') !== '') {
-            if (! $request->boolean('ativo')) {
-                $query->withoutGlobalScope(ExcluirInativoSistemaScope::class);
-            }
-
             $query->where('estabelecimentos.ativo', $request->boolean('ativo'));
         }
 
@@ -698,39 +698,46 @@ class EstabelecimentoController extends Controller
         }
     }
 
+    private function deveIncluirInativosNaListagem(Request $request): bool
+    {
+        $marketplaceFiltro = (string) ($request->input('marketplace_id') ?? '');
+
+        if (in_array($marketplaceFiltro, ['sem_marketplace', 'sem_vinculo'], true)) {
+            return true;
+        }
+
+        if ($request->filled('vinculo') && $request->string('vinculo') === 'sem') {
+            return true;
+        }
+
+        if ($request->filled('status') && $request->string('status') === 'negado') {
+            return true;
+        }
+
+        if ($request->filled('pagbank') && $request->string('pagbank') === 'negado') {
+            return true;
+        }
+
+        return $request->has('ativo')
+            && $request->input('ativo') !== ''
+            && ! $request->boolean('ativo');
+    }
+
     private function aplicarFiltroMarketplaceRevenda(Builder $query, Request $request): void
     {
         $marketplaceFiltro = (string) ($request->input('marketplace_id') ?? '');
         $semVinculo = $marketplaceFiltro === 'sem_vinculo'
             || ($request->filled('vinculo') && $request->string('vinculo') === 'sem');
 
-        if ($semVinculo || $marketplaceFiltro === 'sem_marketplace') {
-            // Inclui inativos: costumam ser exatamente os cadastros sem vínculo comercial.
-            $query->withoutGlobalScope(ExcluirInativoSistemaScope::class);
-        }
-
         if ($semVinculo) {
-            $query->where(function (Builder $q) {
-                $q->where(function (Builder $semMkt) {
-                    $semMkt->whereNull('estabelecimentos.marketplace_id')
-                        ->orWhere('estabelecimentos.marketplace_id', 0)
-                        ->orWhereDoesntHave('marketplace');
-                })->where(function (Builder $semRev) {
-                    $semRev->whereNull('estabelecimentos.revenda_id')
-                        ->orWhere('estabelecimentos.revenda_id', 0)
-                        ->orWhereDoesntHave('revenda');
-                });
-            });
+            $query->whereNull('estabelecimentos.marketplace_id')
+                ->whereNull('estabelecimentos.revenda_id');
 
             return;
         }
 
         if ($marketplaceFiltro === 'sem_marketplace') {
-            $query->where(function (Builder $q) {
-                $q->whereNull('estabelecimentos.marketplace_id')
-                    ->orWhere('estabelecimentos.marketplace_id', 0)
-                    ->orWhereDoesntHave('marketplace');
-            });
+            $query->whereNull('estabelecimentos.marketplace_id');
         } elseif ($marketplaceFiltro !== '' && ctype_digit($marketplaceFiltro)) {
             $query->where('estabelecimentos.marketplace_id', (int) $marketplaceFiltro);
         }
@@ -748,10 +755,6 @@ class EstabelecimentoController extends Controller
         $pagbank = $request->filled('pagbank') && in_array($request->string('pagbank'), ['pendente', 'aprovado', 'negado'], true)
             ? $request->string('pagbank')->toString()
             : null;
-
-        if ($status === 'negado' || $pagbank === 'negado') {
-            $query->withoutGlobalScope(ExcluirInativoSistemaScope::class);
-        }
 
         if ($status && $pagbank) {
             EstabelecimentoEtapaListagem::aplicarFiltroStatus($query, $status);
