@@ -8,7 +8,6 @@ use App\Models\Log;
 use App\Rules\CelularValido;
 use App\Rules\CpfValido;
 use App\Rules\CnpjValido;
-use App\Rules\DocumentoEstabelecimentoUnico;
 use App\Services\AutomacaoLogService;
 use App\Models\Plano;
 use App\Models\Segmento;
@@ -471,8 +470,6 @@ class EstabelecimentoController extends Controller
     private function validar(Request $request): array
     {
         $pessoaTipo = $request->input('pessoa_tipo');
-        $estabelecimentoAtual = $request->route('estabelecimento');
-        $ignoreId = $estabelecimentoAtual instanceof Estabelecimento ? $estabelecimentoAtual->id : null;
 
         $dados = $request->validate([
             'pessoa_tipo' => ['required', 'in:juridica,fisica'],
@@ -482,7 +479,6 @@ class EstabelecimentoController extends Controller
                 'string',
                 'max:18',
                 new CnpjValido,
-                new DocumentoEstabelecimentoUnico('cnpj', $ignoreId),
             ],
             'cpf' => [
                 Rule::requiredIf($pessoaTipo === 'fisica'),
@@ -490,7 +486,6 @@ class EstabelecimentoController extends Controller
                 'string',
                 'max:14',
                 new CpfValido,
-                new DocumentoEstabelecimentoUnico('cpf', $ignoreId),
             ],
             'razao_social' => ['nullable', 'string', 'max:200'],
             'inscricao_estadual' => ['nullable', 'string', 'max:30'],
