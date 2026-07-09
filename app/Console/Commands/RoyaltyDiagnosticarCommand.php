@@ -7,6 +7,7 @@ use App\Models\Estabelecimento;
 use App\Models\EstabelecimentoRoyalty;
 use App\Models\PlanoTaxa;
 use App\Services\RoyaltyCalculadorService;
+use App\Support\ComissaoAdminSql;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -23,7 +24,7 @@ class RoyaltyDiagnosticarCommand extends Command
         $chave = trim((string) $this->argument('estabelecimento'));
 
         $estabelecimento = Estabelecimento::withoutGlobalScopes()
-            ->with(['plano.taxas', 'master', 'marketplace', 'revenda'])
+            ->with(['plano.taxas.royalties', 'master', 'marketplace', 'revenda'])
             ->when(ctype_digit($chave), fn ($q) => $q->where('id', (int) $chave))
             ->when(! ctype_digit($chave), fn ($q) => $q->where('token_pagseguro', $chave))
             ->first();
@@ -96,7 +97,7 @@ class RoyaltyDiagnosticarCommand extends Command
 
             $this->newLine();
             $this->comment('Amostra — movimento '.$amostra->movimento_api_codigo);
-            $comissaoPct = $taxaCasada?->comissao_percentual;
+            $comissaoPct = $taxaCasada?->comissaoAdminPercentual();
 
             $this->table(['Campo', 'Valor'], [
                 ['Instituição', $amostra->instituicao_financeira ?: '—'],
@@ -111,24 +112,16 @@ class RoyaltyDiagnosticarCommand extends Command
         }
 
         // Comissão admin calculada (comissao_percentual × faturamento) no período
-        $comissaoAdmin = (float) DB::table('edi_movimentos as em')
-            ->join('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
-            ->join('plano_taxas as pt', function ($join) {
-                $join->on('pt.plano_id', '=', 'e.plano_id')
-                    ->on('pt.arranjo_ur', '=', 'em.arranjo_ur')
-                    ->on('pt.parcelas', '=', DB::raw('COALESCE(NULLIF(em.quantidade_parcela, 0), 1)'))
-                    ->where('pt.ativo', true);
-            })
+        $comissaoAdmin = (float) ComissaoAdminSql::queryMovimentosComComissaoAdmin()
             ->where('em.estabelecimento_id', $estabelecimento->id)
             ->when($this->option('data'), fn ($q) => $q->whereDate('em.data_inicial_transacao', $this->option('data')))
-            ->whereNotNull('pt.comissao_percentual')
-            ->sum(DB::raw('em.valor_total_transacao * pt.comissao_percentual / 100'));
+            ->sum(DB::raw(ComissaoAdminSql::valor()));
 
         $this->newLine();
         $this->line('Comissão admin calculada no período: R$ '.number_format($comissaoAdmin, 2, ',', '.'));
 
         if ($plano && $taxasAtivas->isNotEmpty()) {
-            $taxasSemComissao = $taxasAtivas->whereNull('comissao_percentual')->count();
+            $taxasSemComissao = $taxasAtivas->filter(fn (PlanoTaxa $taxa) => $taxa->comissaoAdminPercentual() === null)->count();
             if ($taxasSemComissao > 0) {
                 $this->warn("{$taxasSemComissao} de {$taxasAtivas->count()} taxas ativas do plano estão SEM comissao_percentual.");
             }
@@ -145,8 +138,8 @@ class RoyaltyDiagnosticarCommand extends Command
             $causas[] = "Plano #{$plano->id} não tem taxas ativas cadastradas.";
         } elseif ($amostra && ! $taxaCasada) {
             $causas[] = 'Nenhuma plano_taxa casa com o movimento (arranjo_ur/instituição/tipo/parcelas). Cadastre a taxa correspondente.';
-        } elseif ($amostra && $taxaCasada && $taxaCasada->comissao_percentual === null) {
-            $causas[] = "A taxa #{$taxaCasada->id} do plano está SEM comissao_percentual — por isso a COMISSÃO DO ADMIN fica R$ 0,00. Popule comissao_percentual nas plano_taxas do plano #{$plano->id}.";
+        } elseif ($amostra && $taxaCasada && $taxaCasada->comissaoAdminPercentual() === null) {
+            $causas[] = "A taxa #{$taxaCasada->id} do plano está SEM comissão cadastrada — por isso a COMISSÃO DO ADMIN fica R$ 0,00. Salve a grade do plano ou rode plano:sync-comissao-percentual.";
         }
 
         if (! $temCadeia) {

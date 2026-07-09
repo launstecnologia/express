@@ -28,4 +28,19 @@ class PlanoTaxa extends Model
     {
         return $this->hasMany(PlanoTaxaRoyalty::class);
     }
+
+    public function comissaoAdminPercentual(): ?float
+    {
+        $royaltyAdmin = $this->relationLoaded('royalties')
+            ? $this->royalties->firstWhere('nivel', 'admin')?->percentual
+            : $this->royalties()->where('nivel', 'admin')->value('percentual');
+
+        if ($royaltyAdmin !== null && $royaltyAdmin !== '') {
+            return (float) $royaltyAdmin;
+        }
+
+        return $this->comissao_percentual !== null
+            ? (float) $this->comissao_percentual
+            : null;
+    }
 }

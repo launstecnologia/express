@@ -7,6 +7,7 @@ use App\Models\ConciliacaoLinha;
 use App\Support\ConciliacaoDimensao;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use App\Support\ComissaoAdminSql;
 use Illuminate\Support\Facades\DB;
 
 class ConciliacaoConfrontoService
@@ -98,11 +99,9 @@ class ConciliacaoConfrontoService
         $movimentos = DB::table('edi_movimentos as em')
             ->leftJoin('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
             ->leftJoin('plano_taxas as pt', function ($join) {
-                $join->on('pt.plano_id', '=', 'e.plano_id')
-                    ->on('pt.arranjo_ur', '=', 'em.arranjo_ur')
-                    ->on('pt.parcelas', '=', DB::raw('COALESCE(NULLIF(em.quantidade_parcela, 0), 1)'))
-                    ->where('pt.ativo', true);
-            })
+                ComissaoAdminSql::joinPlanoTaxa($join);
+            });
+        ComissaoAdminSql::joinRoyaltyAdmin($movimentos)
             ->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
             ->whereNotNull('em.estabelecimento_id')
             ->select([
@@ -116,7 +115,7 @@ class ConciliacaoConfrontoService
                 'em.leitor',
                 'em.pagamento_prazo',
                 'em.valor_total_transacao',
-                'pt.comissao_percentual',
+                DB::raw(ComissaoAdminSql::percentual().' as comissao_percentual'),
                 DB::raw('COALESCE(e.token_pagseguro, em.estabelecimento, em.id_cliente) as id_cliente'),
                 DB::raw('e.segmento as mcc_estabelecimento'),
             ])

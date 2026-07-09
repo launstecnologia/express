@@ -10,6 +10,7 @@ use App\Models\Usuario;
 use App\Services\DashboardApuracaoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use App\Support\ComissaoAdminSql;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
@@ -64,19 +65,11 @@ class DashboardController extends Controller
                 ->sum('transacao_royalties.valor_royalty');
         }
 
-        return (float) DB::table('edi_movimentos as em')
-            ->join('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
-            ->join('plano_taxas as pt', function ($join) {
-                $join->on('pt.plano_id', '=', 'e.plano_id')
-                    ->on('pt.arranjo_ur', '=', 'em.arranjo_ur')
-                    ->on('pt.parcelas', '=', DB::raw('COALESCE(NULLIF(em.quantidade_parcela, 0), 1)'))
-                    ->where('pt.ativo', true);
-            })
-            ->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
-            ->whereIn('em.estabelecimento_id', Estabelecimento::query()->select('id'))
-            ->whereNotNull('e.plano_id')
-            ->whereNotNull('pt.comissao_percentual')
-            ->sum(DB::raw('em.valor_total_transacao * pt.comissao_percentual / 100'));
+        return (float) ComissaoAdminSql::queryMovimentosComComissaoAdmin(function ($query) use ($inicio, $fim) {
+            $query->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
+                ->whereIn('em.estabelecimento_id', Estabelecimento::query()->select('id'))
+                ->whereNotNull('e.plano_id');
+        })->sum(DB::raw(ComissaoAdminSql::valor()));
     }
 
     private function cacheKeyResumo(mixed $usuario): string

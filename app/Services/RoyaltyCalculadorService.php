@@ -294,6 +294,7 @@ class RoyaltyCalculadorService
             $movimento,
             collect([$estabelecimento->id => $estabelecimento])->keyBy('id'),
             PlanoTaxa::query()
+                ->with('royalties')
                 ->where('plano_id', $estabelecimento->plano_id)
                 ->where('ativo', true)
                 ->get()

@@ -234,7 +234,8 @@ class PlanoTaxaGradeService
                     'tipo_transacao' => $tipo,
                     'meio_pagamento_cod' => $mapa['meio'],
                     'taxa_percentual' => $taxa ?? $planoTaxa?->taxa_percentual ?? 0,
-                    'ativo' => $ativo,
+                    'comissao_percentual' => $comissao ?? $planoTaxa?->comissao_percentual,
+                    'ativo' => $ativo || $taxa !== null || $comissao !== null,
                 ]
             );
 

@@ -7,6 +7,7 @@ use App\Models\AggregatedRevenue;
 use App\Models\EdiMovimento;
 use App\Models\SubUsuario;
 use App\Models\Usuario;
+use App\Support\ComissaoAdminSql;
 use App\Support\EdiMovimentoDetalhe;
 use App\Support\InstituicaoFinanceira;
 use App\Services\RoyaltyCalculadorService;
@@ -108,6 +109,7 @@ class RelatorioController extends Controller
                     'plano_taxa' => $taxa ? [
                         'id' => $taxa->id,
                         'taxa_percentual' => (float) $taxa->taxa_percentual,
+                        'comissao_percentual' => $taxa->comissaoAdminPercentual(),
                         'arranjo_ur' => $taxa->arranjo_ur,
                         'instituicao' => $taxa->instituicao,
                         'tipo_transacao' => $taxa->tipo_transacao,
@@ -242,6 +244,13 @@ class RelatorioController extends Controller
         $query = DB::table('edi_movimentos as em')
             ->join('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id');
 
+        $this->aplicarFiltrosMovimentosBase($query, $request);
+
+        return $query;
+    }
+
+    private function aplicarFiltrosMovimentosBase(\Illuminate\Database\Query\Builder $query, Request $request): void
+    {
         if ($request->filled('estabelecimento')) {
             $termo = '%'.$request->string('estabelecimento')->trim().'%';
             $query->where(function ($q) use ($termo) {
@@ -295,22 +304,14 @@ class RelatorioController extends Controller
         } elseif ($request->filled('mes')) {
             $query->whereMonth('em.data_inicial_transacao', $request->integer('mes'));
         }
-
-        return $query;
     }
 
     private function totalComissaoAdmin(Request $request): float
     {
-        return (float) $this->baseMovimentosFiltrados($request)
-            ->join('plano_taxas as pt', function ($join) {
-                $join->on('pt.plano_id', '=', 'e.plano_id')
-                    ->on('pt.arranjo_ur', '=', 'em.arranjo_ur')
-                    ->on('pt.parcelas', '=', DB::raw('COALESCE(NULLIF(em.quantidade_parcela, 0), 1)'))
-                    ->where('pt.ativo', true);
-            })
-            ->whereNotNull('e.plano_id')
-            ->whereNotNull('pt.comissao_percentual')
-            ->sum(DB::raw('em.valor_total_transacao * pt.comissao_percentual / 100'));
+        return (float) ComissaoAdminSql::queryMovimentosComComissaoAdmin(function (Builder $query) use ($request) {
+            $this->aplicarFiltrosMovimentosBase($query, $request);
+            $query->whereNotNull('e.plano_id');
+        })->sum(DB::raw(ComissaoAdminSql::valor()));
     }
 
     private function totalComissaoParceiro(Request $request, int $usuarioId): float
@@ -323,21 +324,13 @@ class RelatorioController extends Controller
 
     private function comissaoAdminLinha(AggregatedRevenue $linha): float
     {
-        return (float) DB::table('edi_movimentos as em')
-            ->join('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
-            ->join('plano_taxas as pt', function ($join) {
-                $join->on('pt.plano_id', '=', 'e.plano_id')
-                    ->on('pt.arranjo_ur', '=', 'em.arranjo_ur')
-                    ->on('pt.parcelas', '=', DB::raw('COALESCE(NULLIF(em.quantidade_parcela, 0), 1)'))
-                    ->where('pt.ativo', true);
-            })
+        return (float) ComissaoAdminSql::queryMovimentosComComissaoAdmin()
             ->whereDate('em.data_inicial_transacao', $linha->data)
             ->where('em.estabelecimento_id', $linha->estabelecimento_id)
             ->where('em.instituicao_financeira', $linha->instituicao)
             ->where('em.tipo_transacao', $linha->tipo_transacao)
             ->where('em.status_pagamento', $linha->status_pagamento)
-            ->whereNotNull('pt.comissao_percentual')
-            ->sum(DB::raw('em.valor_total_transacao * pt.comissao_percentual / 100'));
+            ->sum(DB::raw(ComissaoAdminSql::valor()));
     }
 
     private function normalizarFiltrosFaturamento(Request $request): Request
@@ -469,24 +462,16 @@ class RelatorioController extends Controller
             return collect();
         }
 
-        return DB::table('edi_movimentos as em')
-            ->join('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
-            ->join('plano_taxas as pt', function ($join) {
-                $join->on('pt.plano_id', '=', 'e.plano_id')
-                    ->on('pt.arranjo_ur', '=', 'em.arranjo_ur')
-                    ->on('pt.parcelas', '=', DB::raw('COALESCE(NULLIF(em.quantidade_parcela, 0), 1)'))
-                    ->where('pt.ativo', true);
-            })
+        return ComissaoAdminSql::queryMovimentosComComissaoAdmin()
             ->whereIn('em.estabelecimento_id', $estabelecimentoIds)
             ->whereBetween('em.data_inicial_transacao', [$dataMin, $dataMax])
-            ->whereNotNull('pt.comissao_percentual')
             ->selectRaw('
                 DATE(em.data_inicial_transacao) as data,
                 em.estabelecimento_id,
                 em.instituicao_financeira as instituicao,
                 em.tipo_transacao,
                 em.status_pagamento,
-                SUM(em.valor_total_transacao * pt.comissao_percentual / 100) as comissao
+                SUM('.ComissaoAdminSql::valor().') as comissao
             ')
             ->groupBy('data', 'em.estabelecimento_id', 'em.instituicao_financeira', 'em.tipo_transacao', 'em.status_pagamento')
             ->get()

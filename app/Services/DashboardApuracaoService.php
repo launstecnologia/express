@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Support\EdiTransacaoCategoria;
+use App\Support\ComissaoAdminSql;
 use App\Support\InstituicaoFinanceira;
 use App\Models\Estabelecimento;
 use App\Models\Plano;
@@ -264,19 +265,12 @@ class DashboardApuracaoService
 
     private function agregarComissaoAdmin(string $desde): Collection
     {
-        return DB::table('edi_movimentos as em')
-            ->join('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
-            ->join('plano_taxas as pt', function ($join) {
-                $join->on('pt.plano_id', '=', 'e.plano_id')
-                    ->on('pt.arranjo_ur', '=', 'em.arranjo_ur')
-                    ->on('pt.parcelas', '=', DB::raw('COALESCE(NULLIF(em.quantidade_parcela, 0), 1)'))
-                    ->where('pt.ativo', true);
-            })
-            ->where('em.data_inicial_transacao', '>=', $desde)
-            ->whereIn('em.estabelecimento_id', $this->estabelecimentosVisiveisSubquery())
-            ->whereNotNull('e.plano_id')
-            ->whereNotNull('pt.comissao_percentual')
-            ->selectRaw('e.plano_id, SUM(em.valor_total_transacao * pt.comissao_percentual / 100) as total')
+        return ComissaoAdminSql::queryMovimentosComComissaoAdmin(function ($query) use ($desde) {
+            $query->where('em.data_inicial_transacao', '>=', $desde)
+                ->whereIn('em.estabelecimento_id', $this->estabelecimentosVisiveisSubquery())
+                ->whereNotNull('e.plano_id');
+        })
+            ->selectRaw('e.plano_id, SUM('.ComissaoAdminSql::valor().') as total')
             ->groupBy('e.plano_id')
             ->get()
             ->pluck('total', 'plano_id');
