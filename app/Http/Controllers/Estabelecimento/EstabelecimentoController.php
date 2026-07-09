@@ -54,7 +54,6 @@ class EstabelecimentoController extends Controller
             'master_id',
             'marketplace_id',
             'revenda_id',
-            'vinculo',
             'status',
             'pagbank',
             'risco',
@@ -656,17 +655,7 @@ class EstabelecimentoController extends Controller
             $query->where('master_id', $request->integer('master_id'));
         }
 
-        if ($request->filled('vinculo') && $request->string('vinculo') === 'sem') {
-            $query->whereNull('marketplace_id')->whereNull('revenda_id');
-        } else {
-            if ($request->filled('marketplace_id')) {
-                $query->where('marketplace_id', $request->integer('marketplace_id'));
-            }
-
-            if ($request->filled('revenda_id')) {
-                $query->where('revenda_id', $request->integer('revenda_id'));
-            }
-        }
+        $this->aplicarFiltroMarketplaceRevenda($query, $request);
 
         if ($request->filled('status') && in_array($request->string('status'), ['pendente', 'aprovado', 'negado'], true)) {
             EstabelecimentoEtapaListagem::aplicarFiltroStatus($query, $request->string('status'));
@@ -706,6 +695,29 @@ class EstabelecimentoController extends Controller
 
         if ($request->filled('data_fim')) {
             $query->whereDate('created_at', '<=', $request->date('data_fim'));
+        }
+    }
+
+    private function aplicarFiltroMarketplaceRevenda(Builder $query, Request $request): void
+    {
+        $marketplaceFiltro = (string) ($request->input('marketplace_id') ?? '');
+        $semVinculo = $marketplaceFiltro === 'sem_vinculo'
+            || ($request->filled('vinculo') && $request->string('vinculo') === 'sem');
+
+        if ($semVinculo) {
+            $query->whereNull('marketplace_id')->whereNull('revenda_id');
+
+            return;
+        }
+
+        if ($marketplaceFiltro === 'sem_marketplace') {
+            $query->whereNull('marketplace_id');
+        } elseif ($marketplaceFiltro !== '' && ctype_digit($marketplaceFiltro)) {
+            $query->where('marketplace_id', (int) $marketplaceFiltro);
+        }
+
+        if ($request->filled('revenda_id')) {
+            $query->where('revenda_id', $request->integer('revenda_id'));
         }
     }
 
