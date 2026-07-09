@@ -665,7 +665,12 @@ class EstabelecimentoController extends Controller
         }
 
         if ($request->filled('plano_id')) {
-            $query->where('plano_id', $request->integer('plano_id'));
+            $planoFiltro = (string) $request->input('plano_id');
+            if ($planoFiltro === 'sem_plano') {
+                $query->whereNull('plano_id');
+            } elseif (ctype_digit($planoFiltro)) {
+                $query->where('plano_id', (int) $planoFiltro);
+            }
         }
 
         if ($request->filled('segmento')) {
@@ -822,21 +827,34 @@ class EstabelecimentoController extends Controller
             ];
         }
 
-        foreach (['master_id' => 'Master', 'revenda_id' => 'Revenda', 'plano_id' => 'Plano'] as $chave => $prefixo) {
+        foreach (['master_id' => 'Master', 'revenda_id' => 'Revenda'] as $chave => $prefixo) {
             $valor = $filtros[$chave] ?? null;
             if ($valor === null || $valor === '') {
                 continue;
             }
 
-            $nome = match ($chave) {
-                'plano_id' => Plano::query()->find((int) $valor)?->nome ?? '#'.$valor,
-                default => Usuario::query()->find((int) $valor)?->nomeExibicao() ?? '#'.$valor,
-            };
+            $nome = Usuario::query()->find((int) $valor)?->nomeExibicao() ?? '#'.$valor;
 
             $resumo[] = [
                 'chave' => $chave,
                 'label' => $prefixo.': '.$nome,
                 'url' => $this->urlSemFiltro($filtros, $chave),
+            ];
+        }
+
+        $planoFiltro = (string) ($filtros['plano_id'] ?? '');
+        if ($planoFiltro === 'sem_plano') {
+            $resumo[] = [
+                'chave' => 'plano_id',
+                'label' => 'Sem plano',
+                'url' => $this->urlSemFiltro($filtros, 'plano_id'),
+            ];
+        } elseif ($planoFiltro !== '' && ctype_digit($planoFiltro)) {
+            $nome = Plano::query()->find((int) $planoFiltro)?->nome ?? '#'.$planoFiltro;
+            $resumo[] = [
+                'chave' => 'plano_id',
+                'label' => 'Plano: '.$nome,
+                'url' => $this->urlSemFiltro($filtros, 'plano_id'),
             ];
         }
 

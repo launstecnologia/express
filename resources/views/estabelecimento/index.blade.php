@@ -15,6 +15,7 @@
     }
     $filtroSemVinculoTotal = in_array($marketplaceFiltro, ['sem_vinculo'], true)
         || ($filtros['vinculo'] ?? '') === 'sem';
+    $planoFiltro = (string) ($filtros['plano_id'] ?? '');
 @endphp
 
 <div x-data="{ filtrosAberto: false }" class="space-y-6">
@@ -267,8 +268,9 @@
                         <label for="filtro-plano" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Plano</label>
                         <select id="filtro-plano" name="plano_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
                             <option value="">Todos</option>
+                            <option value="sem_plano" @selected($planoFiltro === 'sem_plano')>— Sem plano —</option>
                             @foreach ($planos as $plano)
-                                <option value="{{ $plano->id }}" @selected(($filtros['plano_id'] ?? '') == $plano->id)>{{ $plano->nome }}</option>
+                                <option value="{{ $plano->id }}" @selected($planoFiltro === (string) $plano->id)>{{ $plano->nome }}</option>
                             @endforeach
                         </select>
                     </div>
