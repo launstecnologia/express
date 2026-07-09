@@ -775,23 +775,9 @@ class EstabelecimentoController extends Controller
             ? $request->string('pagbank')->toString()
             : null;
 
-        if ($status && $pagbank) {
-            EstabelecimentoEtapaListagem::aplicarFiltroStatus($query, $status);
-            EstabelecimentoEtapaListagem::aplicarFiltroPagBank($query, $pagbank);
-
-            return;
-        }
-
+        // Cada select filtra só a própria coluna/badge — sem OR entre cadastro e PagBank.
         if ($status) {
-            if (in_array($status, ['pendente', 'negado'], true)) {
-                EstabelecimentoEtapaListagem::aplicarFiltroEtapaCombinada($query, $status);
-
-                return;
-            }
-
             EstabelecimentoEtapaListagem::aplicarFiltroStatus($query, $status);
-
-            return;
         }
 
         if ($pagbank) {
@@ -806,9 +792,9 @@ class EstabelecimentoController extends Controller
     {
         $rotulos = [
             'status' => [
-                'pendente' => 'Situação pendente (cadastro ou PagBank)',
+                'pendente' => 'Cadastro pendente',
                 'aprovado' => 'Cadastro aprovado',
-                'negado' => 'Situação negada (cadastro ou PagBank)',
+                'negado' => 'Cadastro negado',
             ],
             'pagbank' => [
                 'pendente' => 'PagBank pendente',

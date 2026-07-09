@@ -243,7 +243,7 @@
                                 <option value="{{ $valor }}" @selected(($filtros['status'] ?? '') === $valor)>{{ $rotulo }}</option>
                             @endforeach
                         </select>
-                        <p class="mt-1 text-xs text-gray-400">Pendente/negado considera cadastro <strong>ou</strong> PagBank, se o outro filtro não estiver preenchido.</p>
+                        <p class="mt-1 text-xs text-gray-400">Filtra só o status do cadastro (coluna Status). Use o campo PagBank para a outra etapa.</p>
                     </div>
 
                     <div>

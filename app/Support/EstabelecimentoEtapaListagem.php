@@ -132,20 +132,6 @@ class EstabelecimentoEtapaListagem
         });
     }
 
-    /**
-     * Pendente/negado no cadastro OU no PagBank (quando só um filtro de situação é usado).
-     */
-    public static function aplicarFiltroEtapaCombinada(Builder $query, string $etapa): void
-    {
-        $query->where(function (Builder $outer) use ($etapa) {
-            $outer->where(function (Builder $statusQ) use ($etapa) {
-                self::aplicarFiltroStatus($statusQ, $etapa);
-            })->orWhere(function (Builder $pagbankQ) use ($etapa) {
-                self::aplicarFiltroPagBank($pagbankQ, $etapa);
-            });
-        });
-    }
-
     private static function aplicarFiltroPagBankAutomatico(Builder $query, string $etapa): void
     {
         match ($etapa) {
