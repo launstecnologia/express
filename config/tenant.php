@@ -19,6 +19,6 @@ return [
     /** E-mail para registro Let's Encrypt / Certbot */
     'certbot_email' => env('TENANT_CERTBOT_EMAIL', env('MAIL_FROM_ADDRESS', 'admin@express.app.br')),
 
-    /** Habilita execução automática do script de SSL (requer Docker no host) */
-    'ssl_auto_provision' => (bool) env('TENANT_SSL_AUTO_PROVISION', false),
+    /** Habilita execução automática do script de SSL pelo painel admin */
+    'ssl_auto_provision' => (bool) env('TENANT_SSL_AUTO_PROVISION', true),
 ];

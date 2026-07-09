@@ -35,7 +35,7 @@ class TenantSslProvisionerService
         $script = base_path('scripts/provision-tenant-ssl.sh');
         $comandoManual = "bash deploy.sh provision-ssl {$domain}";
 
-        if (! config('tenant.ssl_auto_provision') || ! is_file($script)) {
+        if (! $this->deveProvisionarAutomaticamente($script)) {
             return [
                 'modo' => 'manual',
                 'dominio' => $domain,
@@ -44,7 +44,15 @@ class TenantSslProvisionerService
             ];
         }
 
-        $resultado = Process::timeout(300)->run(['bash', $script, $domain]);
+        $this->recarregarNginx();
+
+        $resultado = Process::timeout(300)
+            ->path(base_path())
+            ->env([
+                'COMPOSE_PROJECT_NAME' => 'express',
+                'TENANT_CERTBOT_EMAIL' => (string) config('tenant.certbot_email'),
+            ])
+            ->run(['bash', $script, $domain]);
 
         if (! $resultado->successful()) {
             $erro = trim($resultado->errorOutput() ?: $resultado->output());
@@ -53,7 +61,7 @@ class TenantSslProvisionerService
 
             throw new RuntimeException(
                 "Falha ao emitir SSL automaticamente. DNS e config HTTP já foram gerados.\n"
-                ."Execute no servidor: {$comandoManual}\n\n{$erro}"
+                .$this->mensagemDockerIndisponivel()."\n\n{$erro}"
             );
         }
 
@@ -144,6 +152,45 @@ class TenantSslProvisionerService
         $base = strtolower((string) config('tenant.base_domain'));
 
         return $base !== '' && (str_ends_with($domain, '.'.$base) || $domain === $base);
+    }
+
+    private function deveProvisionarAutomaticamente(string $script): bool
+    {
+        if (! config('tenant.ssl_auto_provision') || ! is_file($script)) {
+            return false;
+        }
+
+        if (! $this->dockerDisponivel()) {
+            throw new RuntimeException($this->mensagemDockerIndisponivel());
+        }
+
+        return true;
+    }
+
+    private function dockerDisponivel(): bool
+    {
+        if (! is_readable('/var/run/docker.sock')) {
+            return false;
+        }
+
+        $resultado = Process::timeout(15)->run(['docker', 'info']);
+
+        return $resultado->successful();
+    }
+
+    private function recarregarNginx(): void
+    {
+        Process::timeout(30)
+            ->path(base_path())
+            ->env(['COMPOSE_PROJECT_NAME' => 'express'])
+            ->run(['docker', 'compose', 'exec', '-T', 'nginx', 'nginx', '-s', 'reload']);
+    }
+
+    private function mensagemDockerIndisponivel(): string
+    {
+        return 'SSL automático indisponível no container app. No servidor: '
+            .'1) adicione DOCKER_GID=$(stat -c \'%g\' /var/run/docker.sock) no .env '
+            .'2) rode bash deploy.sh update';
     }
 
     private function diretorioTenants(): string

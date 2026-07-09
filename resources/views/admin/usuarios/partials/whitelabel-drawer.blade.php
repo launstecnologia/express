@@ -199,7 +199,7 @@
                                         <i class="fa-solid fa-lock"></i> Configurar SSL automaticamente
                                     </button>
                                 </form>
-                                <p class="mt-1 text-[11px] text-gray-400">Valida o DNS, gera o Nginx e emite certificado Let's Encrypt.</p>
+                                <p class="mt-1 text-[11px] text-gray-400">Valida o DNS, emite certificado Let's Encrypt e ativa HTTPS automaticamente.</p>
                             @endif
                         </label>
 

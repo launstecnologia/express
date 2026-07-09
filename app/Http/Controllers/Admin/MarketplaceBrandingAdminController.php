@@ -45,6 +45,8 @@ class MarketplaceBrandingAdminController extends Controller
         abort_unless($request->user()?->tipo === 'admin', 403);
         abort_unless($usuario->tipo === 'marketplace', 404);
 
+        set_time_limit(330);
+
         $branding = $usuario->marketplaceBranding;
 
         abort_unless($branding && $ssl->podeProvisionar($branding), 422, 'Cadastre um domínio personalizado antes de configurar o SSL.');

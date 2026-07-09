@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\TrocaSenhaObrigatoriaController;
 use App\Http\Controllers\Admin\ChamadoController as AdminChamadoController;
 use App\Http\Controllers\Admin\AdminKycController;
+use App\Http\Controllers\Admin\ConciliacaoController;
 use App\Http\Controllers\Admin\ConfiguracaoPlataformaController;
 use App\Http\Controllers\Admin\EstabelecimentoAutomacaoController;
 use App\Http\Controllers\Admin\EstabelecimentoPagBankController;
@@ -186,6 +187,14 @@ Route::middleware(['auth', 'trocar.senha', 'tenant.access'])->group(function () 
         Route::get('admin/email-templates/{emailTemplate}/edit', [EmailTemplateController::class, 'edit'])->name('admin.email-templates.edit');
         Route::put('admin/email-templates/{emailTemplate}', [EmailTemplateController::class, 'update'])->name('admin.email-templates.update');
         Route::post('admin/email-templates/{emailTemplate}/teste', [EmailTemplateController::class, 'teste'])->name('admin.email-templates.teste');
+        Route::prefix('admin/conciliacoes')->name('admin.conciliacoes.')->group(function () {
+            Route::get('/', [ConciliacaoController::class, 'index'])->name('index');
+            Route::get('/importar', [ConciliacaoController::class, 'create'])->name('create');
+            Route::post('/', [ConciliacaoController::class, 'store'])->name('store');
+            Route::get('/{conciliacao}', [ConciliacaoController::class, 'show'])->name('show');
+            Route::post('/{conciliacao}/confrontar', [ConciliacaoController::class, 'confrontar'])->name('confrontar');
+            Route::delete('/{conciliacao}', [ConciliacaoController::class, 'destroy'])->name('destroy');
+        });
     });
 
     Route::middleware('nivel:admin')->group(function () {

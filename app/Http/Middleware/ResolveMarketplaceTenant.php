@@ -100,6 +100,7 @@ class ResolveMarketplaceTenant
     private function resolverPorHost(string $host): ?MarketplaceBranding
     {
         $host = strtolower(trim($host));
+        $host = preg_replace('/^www\./', '', $host) ?? $host;
 
         if ($host === '' || TenantContext::isPlatformHost($host)) {
             return null;

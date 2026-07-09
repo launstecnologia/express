@@ -11,7 +11,7 @@
 set -euo pipefail
 
 COMPOSE="docker compose"
-APP_CONTAINER="express-app"
+APP_SERVICE="app"
 BLUE='\033[0;34m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -56,7 +56,7 @@ check_api_keys() {
 # ----------------------------------------------------------------
 ensure_storage_dirs() {
     log "Verificando pastas e permissões do storage..."
-    $COMPOSE exec -T -u root $APP_CONTAINER sh -c '
+    $COMPOSE exec -T -u root $APP_SERVICE sh -c '
         mkdir -p storage/app/private/chamados storage/app/public \
                  storage/framework/cache storage/framework/sessions \
                  storage/framework/views storage/logs bootstrap/cache
@@ -84,28 +84,44 @@ cmd_install() {
     sleep 10
 
     log "Rodando migrations..."
-    $COMPOSE exec -T $APP_CONTAINER php artisan migrate --force
+    $COMPOSE exec -T $APP_SERVICE php artisan migrate --force
 
     log "Rodando seeders (admin padrão)..."
-    $COMPOSE exec -T $APP_CONTAINER php artisan db:seed --force
+    $COMPOSE exec -T $APP_SERVICE php artisan db:seed --force
 
     log "Criando link de storage..."
-    $COMPOSE exec -T $APP_CONTAINER php artisan storage:link
+    $COMPOSE exec -T $APP_SERVICE php artisan storage:link
 
     log "Gerando chave de aplicação (se vazia)..."
     APP_KEY=$(grep "^APP_KEY=" .env | cut -d'=' -f2-)
     if [ -z "$APP_KEY" ]; then
-        $COMPOSE exec -T $APP_CONTAINER php artisan key:generate --force
+        $COMPOSE exec -T $APP_SERVICE php artisan key:generate --force
     fi
 
     log "Otimizando para produção..."
     ensure_storage_dirs
-    $COMPOSE exec -T $APP_CONTAINER php artisan config:cache
-    $COMPOSE exec -T $APP_CONTAINER php artisan route:cache
-    $COMPOSE exec -T $APP_CONTAINER php artisan view:cache
+    $COMPOSE exec -T $APP_SERVICE php artisan config:cache
+    $COMPOSE exec -T $APP_SERVICE php artisan route:cache
+    $COMPOSE exec -T $APP_SERVICE php artisan view:cache
 
     ok "Deploy concluído!"
     cmd_status
+}
+
+# ----------------------------------------------------------------
+# Verifica DOCKER_GID para SSL automático pelo painel
+# ----------------------------------------------------------------
+check_docker_gid() {
+    if [ -f ".env" ] && grep -q "^TENANT_SSL_AUTO_PROVISION=true" .env 2>/dev/null; then
+        local gid_atual
+        gid_atual=$(grep "^DOCKER_GID=" .env 2>/dev/null | cut -d'=' -f2- || true)
+        local gid_host
+        gid_host=$(stat -c '%g' /var/run/docker.sock 2>/dev/null || true)
+
+        if [ -n "$gid_host" ] && [ "$gid_atual" != "$gid_host" ]; then
+            warn "Para SSL automático no painel admin, defina DOCKER_GID=$gid_host no .env e rode deploy.sh update"
+        fi
+    fi
 }
 
 # ----------------------------------------------------------------
@@ -114,6 +130,7 @@ cmd_install() {
 cmd_update() {
     log "Atualizando aplicação..."
     check_requirements
+    check_docker_gid
 
     log "Baixando código mais recente..."
     git pull origin main 2>/dev/null || warn "git pull falhou — verifique manualmente"
@@ -131,14 +148,14 @@ cmd_update() {
     sleep 5
 
     log "Rodando migrations..."
-    $COMPOSE exec -T $APP_CONTAINER php artisan migrate --force
+    $COMPOSE exec -T $APP_SERVICE php artisan migrate --force
 
     log "Limpando e recriando caches..."
     ensure_storage_dirs
-    $COMPOSE exec -T $APP_CONTAINER php artisan optimize:clear
-    $COMPOSE exec -T $APP_CONTAINER php artisan config:cache
-    $COMPOSE exec -T $APP_CONTAINER php artisan route:cache
-    $COMPOSE exec -T $APP_CONTAINER php artisan view:cache
+    $COMPOSE exec -T $APP_SERVICE php artisan optimize:clear
+    $COMPOSE exec -T $APP_SERVICE php artisan config:cache
+    $COMPOSE exec -T $APP_SERVICE php artisan route:cache
+    $COMPOSE exec -T $APP_SERVICE php artisan view:cache
 
     ok "Atualização concluída!"
     cmd_status
@@ -149,7 +166,7 @@ cmd_update() {
 # ----------------------------------------------------------------
 cmd_migrate() {
     log "Rodando migrations..."
-    $COMPOSE exec -T $APP_CONTAINER php artisan migrate --force
+    $COMPOSE exec -T $APP_SERVICE php artisan migrate --force
     ok "Migrations concluídas"
 }
 
@@ -239,7 +256,7 @@ cmd_provision_ssl() {
 # ----------------------------------------------------------------
 cmd_artisan() {
     shift
-    $COMPOSE exec $APP_CONTAINER php artisan "$@"
+    $COMPOSE exec $APP_SERVICE php artisan "$@"
 }
 
 # ----------------------------------------------------------------
