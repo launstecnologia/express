@@ -21,17 +21,20 @@
             <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                 <form method="GET" action="{{ route('estabelecimentos.index') }}" class="flex min-w-0 flex-1 items-center sm:max-w-xs sm:flex-none">
                     @foreach ($filtros as $chave => $valor)
-                        @if ($chave !== 'busca' && $valor !== null && $valor !== '')
+                        @if (! in_array($chave, ['busca', 'codigo_edi'], true) && $valor !== null && $valor !== '')
                             <input type="hidden" name="{{ $chave }}" value="{{ $valor }}">
                         @endif
                     @endforeach
+                    @if (filled($filtros['codigo_edi'] ?? null))
+                        <input type="hidden" name="codigo_edi" value="{{ $filtros['codigo_edi'] }}">
+                    @endif
                     <div class="relative w-full">
                         <i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400"></i>
                         <input
                             type="search"
                             name="busca"
                             value="{{ $filtros['busca'] ?? '' }}"
-                            placeholder="Nome, fantasia, CNPJ, CPF, cidade..."
+                            placeholder="Nome, fantasia, CNPJ, CPF, cidade, código EDI..."
                             class="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                     </div>
@@ -152,10 +155,24 @@
                             name="busca"
                             type="search"
                             value="{{ $filtros['busca'] ?? '' }}"
-                            placeholder="Nome, razão social, fantasia, CNPJ, CPF, cidade"
+                            placeholder="Nome, razão social, fantasia, CNPJ, CPF, cidade, código EDI"
                             class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
-                        <p class="mt-1 text-xs text-gray-400">Busca em nome, razão social, fantasia, documento e cidade.</p>
+                        <p class="mt-1 text-xs text-gray-400">Busca em nome, documento, cidade e código EDI (id_cliente / token PagSeguro).</p>
+                    </div>
+
+                    <div>
+                        <label for="filtro-codigo-edi" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Código EDI (id_cliente)</label>
+                        <input
+                            id="filtro-codigo-edi"
+                            name="codigo_edi"
+                            type="search"
+                            inputmode="numeric"
+                            value="{{ $filtros['codigo_edi'] ?? '' }}"
+                            placeholder="Ex.: 798179947"
+                            class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 font-mono text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                        <p class="mt-1 text-xs text-gray-400">ID do estabelecimento no EDI PagSeguro (<code class="text-[10px]">token_pagseguro</code>).</p>
                     </div>
 
                     <div>

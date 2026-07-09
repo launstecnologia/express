@@ -49,6 +49,7 @@ class EstabelecimentoController extends Controller
 
         $filtros = $request->only([
             'busca',
+            'codigo_edi',
             'master_id',
             'marketplace_id',
             'revenda_id',
@@ -605,25 +606,32 @@ class EstabelecimentoController extends Controller
 
     private function aplicarFiltrosIndex(Builder $query, Request $request): void
     {
+        if ($request->filled('codigo_edi')) {
+            $codigo = trim($request->string('codigo_edi'));
+            $query->where('token_pagseguro', 'like', '%'.$codigo.'%');
+        }
+
         if ($request->filled('busca')) {
             $termo = trim($request->string('busca'));
             $like = '%'.mb_strtolower($termo).'%';
             $digitos = DocumentoBrasil::apenasDigitos($termo);
 
-            $query->where(function (Builder $q) use ($like, $digitos) {
+            $query->where(function (Builder $q) use ($like, $digitos, $termo) {
                 $q->whereRaw('LOWER(COALESCE(nome_fantasia, "")) LIKE ?', [$like])
                     ->orWhereRaw('LOWER(COALESCE(razao_social, "")) LIKE ?', [$like])
                     ->orWhereRaw('LOWER(COALESCE(nome_completo, "")) LIKE ?', [$like])
-                    ->orWhereRaw('LOWER(COALESCE(cidade, "")) LIKE ?', [$like]);
+                    ->orWhereRaw('LOWER(COALESCE(cidade, "")) LIKE ?', [$like])
+                    ->orWhere('token_pagseguro', $termo);
 
                 if ($digitos !== '') {
-                    $q->orWhereRaw(
-                        "REPLACE(REPLACE(REPLACE(COALESCE(cnpj, ''), '.', ''), '/', ''), '-', '') LIKE ?",
-                        ['%'.$digitos.'%'],
-                    )->orWhereRaw(
-                        "REPLACE(REPLACE(COALESCE(cpf, ''), '.', ''), '-', '') LIKE ?",
-                        ['%'.$digitos.'%'],
-                    );
+                    $q->orWhere('token_pagseguro', 'like', '%'.$digitos.'%')
+                        ->orWhereRaw(
+                            "REPLACE(REPLACE(REPLACE(COALESCE(cnpj, ''), '.', ''), '/', ''), '-', '') LIKE ?",
+                            ['%'.$digitos.'%'],
+                        )->orWhereRaw(
+                            "REPLACE(REPLACE(COALESCE(cpf, ''), '.', ''), '-', '') LIKE ?",
+                            ['%'.$digitos.'%'],
+                        );
                 }
             });
         }
