@@ -19,7 +19,7 @@
                 <p class="text-xs text-gray-400">{{ $estabelecimentos->total() }} resultado(s)</p>
             </div>
             <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-                <form method="GET" action="{{ route('estabelecimentos.index') }}" class="flex min-w-0 flex-1 items-center sm:max-w-xs sm:flex-none">
+                <form method="GET" action="{{ route('estabelecimentos.index') }}" class="flex min-w-0 flex-1 items-center gap-2 sm:max-w-md sm:flex-none">
                     @foreach ($filtros as $chave => $valor)
                         @if (! in_array($chave, ['busca', 'codigo_edi'], true) && $valor !== null && $valor !== '')
                             <input type="hidden" name="{{ $chave }}" value="{{ $valor }}">
@@ -28,16 +28,20 @@
                     @if (filled($filtros['codigo_edi'] ?? null))
                         <input type="hidden" name="codigo_edi" value="{{ $filtros['codigo_edi'] }}">
                     @endif
-                    <div class="relative w-full">
+                    <div class="relative min-w-0 flex-1">
                         <i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400"></i>
                         <input
                             type="search"
                             name="busca"
                             value="{{ $filtros['busca'] ?? '' }}"
-                            placeholder="Nome, fantasia, CNPJ, CPF, cidade, código EDI..."
+                            placeholder="Nome, documento, cidade, marketplace, código EDI..."
                             class="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                     </div>
+                    <button type="submit" class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700">
+                        <i class="fa-solid fa-magnifying-glass text-xs"></i>
+                        Buscar
+                    </button>
                 </form>
                 @if ($podeCadastrarEstabelecimento)
                     <a href="{{ route('estabelecimentos.create') }}" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700">
@@ -155,10 +159,10 @@
                             name="busca"
                             type="search"
                             value="{{ $filtros['busca'] ?? '' }}"
-                            placeholder="Nome, razão social, fantasia, CNPJ, CPF, cidade, código EDI"
+                            placeholder="Nome, documento, cidade, marketplace, revenda, código EDI"
                             class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
-                        <p class="mt-1 text-xs text-gray-400">Busca em nome, documento, cidade e código EDI (id_cliente / token PagSeguro).</p>
+                        <p class="mt-1 text-xs text-gray-400">Busca em nome, documento, cidade, e-mail, marketplace, revenda e código EDI.</p>
                     </div>
 
                     <div>

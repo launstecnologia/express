@@ -32,6 +32,7 @@ use App\Support\KycTipoDocumentoMapper;
 use App\Support\NotificacaoVars;
 use App\Support\AutomacaoErroInterpretador;
 use App\Support\PlatformSettings;
+use App\Scopes\ExcluirInativoSistemaScope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -607,21 +608,31 @@ class EstabelecimentoController extends Controller
     private function aplicarFiltrosIndex(Builder $query, Request $request): void
     {
         if ($request->filled('codigo_edi')) {
-            $codigo = trim($request->string('codigo_edi'));
+            $codigo = trim((string) $request->input('codigo_edi'));
             $query->where('token_pagseguro', 'like', '%'.$codigo.'%');
         }
 
         if ($request->filled('busca')) {
-            $termo = trim($request->string('busca'));
+            $termo = trim((string) $request->input('busca'));
             $like = '%'.mb_strtolower($termo).'%';
             $digitos = DocumentoBrasil::apenasDigitos($termo);
+            $idBusca = ltrim($termo, '#');
+            $buscaPorId = $idBusca !== '' && ctype_digit($idBusca);
 
-            $query->where(function (Builder $q) use ($like, $digitos, $termo) {
+            $query->where(function (Builder $q) use ($like, $digitos, $termo, $buscaPorId, $idBusca) {
                 $q->whereRaw('LOWER(COALESCE(nome_fantasia, "")) LIKE ?', [$like])
                     ->orWhereRaw('LOWER(COALESCE(razao_social, "")) LIKE ?', [$like])
                     ->orWhereRaw('LOWER(COALESCE(nome_completo, "")) LIKE ?', [$like])
                     ->orWhereRaw('LOWER(COALESCE(cidade, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(bairro, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(segmento, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(email, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(webmail_email, "")) LIKE ?', [$like])
                     ->orWhere('token_pagseguro', $termo);
+
+                if ($buscaPorId) {
+                    $q->orWhere('estabelecimentos.id', (int) $idBusca);
+                }
 
                 if ($digitos !== '') {
                     $q->orWhere('token_pagseguro', 'like', '%'.$digitos.'%')
@@ -633,6 +644,10 @@ class EstabelecimentoController extends Controller
                             ['%'.$digitos.'%'],
                         );
                 }
+
+                $this->aplicarBuscaUsuarioRelacionado($q, 'marketplace', $like);
+                $this->aplicarBuscaUsuarioRelacionado($q, 'revenda', $like);
+                $this->aplicarBuscaUsuarioRelacionado($q, 'master', $like);
             });
         }
 
@@ -673,7 +688,11 @@ class EstabelecimentoController extends Controller
         }
 
         if ($request->has('ativo') && $request->input('ativo') !== '') {
-            $query->where('ativo', $request->boolean('ativo'));
+            if (! $request->boolean('ativo')) {
+                $query->withoutGlobalScope(ExcluirInativoSistemaScope::class);
+            }
+
+            $query->where('estabelecimentos.ativo', $request->boolean('ativo'));
         }
 
         if ($request->filled('data_inicio')) {
@@ -683,6 +702,18 @@ class EstabelecimentoController extends Controller
         if ($request->filled('data_fim')) {
             $query->whereDate('created_at', '<=', $request->date('data_fim'));
         }
+    }
+
+    private function aplicarBuscaUsuarioRelacionado(Builder $query, string $relation, string $like): void
+    {
+        $query->orWhereHas($relation, function (Builder $usuario) use ($like) {
+            $usuario->where(function (Builder $inner) use ($like) {
+                $inner->whereRaw('LOWER(COALESCE(nome_fantasia, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(razao_social, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(nome_completo, "")) LIKE ?', [$like])
+                    ->orWhereRaw('LOWER(COALESCE(email, "")) LIKE ?', [$like]);
+            });
+        });
     }
 
     private function usuariosPorTipo(string $tipo)

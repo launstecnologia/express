@@ -79,7 +79,42 @@ class EstabelecimentoEtapaListagem
 
     public static function aplicarFiltroStatus(Builder $query, string $etapa): void
     {
-        $query->where('status', self::normalizarStatus($etapa));
+        $etapa = self::normalizarStatus($etapa);
+        $valores = self::valoresStatusBanco($etapa);
+
+        if ($etapa === self::PENDENTE) {
+            $query->where(function (Builder $q) use ($valores) {
+                $q->whereIn('status', $valores)->orWhereNull('status');
+            });
+
+            return;
+        }
+
+        $query->whereIn('status', $valores);
+    }
+
+    /**
+     * Valores possíveis da coluna `status` que correspondem à etapa normalizada.
+     *
+     * @return array<int, string>
+     */
+    public static function valoresStatusBanco(string $etapa): array
+    {
+        $etapa = self::normalizarStatus($etapa);
+
+        if (EstabelecimentoSchema::statusEnumSimplificado()) {
+            return match ($etapa) {
+                self::APROVADO => ['aprovado', 'habilitado'],
+                self::NEGADO => ['negado', 'desabilitado', 'inativo_sistema'],
+                default => ['pendente'],
+            };
+        }
+
+        return match ($etapa) {
+            self::APROVADO => ['aprovado', 'habilitado'],
+            self::NEGADO => ['negado', 'desabilitado', 'inativo_sistema'],
+            default => ['pendente'],
+        };
     }
 
     public static function aplicarFiltroPagBank(Builder $query, string $etapa): void
