@@ -44,9 +44,17 @@ class EstabelecimentoController extends Controller
     public function __construct(private MarketplacePlanoService $marketplacePlano) {}
     public function index(Request $request)
     {
-        $query = Estabelecimento::query()->with(['marketplace', 'revenda'])->latest();
+        $marketplaceFiltro = (string) ($request->input('marketplace_id') ?? '');
+        $listarSemVinculoComercial = in_array($marketplaceFiltro, ['sem_marketplace', 'sem_vinculo'], true)
+            || ($request->filled('vinculo') && $request->string('vinculo') === 'sem');
 
-        if ($this->deveIncluirInativosNaListagem($request)) {
+        // "Sem marketplace/vínculo": começa SEM global scopes. O withoutGlobalScope no meio
+        // da query não estava surtindo efeito em produção (só vinham os 2 inativos).
+        $query = $listarSemVinculoComercial
+            ? Estabelecimento::withoutGlobalScopes()->with(['marketplace', 'revenda'])->latest()
+            : Estabelecimento::query()->with(['marketplace', 'revenda'])->latest();
+
+        if (! $listarSemVinculoComercial && $this->deveIncluirInativosNaListagem($request)) {
             $query->withoutGlobalScope(ExcluirInativoSistemaScope::class);
         }
 
