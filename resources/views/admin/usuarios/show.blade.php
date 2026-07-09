@@ -81,22 +81,54 @@
                     {{ number_format((float) $usuario->percentual_retencao_pai, 0, ',', '.') }}%
                 </p>
             @endif
-            @if ($usuario->tipo === 'marketplace' && auth()->user()?->tipo === 'admin')
-                <p class="md:col-span-3">
-                    <span class="font-semibold text-gray-700">Planos habilitados:</span>
-                    @if ($usuario->planosHabilitados->isNotEmpty())
-                        {{ $usuario->planosHabilitados->pluck('nome')->join(', ') }}
-                    @else
-                        <span class="text-gray-400">Nenhum plano selecionado</span>
-                    @endif
-                </p>
-            @endif
             <p><span class="font-semibold text-gray-700">E-mail:</span> {{ $usuario->email }}</p>
             <p><span class="font-semibold text-gray-700">Telefone:</span> {{ $usuario->telefone ?: '-' }}</p>
             <p><span class="font-semibold text-gray-700">Celular:</span> {{ $usuario->celular ?: '-' }}</p>
             <p><span class="font-semibold text-gray-700">Endereço:</span> {{ $endereco ?: '-' }}</p>
         @endif
     </div>
+
+    @if ($usuario->tipo === 'marketplace' && auth()->user()?->tipo === 'admin')
+        @php $planosHabilitados = $usuario->planosHabilitados; @endphp
+        <div class="mt-4 border-t border-dashed border-gray-200 pt-4" @if ($planosHabilitados->count() > 6) x-data="{ verTodos: false }" @endif>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <p class="text-xs font-bold uppercase tracking-wide text-gray-400">
+                    Planos habilitados
+                    @if ($planosHabilitados->isNotEmpty())
+                        <span class="ml-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">{{ $planosHabilitados->count() }}</span>
+                    @endif
+                </p>
+                @if ($planosHabilitados->count() > 6)
+                    <button
+                        type="button"
+                        @click="verTodos = !verTodos"
+                        class="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                    >
+                        <span x-text="verTodos ? 'Ver menos' : 'Ver todos ({{ $planosHabilitados->count() }})'"></span>
+                    </button>
+                @endif
+            </div>
+
+            @if ($planosHabilitados->isNotEmpty())
+                <div
+                    class="mt-2 flex flex-wrap gap-1.5"
+                    @if ($planosHabilitados->count() > 6) :class="verTodos ? '' : 'max-h-[4.5rem] overflow-hidden'" @endif
+                >
+                    @foreach ($planosHabilitados as $plano)
+                        <a
+                            href="{{ route('planos.show', $plano) }}"
+                            class="inline-flex max-w-[14rem] items-center rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                            title="{{ $plano->nome }}"
+                        >
+                            <span class="truncate">{{ $plano->nome }}</span>
+                        </a>
+                    @endforeach
+                </div>
+            @else
+                <p class="mt-2 text-xs text-gray-400">Nenhum plano selecionado</p>
+            @endif
+        </div>
+    @endif
 
     <div class="mt-6 flex flex-wrap gap-2 border-t border-dashed border-gray-200 pt-5">
         <a href="{{ route('usuarios.edit', $usuario) }}" class="rounded-lg bg-indigo-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-800">
