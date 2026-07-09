@@ -43,7 +43,7 @@ class EstabelecimentoController extends Controller
     public function __construct(private MarketplacePlanoService $marketplacePlano) {}
     public function index(Request $request)
     {
-        $query = Estabelecimento::query()->with('marketplace')->latest();
+        $query = Estabelecimento::query()->with(['marketplace', 'revenda'])->latest();
 
         $this->aplicarFiltrosIndex($query, $request);
 

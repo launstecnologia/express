@@ -80,7 +80,14 @@
                         <td class="px-5 py-4 font-semibold text-gray-800">#{{ str_pad($estabelecimento->id, 4, '0', STR_PAD_LEFT) }}</td>
                         <td class="px-5 py-4">
                             <p class="font-semibold text-gray-800">{{ $estabelecimento->nome_fantasia ?: $estabelecimento->razao_social ?: $estabelecimento->nome_completo }}</p>
-                            <p class="text-xs text-gray-400">{{ $estabelecimento->marketplace?->nomeExibicao() ?: 'Sem marketplace' }}</p>
+                            <p class="mt-0.5 text-xs text-gray-400">
+                                <span class="font-medium text-gray-500">Marketplace:</span>
+                                {{ $estabelecimento->marketplace?->nomeExibicao() ?: '—' }}
+                            </p>
+                            <p class="text-xs text-gray-400">
+                                <span class="font-medium text-gray-500">Revenda:</span>
+                                {{ $estabelecimento->revenda?->nomeExibicao() ?: '—' }}
+                            </p>
                         </td>
                         <td class="px-5 py-4 text-gray-600">{{ $estabelecimento->cnpj ?: $estabelecimento->cpf ?: '—' }}</td>
                         <td class="px-5 py-4 text-gray-600">{{ $estabelecimento->created_at?->format('d/m/Y') ?: '—' }}</td>
