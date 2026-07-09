@@ -54,6 +54,7 @@ class EstabelecimentoController extends Controller
             'master_id',
             'marketplace_id',
             'revenda_id',
+            'vinculo',
             'status',
             'pagbank',
             'risco',
@@ -655,12 +656,16 @@ class EstabelecimentoController extends Controller
             $query->where('master_id', $request->integer('master_id'));
         }
 
-        if ($request->filled('marketplace_id')) {
-            $query->where('marketplace_id', $request->integer('marketplace_id'));
-        }
+        if ($request->filled('vinculo') && $request->string('vinculo') === 'sem') {
+            $query->whereNull('marketplace_id')->whereNull('revenda_id');
+        } else {
+            if ($request->filled('marketplace_id')) {
+                $query->where('marketplace_id', $request->integer('marketplace_id'));
+            }
 
-        if ($request->filled('revenda_id')) {
-            $query->where('revenda_id', $request->integer('revenda_id'));
+            if ($request->filled('revenda_id')) {
+                $query->where('revenda_id', $request->integer('revenda_id'));
+            }
         }
 
         if ($request->filled('status') && in_array($request->string('status'), ['pendente', 'aprovado', 'negado'], true)) {

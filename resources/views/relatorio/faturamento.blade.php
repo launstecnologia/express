@@ -89,7 +89,6 @@
                 <tr class="border-b border-gray-100 bg-gray-50">
                     <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Data</th>
                     <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Estabelecimento</th>
-                    <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Marketplace</th>
                     <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Instituição</th>
                     <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Tipo</th>
                     <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Transações</th>
@@ -106,7 +105,8 @@
                             ?: $linha->estabelecimento?->razao_social
                             ?: $linha->estabelecimento?->nome_completo
                             ?: '—';
-                        $marketplaceNome = $linha->marketplace?->nomeExibicao() ?? '—';
+                        $marketplaceNome = $linha->marketplace?->nomeExibicao();
+                        $revendaNome = $linha->revenda?->nomeExibicao();
                     @endphp
                     <tr
                         class="cursor-pointer border-b border-gray-50 transition-colors hover:bg-blue-50/60"
@@ -114,10 +114,13 @@
                     >
                         <td class="px-5 py-4 font-medium text-gray-800">{{ $linha->data?->format('d/m/Y') ?: '-' }}</td>
                         <td class="px-5 py-4">
-                            <p class="max-w-[200px] truncate font-medium text-gray-800 dark:text-gray-100" title="{{ $estabelecimentoNome }}">{{ $estabelecimentoNome }}</p>
-                        </td>
-                        <td class="px-5 py-4">
-                            <p class="max-w-[160px] truncate text-gray-600 dark:text-gray-300" title="{{ $marketplaceNome }}">{{ $marketplaceNome }}</p>
+                            <p class="max-w-[220px] truncate font-medium text-gray-800 dark:text-gray-100" title="{{ $estabelecimentoNome }}">{{ $estabelecimentoNome }}</p>
+                            <p class="mt-0.5 max-w-[220px] truncate text-xs text-gray-400" title="{{ $marketplaceNome ?: '—' }}">
+                                <span class="font-medium text-gray-500">Mkt:</span> {{ $marketplaceNome ?: '—' }}
+                            </p>
+                            <p class="max-w-[220px] truncate text-xs text-gray-400" title="{{ $revendaNome ?: '—' }}">
+                                <span class="font-medium text-gray-500">Revenda:</span> {{ $revendaNome ?: '—' }}
+                            </p>
                         </td>
                         <td class="px-5 py-4">
                             <x-instituicao-icone :codigo="$linha->instituicao" size="lg" />
@@ -134,7 +137,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="9" class="px-5 py-10 text-center text-sm text-gray-500">Nenhum faturamento encontrado para o filtro atual.</td>
+                        <td colspan="8" class="px-5 py-10 text-center text-sm text-gray-500">Nenhum faturamento encontrado para o filtro atual.</td>
                     </tr>
                 @endforelse
             </tbody>

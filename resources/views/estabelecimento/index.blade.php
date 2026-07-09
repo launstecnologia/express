@@ -191,7 +191,7 @@
 
                     <div>
                         <label for="filtro-marketplace" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Marketplace</label>
-                        <select id="filtro-marketplace" name="marketplace_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <select id="filtro-marketplace" name="marketplace_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" @disabled(($filtros['vinculo'] ?? '') === 'sem')>
                             <option value="">Todos</option>
                             @foreach ($marketplaces as $marketplace)
                                 <option value="{{ $marketplace['id'] }}" @selected(($filtros['marketplace_id'] ?? '') == $marketplace['id'])>{{ $marketplace['nome'] }}</option>
@@ -201,12 +201,21 @@
 
                     <div>
                         <label for="filtro-revenda" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Revenda</label>
-                        <select id="filtro-revenda" name="revenda_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <select id="filtro-revenda" name="revenda_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" @disabled(($filtros['vinculo'] ?? '') === 'sem')>
                             <option value="">Todos</option>
                             @foreach ($revendas as $revenda)
                                 <option value="{{ $revenda['id'] }}" @selected(($filtros['revenda_id'] ?? '') == $revenda['id'])>{{ $revenda['nome'] }}</option>
                             @endforeach
                         </select>
+                    </div>
+
+                    <div>
+                        <label for="filtro-vinculo" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Vínculo comercial</label>
+                        <select id="filtro-vinculo" name="vinculo" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">Todos</option>
+                            <option value="sem" @selected(($filtros['vinculo'] ?? '') === 'sem')>Sem marketplace e sem revenda</option>
+                        </select>
+                        <p class="mt-1 text-xs text-gray-400">Cadastros sem vínculo com marketplace ou revenda.</p>
                     </div>
 
                     <div>

@@ -80,17 +80,21 @@ class EstabelecimentoEtapaListagem
     public static function aplicarFiltroStatus(Builder $query, string $etapa): void
     {
         $etapa = self::normalizarStatus($etapa);
-        $valores = self::valoresStatusBanco($etapa);
 
         if ($etapa === self::PENDENTE) {
-            $query->where(function (Builder $q) use ($valores) {
-                $q->whereIn('status', $valores)->orWhereNull('status');
+            $excluir = array_merge(
+                self::valoresStatusBanco(self::APROVADO),
+                self::valoresStatusBanco(self::NEGADO),
+            );
+
+            $query->where(function (Builder $q) use ($excluir) {
+                $q->whereNotIn('status', $excluir)->orWhereNull('status');
             });
 
             return;
         }
 
-        $query->whereIn('status', $valores);
+        $query->whereIn('status', self::valoresStatusBanco($etapa));
     }
 
     /**
@@ -102,18 +106,10 @@ class EstabelecimentoEtapaListagem
     {
         $etapa = self::normalizarStatus($etapa);
 
-        if (EstabelecimentoSchema::statusEnumSimplificado()) {
-            return match ($etapa) {
-                self::APROVADO => ['aprovado', 'habilitado'],
-                self::NEGADO => ['negado', 'desabilitado', 'inativo_sistema'],
-                default => ['pendente'],
-            };
-        }
-
         return match ($etapa) {
             self::APROVADO => ['aprovado', 'habilitado'],
             self::NEGADO => ['negado', 'desabilitado', 'inativo_sistema'],
-            default => ['pendente'],
+            default => ['pendente', 'em_analise', 'qualidade', 'em_cadastro'],
         };
     }
 
