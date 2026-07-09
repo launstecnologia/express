@@ -9,11 +9,15 @@ use App\Models\Plano;
 use App\Models\SubUsuario;
 use App\Models\Usuario;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class DashboardApuracaoService
 {
+    private const CACHE_TTL_SECONDS = 300;
+
     public function periodoValido(int $dias): int
     {
         return in_array($dias, [7, 30, 90], true) ? $dias : 30;
@@ -32,17 +36,43 @@ class DashboardApuracaoService
      *         parcelado: float,
      *         pix: float
      *     }>,
-     *     resumo: array{faturamento_total: float, comissao_total: float, pix_total: float, debito_total: float, credito_total: float, parcelado_total: float}
+     *     resumo: array{faturamento_total: float, comissao_total: float, pix_total: float, debito_total: float, credito_total: float, parcelado_total: float},
+     *     transacoes_status: array{itens: list<array{label: string, cor: string, quantidade: int, percentual: float}>, gradiente: string, total: int},
+     *     faturamento_bandeiras: list<array{codigo: string, label: string, valor: float, barra_pct: float, icon_url: ?string}>
      * }
      */
     public function apurar(int $dias = 30, ?Authenticatable $usuario = null): array
     {
         $dias = $this->periodoValido($dias);
+
+        return Cache::remember(
+            $this->cacheKey($dias, $usuario),
+            self::CACHE_TTL_SECONDS,
+            fn () => $this->calcularApuracao($dias, $usuario),
+        );
+    }
+
+    /**
+     * @return array{
+     *     dias: int,
+     *     planos: list<array{
+     *         id: int,
+     *         nome: string,
+     *         faturamento: float,
+     *         comissao: float,
+     *         debito: float,
+     *         credito: float,
+     *         parcelado: float,
+     *         pix: float
+     *     }>,
+     *     resumo: array{faturamento_total: float, comissao_total: float, pix_total: float, debito_total: float, credito_total: float, parcelado_total: float}
+     * }
+     */
+    private function calcularApuracao(int $dias, ?Authenticatable $usuario): array
+    {
         $desde = now()->subDays($dias)->toDateString();
 
-        $estabelecimentoIds = Estabelecimento::query()->pluck('id');
-
-        if ($estabelecimentoIds->isEmpty()) {
+        if (! $this->temEstabelecimentosVisiveis()) {
             $vazia = $this->respostaVazia($dias);
 
             return array_merge($vazia, [
@@ -53,16 +83,24 @@ class DashboardApuracaoService
 
         $usuarioIdFiltro = $this->usuarioIdComissao($usuario);
 
-        $faturamentoPorPlano = $this->agregarFaturamento($estabelecimentoIds, $desde);
-        // Admin vê a comissão da plataforma (taxa do plano); parceiro vê o próprio royalty.
+        $faturamentoPorPlano = $this->agregarFaturamento($desde);
         $comissaoPorPlano = $usuarioIdFiltro
-            ? $this->agregarComissao($estabelecimentoIds, $desde, $usuarioIdFiltro)
-            : $this->agregarComissaoAdmin($estabelecimentoIds, $desde);
+            ? $this->agregarComissao($desde, $usuarioIdFiltro)
+            : $this->agregarComissaoAdmin($desde);
 
-        $planos = Plano::query()
-            ->where('ativo', true)
-            ->orderBy('nome')
-            ->get();
+        $planoIds = $faturamentoPorPlano->keys()
+            ->merge($comissaoPorPlano->keys())
+            ->unique()
+            ->filter()
+            ->values();
+
+        $planos = $planoIds->isEmpty()
+            ? collect()
+            : Plano::query()
+                ->whereIn('id', $planoIds)
+                ->where('ativo', true)
+                ->orderBy('nome')
+                ->get();
 
         $planosResumo = $planos->map(function (Plano $plano) use ($faturamentoPorPlano, $comissaoPorPlano) {
             $categorias = $faturamentoPorPlano->get($plano->id, collect());
@@ -101,22 +139,21 @@ class DashboardApuracaoService
             'dias' => $dias,
             'planos' => $planosResumo,
             'resumo' => $resumo,
-            'transacoes_status' => $this->transacoesPorStatus($estabelecimentoIds, $desde),
-            'faturamento_bandeiras' => $this->faturamentoPorBandeira($estabelecimentoIds, $desde),
+            'transacoes_status' => $this->transacoesPorStatus($desde),
+            'faturamento_bandeiras' => $this->faturamentoPorBandeira($desde),
         ];
     }
 
     /**
      * @return array{itens: list<array{label: string, cor: string, quantidade: int, percentual: float}>, gradiente: string, total: int}
      */
-    private function transacoesPorStatus(Collection $estabelecimentoIds, string $desde): array
+    private function transacoesPorStatus(string $desde): array
     {
         $linhas = DB::table('edi_movimentos as em')
-            ->join('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
-            ->whereIn('e.id', $estabelecimentoIds)
-            ->whereDate('em.data_inicial_transacao', '>=', $desde)
+            ->where('em.data_inicial_transacao', '>=', $desde)
+            ->whereIn('em.estabelecimento_id', $this->estabelecimentosVisiveisSubquery())
             ->selectRaw('COALESCE(NULLIF(em.status_pagamento, ""), "sem") as status_codigo, COUNT(*) as quantidade')
-            ->groupBy('status_codigo')
+            ->groupByRaw('COALESCE(NULLIF(em.status_pagamento, ""), "sem")')
             ->orderByDesc('quantidade')
             ->get();
 
@@ -158,12 +195,11 @@ class DashboardApuracaoService
     /**
      * @return list<array{codigo: string, label: string, valor: float, barra_pct: float, icon_url: ?string}>
      */
-    private function faturamentoPorBandeira(Collection $estabelecimentoIds, string $desde): array
+    private function faturamentoPorBandeira(string $desde): array
     {
         $linhas = DB::table('edi_movimentos as em')
-            ->join('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
-            ->whereIn('e.id', $estabelecimentoIds)
-            ->whereDate('em.data_inicial_transacao', '>=', $desde)
+            ->where('em.data_inicial_transacao', '>=', $desde)
+            ->whereIn('em.estabelecimento_id', $this->estabelecimentosVisiveisSubquery())
             ->whereNotNull('em.instituicao_financeira')
             ->selectRaw('em.instituicao_financeira as instituicao, SUM(em.valor_total_transacao) as valor')
             ->groupBy('em.instituicao_financeira')
@@ -209,14 +245,14 @@ class DashboardApuracaoService
         };
     }
 
-    private function agregarFaturamento(Collection $estabelecimentoIds, string $desde): Collection
+    private function agregarFaturamento(string $desde): Collection
     {
         $categoriaSql = EdiTransacaoCategoria::sqlCategoria('em');
 
         return DB::table('edi_movimentos as em')
             ->join('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
-            ->whereIn('e.id', $estabelecimentoIds)
-            ->whereDate('em.data_inicial_transacao', '>=', $desde)
+            ->where('em.data_inicial_transacao', '>=', $desde)
+            ->whereIn('em.estabelecimento_id', $this->estabelecimentosVisiveisSubquery())
             ->whereNotNull('e.plano_id')
             ->selectRaw("e.plano_id, {$categoriaSql} as categoria, SUM(em.valor_total_transacao) as total")
             ->groupBy('e.plano_id', DB::raw($categoriaSql))
@@ -226,12 +262,7 @@ class DashboardApuracaoService
             ->map(fn (Collection $rows) => $rows->pluck('total', 'categoria'));
     }
 
-    /**
-     * Comissão da plataforma (admin): comissao_percentual da plano_taxa × faturamento,
-     * casando cada movimento com sua taxa (arranjo_ur + parcelas). Independe de cadeia
-     * comercial — por isso aparece mesmo sem MKT/revenda vinculados.
-     */
-    private function agregarComissaoAdmin(Collection $estabelecimentoIds, string $desde): Collection
+    private function agregarComissaoAdmin(string $desde): Collection
     {
         return DB::table('edi_movimentos as em')
             ->join('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
@@ -241,8 +272,8 @@ class DashboardApuracaoService
                     ->on('pt.parcelas', '=', DB::raw('COALESCE(NULLIF(em.quantidade_parcela, 0), 1)'))
                     ->where('pt.ativo', true);
             })
-            ->whereIn('e.id', $estabelecimentoIds)
-            ->whereDate('em.data_inicial_transacao', '>=', $desde)
+            ->where('em.data_inicial_transacao', '>=', $desde)
+            ->whereIn('em.estabelecimento_id', $this->estabelecimentosVisiveisSubquery())
             ->whereNotNull('e.plano_id')
             ->whereNotNull('pt.comissao_percentual')
             ->selectRaw('e.plano_id, SUM(em.valor_total_transacao * pt.comissao_percentual / 100) as total')
@@ -251,13 +282,13 @@ class DashboardApuracaoService
             ->pluck('total', 'plano_id');
     }
 
-    private function agregarComissao(Collection $estabelecimentoIds, string $desde, ?int $usuarioIdFiltro): Collection
+    private function agregarComissao(string $desde, ?int $usuarioIdFiltro): Collection
     {
         $query = DB::table('transacao_royalties as tr')
             ->join('edi_movimentos as em', 'em.id', '=', 'tr.edi_movimento_id')
             ->join('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
-            ->whereIn('e.id', $estabelecimentoIds)
-            ->whereDate('em.data_inicial_transacao', '>=', $desde)
+            ->where('em.data_inicial_transacao', '>=', $desde)
+            ->whereIn('em.estabelecimento_id', $this->estabelecimentosVisiveisSubquery())
             ->whereNotNull('e.plano_id')
             ->selectRaw('e.plano_id, SUM(tr.valor_royalty) as total')
             ->groupBy('e.plano_id');
@@ -280,6 +311,29 @@ class DashboardApuracaoService
         }
 
         return null;
+    }
+
+    private function temEstabelecimentosVisiveis(): bool
+    {
+        return Estabelecimento::query()->exists();
+    }
+
+    /** @return Builder<Estabelecimento> */
+    private function estabelecimentosVisiveisSubquery(): Builder
+    {
+        return Estabelecimento::query()->select('id');
+    }
+
+    private function cacheKey(int $dias, ?Authenticatable $usuario): string
+    {
+        if ($usuario instanceof SubUsuario) {
+            $usuario = $usuario->dono;
+        }
+
+        $tipo = $usuario instanceof Usuario ? $usuario->tipo : 'guest';
+        $id = $usuario?->id ?? 0;
+
+        return "dashboard.apuracao.v2.{$tipo}.{$id}.{$dias}";
     }
 
     private function respostaVazia(int $dias): array
