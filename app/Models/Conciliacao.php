@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Conciliacao extends Model
 {
+    protected $table = 'conciliacoes';
+
     protected $fillable = [
         'referencia_mes',
         'data_referencia',
