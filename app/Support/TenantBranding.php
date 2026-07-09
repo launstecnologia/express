@@ -122,8 +122,16 @@ class TenantBranding
     public static function logoUrl(string $variant = 'default'): ?string
     {
         if (self::isActive()) {
+            if ($variant === 'white' && self::$tenant->logo_white_oculta) {
+                return null;
+            }
+
+            if ($variant === 'default' && self::$tenant->logo_oculta) {
+                return null;
+            }
+
             $path = match ($variant) {
-                'white' => self::$tenant->logo_white_path ?: self::$tenant->logo_path,
+                'white' => self::$tenant->logo_white_path ?: (self::$tenant->logo_oculta ? null : self::$tenant->logo_path),
                 'favicon' => self::$tenant->favicon_path,
                 default => self::$tenant->logo_path,
             };

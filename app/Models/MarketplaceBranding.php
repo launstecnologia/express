@@ -14,6 +14,8 @@ class MarketplaceBranding extends Model
         'primary_color',
         'logo_path',
         'logo_white_path',
+        'logo_oculta',
+        'logo_white_oculta',
         'favicon_path',
         'custom_domain',
         'custom_domain_verified_at',
@@ -29,6 +31,8 @@ class MarketplaceBranding extends Model
             'custom_domain_verified_at' => 'datetime',
             'ssl_provisioned_at' => 'datetime',
             'whitelabel_ativo' => 'boolean',
+            'logo_oculta' => 'boolean',
+            'logo_white_oculta' => 'boolean',
             'subdominio_provisionado' => 'boolean',
         ];
     }

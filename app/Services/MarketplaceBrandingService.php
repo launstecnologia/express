@@ -67,9 +67,19 @@ class MarketplaceBrandingService
      */
     public function urlsPreview(?MarketplaceBranding $branding): array
     {
+        $logoOculta = (bool) ($branding?->logo_oculta);
+        $logoWhiteOculta = (bool) ($branding?->logo_white_oculta);
+
         return [
-            'logoUrl' => $this->urlArquivo($branding?->logo_path, 'default'),
-            'logoWhiteUrl' => $this->urlArquivo($branding?->logo_white_path ?: $branding?->logo_path, 'white'),
+            'logoUrl' => $logoOculta
+                ? null
+                : $this->urlArquivo($branding?->logo_path, 'default'),
+            'logoWhiteUrl' => $logoWhiteOculta
+                ? null
+                : $this->urlArquivo(
+                    $branding?->logo_white_path ?: ($logoOculta ? null : $branding?->logo_path),
+                    'white',
+                ),
             'faviconUrl' => $this->urlArquivo($branding?->favicon_path, 'favicon'),
         ];
     }
@@ -105,14 +115,27 @@ class MarketplaceBrandingService
             $dados['custom_domain_verified_at'] = now();
         }
 
-        foreach (['logo' => 'logo_path', 'logo_white' => 'logo_white_path', 'favicon' => 'favicon_path'] as $input => $column) {
-            $removerKey = match ($input) {
-                'logo' => 'remover_logo',
-                'logo_white' => 'remover_logo_white',
-                default => 'remover_favicon',
-            };
+        foreach ([
+            ['logo', 'logo_path', 'logo_oculta', 'logo_acao'],
+            ['logo_white', 'logo_white_path', 'logo_white_oculta', 'logo_white_acao'],
+            ['favicon', 'favicon_path', null, 'remover_favicon'],
+        ] as [$input, $column, $ocultaColumn, $acaoKey]) {
+            if ($ocultaColumn) {
+                $updates = $this->aplicarAcaoLogo(
+                    $request,
+                    $branding,
+                    $marketplace,
+                    $input,
+                    $column,
+                    $ocultaColumn,
+                    $acaoKey,
+                );
+                $dados = array_merge($dados, $updates);
 
-            if ($request->boolean($removerKey) && $branding->{$column}) {
+                continue;
+            }
+
+            if ($request->boolean($acaoKey) && $branding->{$column}) {
                 Storage::disk('public')->delete($branding->{$column});
                 $dados[$column] = null;
             }
@@ -129,8 +152,8 @@ class MarketplaceBrandingService
             $dados['logo'],
             $dados['logo_white'],
             $dados['favicon'],
-            $dados['remover_logo'],
-            $dados['remover_logo_white'],
+            $dados['logo_acao'],
+            $dados['logo_white_acao'],
             $dados['remover_favicon'],
             $dados['verificar_dominio'],
         );
@@ -203,5 +226,41 @@ class MarketplaceBrandingService
     public function urlAcesso(MarketplaceBranding $branding): string
     {
         return $this->urlsAcesso($branding)['atual'];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function aplicarAcaoLogo(
+        Request $request,
+        MarketplaceBranding $branding,
+        Usuario $marketplace,
+        string $input,
+        string $columnPath,
+        string $columnOculta,
+        string $acaoInput,
+    ): array {
+        $updates = [];
+        $acao = $request->input($acaoInput);
+
+        if (in_array($acao, ['padrao', 'ocultar'], true)) {
+            if ($branding->{$columnPath}) {
+                Storage::disk('public')->delete($branding->{$columnPath});
+            }
+
+            $updates[$columnPath] = null;
+            $updates[$columnOculta] = $acao === 'ocultar';
+        }
+
+        if ($request->hasFile($input)) {
+            if ($branding->{$columnPath}) {
+                Storage::disk('public')->delete($branding->{$columnPath});
+            }
+
+            $updates[$columnPath] = $request->file($input)->store("platform/marketplaces/{$marketplace->id}", 'public');
+            $updates[$columnOculta] = false;
+        }
+
+        return $updates;
     }
 }

@@ -2,7 +2,11 @@
 <div class="flex h-full min-h-0 flex-col">
     <div class="flex items-center justify-between px-4 pb-4 pt-4">
         <a href="{{ route('dashboard') }}" class="block" @if($mobileMenu) @click="sidebarOpen = false" @endif>
-            <img src="{{ $logoUrl }}" alt="{{ $appName }}" class="h-12 w-auto object-contain sm:h-14 lg:h-16">
+            @if ($logoUrl)
+                <img src="{{ $logoUrl }}" alt="{{ $appName }}" class="h-12 w-auto object-contain sm:h-14 lg:h-16">
+            @else
+                <span class="text-lg font-bold text-gray-800 dark:text-gray-100">{{ $appName }}</span>
+            @endif
         </a>
         @if ($mobileMenu)
             <button type="button" @click="sidebarOpen = false" class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" aria-label="Fechar menu">

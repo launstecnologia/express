@@ -28,8 +28,8 @@ class MarketplaceBrandingAdminController extends Controller
             'logo' => ['nullable', 'image', 'max:4096'],
             'logo_white' => ['nullable', 'image', 'max:4096'],
             'favicon' => ['nullable', 'image', 'max:2048'],
-            'remover_logo' => ['boolean'],
-            'remover_logo_white' => ['boolean'],
+            'logo_acao' => ['nullable', 'in:padrao,ocultar'],
+            'logo_white_acao' => ['nullable', 'in:padrao,ocultar'],
             'remover_favicon' => ['boolean'],
         ]);
 

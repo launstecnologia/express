@@ -57,13 +57,15 @@
             <div class="absolute bottom-40 left-10 h-2 w-2 rounded-full bg-rose-400/80"></div>
 
             <div class="relative z-10 my-6 flex w-full max-w-lg flex-1 items-center justify-center">
-                <img
-                    src="{{ $logoWhiteUrl ?? $logoUrl }}"
-                    alt="{{ $appName }}"
-                    class="w-full max-w-md object-contain object-center brightness-0 invert drop-shadow-lg"
-                    onerror="this.style.display='none'; this.nextElementSibling.style.display='block'"
-                >
-                <p class="hidden text-3xl font-bold tracking-tight" style="display:none">Express Payments</p>
+                @if ($logoWhiteUrl ?? $logoUrl)
+                    <img
+                        src="{{ $logoWhiteUrl ?? $logoUrl }}"
+                        alt="{{ $appName }}"
+                        class="w-full max-w-md object-contain object-center brightness-0 invert drop-shadow-lg"
+                    >
+                @else
+                    <p class="text-3xl font-bold tracking-tight text-white">{{ $appName }}</p>
+                @endif
             </div>
 
             <div class="relative z-10 w-full max-w-lg text-center lg:text-left">
@@ -80,7 +82,11 @@
         <div class="flex flex-1 items-center justify-center px-6 py-10 lg:max-w-[50%] lg:px-16 lg:py-12">
             <div class="w-full max-w-md">
                 <div class="mb-8 lg:hidden">
-                    <img src="{{ $logoUrl }}" alt="{{ $appName }}" class="mx-auto h-16 w-auto max-w-xs object-contain sm:h-20">
+                    @if ($logoUrl)
+                        <img src="{{ $logoUrl }}" alt="{{ $appName }}" class="mx-auto h-16 w-auto max-w-xs object-contain sm:h-20">
+                    @else
+                        <p class="text-center text-2xl font-bold text-gray-900">{{ $appName }}</p>
+                    @endif
                 </div>
 
                 <h1 class="text-center text-2xl font-bold text-gray-900 lg:text-left lg:text-3xl">Faça seu login</h1>

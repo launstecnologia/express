@@ -115,28 +115,40 @@
                                 <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Logo padrão</p>
                                 @include('partials.branding-image-hint', ['variant' => 'logo'])
                                 <div class="mb-3 flex h-20 items-center justify-center rounded-lg bg-gray-50 dark:bg-gray-800">
-                                    <img src="{{ $logoUrl }}" alt="Logo" class="max-h-16 max-w-full object-contain">
+                                    @if ($branding->logo_oculta)
+                                        <p class="text-xs italic text-gray-400">Sem logo</p>
+                                    @elseif ($logoUrl)
+                                        <img src="{{ $logoUrl }}" alt="Logo" class="max-h-16 max-w-full object-contain">
+                                    @else
+                                        <p class="text-xs text-gray-400">Logo padrão da plataforma</p>
+                                    @endif
                                 </div>
                                 <input type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/svg+xml" class="block w-full text-xs text-gray-600 file:mr-2 file:rounded file:border-0 file:bg-blue-50 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-blue-700">
-                                @if ($branding->logo_path)
-                                    <label class="mt-2 flex items-center gap-2 text-xs text-red-600">
-                                        <input type="checkbox" name="remover_logo" value="1" class="rounded"> Remover logo
-                                    </label>
-                                @endif
+                                @include('partials.branding-logo-acoes', [
+                                    'name' => 'logo_acao',
+                                    'oculta' => (bool) $branding->logo_oculta,
+                                    'temArquivo' => filled($branding->logo_path),
+                                ])
                             </div>
 
                             <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
                                 <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">Logo branca</p>
                                 @include('partials.branding-image-hint', ['variant' => 'logo_white'])
                                 <div class="mb-3 flex h-20 items-center justify-center rounded-lg" style="background-color: {{ old('primary_color', $branding->primary_color) }}">
-                                    <img src="{{ $logoWhiteUrl }}" alt="Logo branca" class="max-h-16 max-w-full object-contain brightness-0 invert">
+                                    @if ($branding->logo_white_oculta)
+                                        <p class="text-xs italic text-white/70">Sem logo</p>
+                                    @elseif ($logoWhiteUrl)
+                                        <img src="{{ $logoWhiteUrl }}" alt="Logo branca" class="max-h-16 max-w-full object-contain brightness-0 invert">
+                                    @else
+                                        <p class="text-xs text-white/70">Logo branca padrão</p>
+                                    @endif
                                 </div>
                                 <input type="file" name="logo_white" accept="image/png,image/jpeg,image/webp,image/svg+xml" class="block w-full text-xs text-gray-600 file:mr-2 file:rounded file:border-0 file:bg-blue-50 file:px-2 file:py-1 file:text-xs file:font-semibold file:text-blue-700">
-                                @if ($branding->logo_white_path)
-                                    <label class="mt-2 flex items-center gap-2 text-xs text-red-600">
-                                        <input type="checkbox" name="remover_logo_white" value="1" class="rounded"> Remover logo branca
-                                    </label>
-                                @endif
+                                @include('partials.branding-logo-acoes', [
+                                    'name' => 'logo_white_acao',
+                                    'oculta' => (bool) $branding->logo_white_oculta,
+                                    'temArquivo' => filled($branding->logo_white_path),
+                                ])
                             </div>
 
                             <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
