@@ -11,7 +11,8 @@ use App\Support\ComissaoAdminSql;
 use App\Support\EdiMovimentoDetalhe;
 use App\Support\InstituicaoFinanceira;
 use App\Services\RoyaltyCalculadorService;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -142,12 +143,12 @@ class RelatorioController extends Controller
         ]);
     }
 
-    private function aplicarFiltrosFaturamento(Builder $query, Request $request): void
+    private function aplicarFiltrosFaturamento(EloquentBuilder $query, Request $request): void
     {
         if ($request->filled('estabelecimento')) {
             $termo = '%'.$request->string('estabelecimento')->trim().'%';
-            $query->whereHas('estabelecimento', function (Builder $estabelecimento) use ($termo) {
-                $estabelecimento->where(function (Builder $q) use ($termo) {
+            $query->whereHas('estabelecimento', function (EloquentBuilder $estabelecimento) use ($termo) {
+                $estabelecimento->where(function (EloquentBuilder $q) use ($termo) {
                     $q->where('nome_fantasia', 'like', $termo)
                         ->orWhere('razao_social', 'like', $termo)
                         ->orWhere('nome_completo', 'like', $termo);
@@ -308,7 +309,7 @@ class RelatorioController extends Controller
 
     private function totalComissaoAdmin(Request $request): float
     {
-        return (float) ComissaoAdminSql::queryMovimentosComComissaoAdmin(function (Builder $query) use ($request) {
+        return (float) ComissaoAdminSql::queryMovimentosComComissaoAdmin(function (QueryBuilder $query) use ($request) {
             $this->aplicarFiltrosMovimentosBase($query, $request);
             $query->whereNotNull('e.plano_id');
         })->sum(DB::raw(ComissaoAdminSql::valor()));

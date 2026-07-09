@@ -27,49 +27,37 @@
             </a>
         @endif
     </div>
-    <div class="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-5">
-        <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p class="mb-1 text-xs font-medium text-gray-500">Total Transações</p>
-            <div class="flex items-center justify-between">
-                <span class="text-2xl font-bold text-gray-800">{{ number_format($totais->total_transacoes ?? 0, 0, ',', '.') }}</span>
-                <div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600">
-                    <i class="fa-solid fa-list text-sm"></i>
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Total transações</p>
+                    <p class="mt-2 text-2xl font-bold tabular-nums text-gray-800 sm:text-3xl dark:text-gray-100">{{ number_format($totais->total_transacoes ?? 0, 0, ',', '.') }}</p>
+                </div>
+                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
+                    <i class="fa-solid fa-list text-lg"></i>
                 </div>
             </div>
         </div>
-        <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p class="mb-1 text-xs font-medium text-gray-500">Faturamento</p>
-            <div class="flex items-center justify-between">
-                <span class="text-2xl font-bold text-green-600">R$ {{ number_format($totais->total_valor ?? 0, 2, ',', '.') }}</span>
-                <div class="flex h-8 w-8 items-center justify-center rounded-full bg-green-100 text-green-600">
-                    <i class="fa-solid fa-circle-check text-sm"></i>
+        <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Faturamento</p>
+                    <p class="mt-2 text-lg font-bold tabular-nums leading-tight text-green-600 sm:text-xl lg:text-2xl dark:text-green-400">R$ {{ number_format($totais->total_valor ?? 0, 2, ',', '.') }}</p>
+                </div>
+                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-400">
+                    <i class="fa-solid fa-chart-line text-lg"></i>
                 </div>
             </div>
         </div>
-        <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p class="mb-1 text-xs font-medium text-gray-500">Comissões</p>
-            <div class="flex items-center justify-between">
-                <span class="text-2xl font-bold text-sky-600">R$ {{ number_format($totalRoyaltyExibido ?? 0, 2, ',', '.') }}</span>
-                <div class="flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sky-600">
-                    <i class="fa-solid fa-hand-holding-dollar text-sm"></i>
+        <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Comissões</p>
+                    <p class="mt-2 text-lg font-bold tabular-nums leading-tight text-sky-600 sm:text-xl lg:text-2xl dark:text-sky-400">R$ {{ number_format($totalRoyaltyExibido ?? 0, 2, ',', '.') }}</p>
                 </div>
-            </div>
-        </div>
-        <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p class="mb-1 text-xs font-medium text-gray-500">Pendentes</p>
-            <div class="flex items-center justify-between">
-                <span class="text-2xl font-bold text-yellow-600">0</span>
-                <div class="flex h-8 w-8 items-center justify-center rounded-full bg-yellow-100 text-yellow-600">
-                    <i class="fa-regular fa-clock text-sm"></i>
-                </div>
-            </div>
-        </div>
-        <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p class="mb-1 text-xs font-medium text-gray-500">Cancelados</p>
-            <div class="flex items-center justify-between">
-                <span class="text-2xl font-bold text-red-500">0</span>
-                <div class="flex h-8 w-8 items-center justify-center rounded-full bg-red-100 text-red-500">
-                    <i class="fa-solid fa-circle-xmark text-sm"></i>
+                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600 dark:bg-sky-950 dark:text-sky-400">
+                    <i class="fa-solid fa-hand-holding-dollar text-lg"></i>
                 </div>
             </div>
         </div>

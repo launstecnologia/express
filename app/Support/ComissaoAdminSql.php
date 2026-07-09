@@ -40,7 +40,7 @@ class ComissaoAdminSql
     }
 
     /**
-     * @param  callable(JoinClause): void|null  $antes
+     * @param  callable(QueryBuilder): void|null  $antes
      */
     public static function queryMovimentosComComissaoAdmin(?callable $antes = null): Builder
     {
