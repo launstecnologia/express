@@ -704,20 +704,39 @@ class EstabelecimentoController extends Controller
         $semVinculo = $marketplaceFiltro === 'sem_vinculo'
             || ($request->filled('vinculo') && $request->string('vinculo') === 'sem');
 
+        if ($semVinculo || $marketplaceFiltro === 'sem_marketplace') {
+            // Inclui inativos: costumam ser exatamente os cadastros sem vínculo comercial.
+            $query->withoutGlobalScope(ExcluirInativoSistemaScope::class);
+        }
+
         if ($semVinculo) {
-            $query->whereNull('marketplace_id')->whereNull('revenda_id');
+            $query->where(function (Builder $q) {
+                $q->where(function (Builder $semMkt) {
+                    $semMkt->whereNull('estabelecimentos.marketplace_id')
+                        ->orWhere('estabelecimentos.marketplace_id', 0)
+                        ->orWhereDoesntHave('marketplace');
+                })->where(function (Builder $semRev) {
+                    $semRev->whereNull('estabelecimentos.revenda_id')
+                        ->orWhere('estabelecimentos.revenda_id', 0)
+                        ->orWhereDoesntHave('revenda');
+                });
+            });
 
             return;
         }
 
         if ($marketplaceFiltro === 'sem_marketplace') {
-            $query->whereNull('marketplace_id');
+            $query->where(function (Builder $q) {
+                $q->whereNull('estabelecimentos.marketplace_id')
+                    ->orWhere('estabelecimentos.marketplace_id', 0)
+                    ->orWhereDoesntHave('marketplace');
+            });
         } elseif ($marketplaceFiltro !== '' && ctype_digit($marketplaceFiltro)) {
-            $query->where('marketplace_id', (int) $marketplaceFiltro);
+            $query->where('estabelecimentos.marketplace_id', (int) $marketplaceFiltro);
         }
 
         if ($request->filled('revenda_id')) {
-            $query->where('revenda_id', $request->integer('revenda_id'));
+            $query->where('estabelecimentos.revenda_id', $request->integer('revenda_id'));
         }
     }
 
