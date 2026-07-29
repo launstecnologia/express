@@ -60,7 +60,7 @@ class ConciliacaoImportService
             $pathSalvo = $arquivo->storeAs($pasta, $nomeArquivo, 'local');
         }
 
-        return DB::transaction(function () use ($rows, $meta, $referenciaMes, $estabelecimentos, $usuarioId, $nomeArquivo, $pathSalvo, $confrontar) {
+        $conciliacao = DB::transaction(function () use ($rows, $meta, $referenciaMes, $estabelecimentos, $usuarioId, $nomeArquivo, $pathSalvo) {
             $conciliacao = Conciliacao::query()->create([
                 'referencia_mes' => $referenciaMes,
                 'data_referencia' => $meta['data_referencia'],
@@ -120,12 +120,15 @@ class ConciliacaoImportService
                 'linhas_sem_estabelecimento' => $semEstabelecimento,
             ]);
 
-            if ($confrontar) {
-                $this->confronto->confrontar($conciliacao->fresh());
-            }
-
             return $conciliacao->fresh();
         });
+
+        // Fora da transação: se o confronto falhar/estourar tempo, a importação já fica salva.
+        if ($confrontar) {
+            $this->confronto->confrontar($conciliacao);
+        }
+
+        return $conciliacao->fresh();
     }
 
     /**

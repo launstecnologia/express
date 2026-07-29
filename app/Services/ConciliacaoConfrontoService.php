@@ -4,10 +4,9 @@ namespace App\Services;
 
 use App\Models\Conciliacao;
 use App\Models\ConciliacaoLinha;
-use App\Support\ConciliacaoDimensao;
-use Carbon\Carbon;
-use Illuminate\Support\Collection;
 use App\Support\ComissaoAdminSql;
+use App\Support\ConciliacaoDimensao;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class ConciliacaoConfrontoService
@@ -16,6 +15,8 @@ class ConciliacaoConfrontoService
 
     public function confrontar(Conciliacao $conciliacao): Conciliacao
     {
+        @set_time_limit(300);
+
         $inicio = $conciliacao->referencia_mes->copy()->startOfMonth()->toDateString();
         $fim = $conciliacao->referencia_mes->copy()->endOfMonth()->toDateString();
 
@@ -26,18 +27,27 @@ class ConciliacaoConfrontoService
         $semEstabelecimento = 0;
         $semEdi = 0;
 
-        $conciliacao->linhas()->orderBy('id')->chunkById(500, function ($linhas) use ($agregados, &$ok, &$divergentes, &$semEstabelecimento, &$semEdi) {
+        $conciliacao->linhas()->orderBy('id')->chunkById(500, function ($linhas) use (
+            $agregados,
+            &$ok,
+            &$divergentes,
+            &$semEstabelecimento,
+            &$semEdi,
+        ) {
+            $lote = [];
+
             foreach ($linhas as $linha) {
                 if ($linha->sem_estabelecimento) {
                     $semEstabelecimento++;
-                    $linha->update([
+                    $lote[] = [
+                        'id' => (int) $linha->id,
                         'status' => 'sem_estabelecimento',
                         'edi_tpv' => null,
                         'edi_comissao' => null,
                         'edi_qtd' => null,
                         'diff_tpv' => null,
                         'diff_comissao' => null,
-                    ]);
+                    ];
 
                     continue;
                 }
@@ -46,14 +56,15 @@ class ConciliacaoConfrontoService
 
                 if ($edi === null) {
                     $semEdi++;
-                    $linha->update([
+                    $lote[] = [
+                        'id' => (int) $linha->id,
                         'status' => 'sem_edi',
                         'edi_tpv' => 0,
                         'edi_comissao' => 0,
                         'edi_qtd' => 0,
                         'diff_tpv' => round((float) $linha->tpv, 2),
                         'diff_comissao' => round((float) $linha->ms_comissao, 4),
-                    ]);
+                    ];
 
                     continue;
                 }
@@ -68,15 +79,18 @@ class ConciliacaoConfrontoService
                     $divergentes++;
                 }
 
-                $linha->update([
+                $lote[] = [
+                    'id' => (int) $linha->id,
                     'status' => $bate ? 'ok' : 'divergente',
                     'edi_tpv' => $edi['tpv'],
                     'edi_comissao' => $edi['comissao'],
                     'edi_qtd' => $edi['qtd'],
                     'diff_tpv' => $diffTpv,
                     'diff_comissao' => $diffComissao,
-                ]);
+                ];
             }
+
+            $this->aplicarLote($lote);
         });
 
         $conciliacao->update([
@@ -92,16 +106,77 @@ class ConciliacaoConfrontoService
     }
 
     /**
+     * @param  list<array{
+     *     id: int,
+     *     status: string,
+     *     edi_tpv: float|int|null,
+     *     edi_comissao: float|int|null,
+     *     edi_qtd: int|null,
+     *     diff_tpv: float|int|null,
+     *     diff_comissao: float|int|null
+     * }>  $lote
+     */
+    private function aplicarLote(array $lote): void
+    {
+        if ($lote === []) {
+            return;
+        }
+
+        $ids = array_column($lote, 'id');
+        $campos = ['status', 'edi_tpv', 'edi_comissao', 'edi_qtd', 'diff_tpv', 'diff_comissao'];
+        $cases = array_fill_keys($campos, '');
+
+        foreach ($lote as $row) {
+            $id = (int) $row['id'];
+
+            foreach ($campos as $campo) {
+                $cases[$campo] .= ' WHEN '.$id.' THEN '.$this->sqlLiteral($row[$campo]);
+            }
+        }
+
+        $sets = [];
+
+        foreach ($campos as $campo) {
+            $sets[] = "{$campo} = CASE id{$cases[$campo]} END";
+        }
+
+        $sets[] = 'updated_at = NOW()';
+
+        DB::update(
+            'UPDATE conciliacao_linhas SET '.implode(', ', $sets)
+            .' WHERE id IN ('.implode(',', $ids).')'
+        );
+    }
+
+    private function sqlLiteral(mixed $valor): string
+    {
+        if ($valor === null) {
+            return 'NULL';
+        }
+
+        if (is_bool($valor)) {
+            return $valor ? '1' : '0';
+        }
+
+        if (is_int($valor) || is_float($valor)) {
+            return (string) $valor;
+        }
+
+        return DB::getPdo()->quote((string) $valor);
+    }
+
+    /**
      * @return Collection<string, array{tpv: float, comissao: float, qtd: int}>
      */
     private function agregarEdi(string $inicio, string $fim): Collection
     {
-        $movimentos = DB::table('edi_movimentos as em')
+        $query = DB::table('edi_movimentos as em')
             ->leftJoin('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
             ->leftJoin('plano_taxas as pt', function ($join) {
                 ComissaoAdminSql::joinPlanoTaxa($join);
             });
-        ComissaoAdminSql::joinRoyaltyAdmin($movimentos)
+
+        ComissaoAdminSql::joinRoyaltyAdmin($query)
             ->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
             ->whereNotNull('em.estabelecimento_id')
             ->select([
@@ -118,12 +193,11 @@ class ConciliacaoConfrontoService
                 DB::raw(ComissaoAdminSql::percentual().' as comissao_percentual'),
                 DB::raw('COALESCE(e.token_pagseguro, em.estabelecimento, em.id_cliente) as id_cliente'),
                 DB::raw('e.segmento as mcc_estabelecimento'),
-            ])
-            ->get();
+            ]);
 
         $grupos = [];
 
-        foreach ($movimentos as $mov) {
+        foreach ($query->orderBy('em.id')->cursor() as $mov) {
             $idCliente = trim((string) $mov->id_cliente);
 
             if ($idCliente === '') {

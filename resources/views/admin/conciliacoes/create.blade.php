@@ -15,7 +15,7 @@
             O sistema lê automaticamente as colunas (id_cliente, TPV, comissão, bandeira, etc.) e vincula ao estabelecimento pelo <code class="text-xs">token_pagseguro</code>.
         </p>
 
-        <form method="POST" action="{{ route('admin.conciliacoes.store') }}" enctype="multipart/form-data" class="mt-6 space-y-4">
+        <form id="form-conciliacao" method="POST" action="{{ route('admin.conciliacoes.store') }}" enctype="multipart/form-data" class="mt-6 space-y-4">
             @csrf
 
             <label class="block space-y-2">
@@ -29,10 +29,31 @@
                 Confrontar automaticamente com EDI após importar
             </label>
 
-            <button type="submit" class="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
+            <p class="text-xs text-gray-500">
+                Arquivos grandes (milhares de linhas) podem levar alguns minutos. Não feche a aba enquanto processa.
+            </p>
+
+            <button id="btn-importar" type="submit" class="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70">
                 Importar
             </button>
+
+            <div id="importando" class="hidden rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                <i class="fa-solid fa-spinner fa-spin"></i>
+                Importando e confrontando… isso pode demorar. Aguarde.
+            </div>
         </form>
     </div>
 </div>
+
+<script>
+document.getElementById('form-conciliacao')?.addEventListener('submit', function () {
+    const btn = document.getElementById('btn-importar');
+    const aviso = document.getElementById('importando');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Processando…';
+    }
+    aviso?.classList.remove('hidden');
+});
+</script>
 @endsection

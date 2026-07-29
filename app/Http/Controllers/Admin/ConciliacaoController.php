@@ -27,25 +27,50 @@ class ConciliacaoController extends Controller
         return view('admin.conciliacoes.create');
     }
 
-    public function store(Request $request, ConciliacaoImportService $import)
+    public function store(Request $request, ConciliacaoImportService $import, ConciliacaoConfrontoService $confronto)
     {
-        $dados = $request->validate([
+        $request->validate([
             'arquivo' => ['required', 'file', 'mimes:xlsx', 'max:20480'],
         ]);
 
+        @set_time_limit(300);
+
+        $deveConfrontar = $request->boolean('confrontar', true);
+
         try {
+            // Importa sem confronto para não perder o arquivo se o EDI estourar tempo/memória.
             $conciliacao = $import->importarArquivo(
                 $request->file('arquivo'),
                 $request->user()?->id,
-                $request->boolean('confrontar', true),
+                false,
             );
         } catch (\Throwable $e) {
-            return back()->withInput()->withErrors(['arquivo' => $e->getMessage()]);
+            report($e);
+
+            return back()->withInput()->withErrors([
+                'arquivo' => 'Falha ao importar: '.$e->getMessage(),
+            ]);
+        }
+
+        if (! $deveConfrontar) {
+            return redirect()
+                ->route('admin.conciliacoes.show', $conciliacao)
+                ->with('status', 'Conciliação importada. Use “Reconfrontar EDI” quando quiser confrontar.');
+        }
+
+        try {
+            $confronto->confrontar($conciliacao);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect()
+                ->route('admin.conciliacoes.show', $conciliacao)
+                ->with('status', 'Conciliação importada, mas o confronto com EDI falhou: '.$e->getMessage());
         }
 
         return redirect()
             ->route('admin.conciliacoes.show', $conciliacao)
-            ->with('status', 'Conciliação importada com sucesso.');
+            ->with('status', 'Conciliação importada e confrontada com sucesso.');
     }
 
     public function show(Request $request, Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto)
@@ -110,7 +135,17 @@ class ConciliacaoController extends Controller
 
     public function confrontar(Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto)
     {
-        $confronto->confrontar($conciliacao);
+        @set_time_limit(300);
+
+        try {
+            $confronto->confrontar($conciliacao);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect()
+                ->route('admin.conciliacoes.show', $conciliacao)
+                ->withErrors(['confronto' => 'Falha no confronto: '.$e->getMessage()]);
+        }
 
         return redirect()
             ->route('admin.conciliacoes.show', $conciliacao)
