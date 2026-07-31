@@ -3,42 +3,21 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\AggregatedRevenue;
-use App\Models\Estabelecimento;
-use App\Models\SubUsuario;
-use App\Models\Usuario;
 use App\Services\DashboardApuracaoService;
+use App\Services\DashboardResumoService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
-use App\Support\ComissaoAdminSql;
-use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
-    private const CACHE_TTL_SECONDS = 300;
-
-    public function __invoke(Request $request, DashboardApuracaoService $apuracaoService)
-    {
+    public function __invoke(
+        Request $request,
+        DashboardApuracaoService $apuracaoService,
+        DashboardResumoService $resumoService,
+    ) {
         $periodo = $apuracaoService->periodoValido($request->integer('periodo', 30));
         $apuracao = $apuracaoService->apurar($periodo, $request->user());
 
-        $usuario = $request->user();
-        if ($usuario instanceof SubUsuario) {
-            $usuario = $usuario->dono;
-        }
-
-        $cacheKey = $this->cacheKeyResumo($usuario);
-
-        $resumoCards = Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($usuario) {
-            return [
-                'totalEstabelecimentos' => Estabelecimento::count(),
-                'faturamentoMes' => (float) AggregatedRevenue::query()
-                    ->where('ano', now()->year)
-                    ->where('mes', now()->month)
-                    ->sum('total_valor'),
-                'royaltiesMes' => $this->royaltiesMes($usuario),
-            ];
-        });
+        $resumoCards = $resumoService->resumo($request->user());
 
         return view('admin.dashboard', [
             'periodo' => $periodo,
@@ -50,38 +29,5 @@ class DashboardController extends Controller
             'transacoesStatus' => $apuracao['transacoes_status'],
             'faturamentoBandeiras' => $apuracao['faturamento_bandeiras'],
         ]);
-    }
-
-    private function royaltiesMes(mixed $usuario): float
-    {
-        $inicio = now()->startOfMonth()->toDateString();
-        $fim = now()->endOfMonth()->toDateString();
-
-        if ($usuario instanceof Usuario && $usuario->tipo !== 'admin') {
-            return (float) DB::table('transacao_royalties')
-                ->join('edi_movimentos', 'edi_movimentos.id', '=', 'transacao_royalties.edi_movimento_id')
-                ->whereBetween('edi_movimentos.data_inicial_transacao', [$inicio, $fim])
-                ->where('transacao_royalties.usuario_id', $usuario->id)
-                ->sum('transacao_royalties.valor_royalty');
-        }
-
-        return (float) ComissaoAdminSql::queryMovimentosComComissaoAdmin(function ($query) use ($inicio, $fim) {
-            $query->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
-                ->whereIn('em.estabelecimento_id', Estabelecimento::query()->select('id'))
-                ->whereNotNull('e.plano_id');
-        })->sum(DB::raw(ComissaoAdminSql::valor()));
-    }
-
-    private function cacheKeyResumo(mixed $usuario): string
-    {
-        if ($usuario instanceof SubUsuario) {
-            $usuario = $usuario->dono;
-        }
-
-        $tipo = $usuario instanceof Usuario ? $usuario->tipo : 'guest';
-        $id = $usuario?->id ?? 0;
-        $mes = now()->format('Y-m');
-
-        return "dashboard.resumo.v2.{$tipo}.{$id}.{$mes}";
     }
 }
