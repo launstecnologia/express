@@ -11,12 +11,22 @@ class DashboardController extends Controller
     public function __invoke(Request $request, DashboardService $dashboardService)
     {
         $periodo = (int) $request->integer('periodo', 30);
-        $resumo = $dashboardService->resumoRapido($request->user());
+        $periodo = in_array($periodo, [7, 30, 90], true) ? $periodo : 30;
+        $usuario = $request->user();
+
+        $resumo = $dashboardService->resumoRapido($usuario);
+        $comissao = $dashboardService->comissaoMes($usuario);
+        $apuracao = $dashboardService->apuracao($periodo, $usuario);
 
         return view('admin.dashboard', [
-            'periodo' => in_array($periodo, [7, 30, 90], true) ? $periodo : 30,
+            'periodo' => $periodo,
             'totalEstabelecimentos' => $resumo['totalEstabelecimentos'],
             'faturamentoMes' => $resumo['faturamentoMes'],
+            'royaltiesMes' => $comissao['royaltiesMes'],
+            'planosResumo' => $apuracao['planosResumo'],
+            'resumoPlanos' => $apuracao['resumoPlanos'],
+            'transacoesStatus' => $apuracao['transacoesStatus'],
+            'faturamentoBandeiras' => $apuracao['faturamentoBandeiras'],
         ]);
     }
 
