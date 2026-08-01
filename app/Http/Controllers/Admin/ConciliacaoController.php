@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ConfrontarConciliacaoJob;
 use App\Models\Conciliacao;
 use App\Models\ConciliacaoLinha;
 use App\Services\ConciliacaoConfrontoService;
@@ -27,13 +28,11 @@ class ConciliacaoController extends Controller
         return view('admin.conciliacoes.create');
     }
 
-    public function store(Request $request, ConciliacaoImportService $import, ConciliacaoConfrontoService $confronto)
+    public function store(Request $request, ConciliacaoImportService $import)
     {
         $request->validate([
             'arquivo' => ['required', 'file', 'mimes:xlsx', 'max:20480'],
         ]);
-
-        @set_time_limit(300);
 
         $deveConfrontar = $request->boolean('confrontar', true);
 
@@ -59,18 +58,24 @@ class ConciliacaoController extends Controller
         }
 
         try {
-            $confronto->confrontar($conciliacao);
+            $this->enfileirarConfronto($conciliacao);
         } catch (\Throwable $e) {
             report($e);
 
+            $conciliacao->update([
+                'status' => 'erro',
+                'confronto_status' => 'erro',
+                'confronto_erro' => mb_substr($e->getMessage(), 0, 2000),
+            ]);
+
             return redirect()
                 ->route('admin.conciliacoes.show', $conciliacao)
-                ->with('status', 'Conciliação importada, mas o confronto com EDI falhou: '.$e->getMessage());
+                ->withErrors(['confronto' => 'A importação foi salva, mas não foi possível adicionar o confronto à fila.']);
         }
 
         return redirect()
             ->route('admin.conciliacoes.show', $conciliacao)
-            ->with('status', 'Conciliação importada e confrontada com sucesso.');
+            ->with('status', 'Conciliação importada. O confronto com EDI entrou na fila e continuará em segundo plano.');
     }
 
     public function show(Request $request, Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto)
@@ -133,23 +138,33 @@ class ConciliacaoController extends Controller
         ]);
     }
 
-    public function confrontar(Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto)
+    public function confrontar(Conciliacao $conciliacao)
     {
-        @set_time_limit(300);
+        if (in_array($conciliacao->confronto_status, ['na_fila', 'processando'], true)) {
+            return redirect()
+                ->route('admin.conciliacoes.show', $conciliacao)
+                ->with('status', 'O confronto desta conciliação já está na fila ou em processamento.');
+        }
 
         try {
-            $confronto->confrontar($conciliacao);
+            $this->enfileirarConfronto($conciliacao);
         } catch (\Throwable $e) {
             report($e);
 
+            $conciliacao->update([
+                'status' => 'erro',
+                'confronto_status' => 'erro',
+                'confronto_erro' => mb_substr($e->getMessage(), 0, 2000),
+            ]);
+
             return redirect()
                 ->route('admin.conciliacoes.show', $conciliacao)
-                ->withErrors(['confronto' => 'Falha no confronto: '.$e->getMessage()]);
+                ->withErrors(['confronto' => 'Não foi possível adicionar o confronto à fila.']);
         }
 
         return redirect()
             ->route('admin.conciliacoes.show', $conciliacao)
-            ->with('status', 'Confronto com EDI atualizado.');
+            ->with('status', 'Confronto adicionado à fila. Você pode sair desta página.');
     }
 
     public function destroy(Conciliacao $conciliacao)
@@ -159,5 +174,17 @@ class ConciliacaoController extends Controller
         return redirect()
             ->route('admin.conciliacoes.index')
             ->with('status', 'Conciliação removida.');
+    }
+
+    private function enfileirarConfronto(Conciliacao $conciliacao): void
+    {
+        $conciliacao->update([
+            'status' => 'importado',
+            'confronto_status' => 'na_fila',
+            'confronto_erro' => null,
+            'confronto_iniciado_em' => null,
+        ]);
+
+        ConfrontarConciliacaoJob::dispatch($conciliacao->id)->onQueue('conciliacao');
     }
 }

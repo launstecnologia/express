@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Abrindo Webmail…</title>
+    <title>Acessar Webmail</title>
     <style>
         body {
             font-family: system-ui, -apple-system, sans-serif;
@@ -20,66 +20,90 @@
             padding: 2rem 2.5rem;
             box-shadow: 0 4px 24px rgba(0,0,0,.08);
             text-align: center;
-            max-width: 400px;
+            max-width: 420px;
             width: 100%;
         }
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid #e2e8f0;
-            border-top-color: #3b82f6;
-            border-radius: 50%;
-            animation: spin .7s linear infinite;
-            margin: 0 auto 1rem;
+        h1 { font-size: 1rem; color: #1e293b; margin: 0 0 .25rem; }
+        p { color: #64748b; font-size: .85rem; margin: 0 0 1.25rem; }
+        .campo { text-align: left; margin-bottom: .85rem; }
+        .campo label { display: block; font-size: .75rem; color: #64748b; margin-bottom: .25rem; }
+        .cred {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: .55rem .75rem;
+            font-family: monospace;
+            font-size: .85rem;
+            color: #334155;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        p { color: #64748b; font-size: .9rem; margin: 0 0 .5rem; }
-        strong { color: #1e293b; }
-        .manual { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid #e2e8f0; display: none; }
-        .manual p { font-size: .85rem; margin-bottom: .75rem; }
-        .cred { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: .5rem .75rem; font-family: monospace; font-size: .85rem; color: #334155; margin-bottom: .5rem; text-align: left; word-break: break-all; }
-        .btn { display: inline-block; background: #3b82f6; color: #fff; border: none; border-radius: 8px; padding: .6rem 1.25rem; font-size: .85rem; font-weight: 600; cursor: pointer; text-decoration: none; margin-top: .5rem; }
+        .cred span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+        .cred button {
+            border: none;
+            background: #e2e8f0;
+            color: #334155;
+            border-radius: 6px;
+            padding: .3rem .55rem;
+            font-size: .75rem;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .cred button:hover { background: #cbd5e1; }
+        .btn {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            background: #3b82f6;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: .7rem 1.25rem;
+            font-size: .9rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            margin-top: 1.25rem;
+        }
+        .btn:hover { background: #2563eb; }
+        .aviso { margin-top: .75rem; font-size: .75rem; color: #94a3b8; }
     </style>
 </head>
 <body>
     <div class="card">
-        <div class="spinner" id="spinner"></div>
-        <p>Entrando em <strong>{{ $email }}</strong>…</p>
+        <h1>Acessar e-mail da plataforma</h1>
+        <p>Copie as credenciais abaixo e entre no Webmail.</p>
 
-        {{-- Fallback manual caso o auto-login falhe --}}
-        <div class="manual" id="manual">
-            <p>O login automático não foi possível. Use as credenciais abaixo para entrar manualmente:</p>
-            <div class="cred">{{ $email }}</div>
-            <div class="cred" id="senhaBox" title="Clique para revelar" style="cursor:pointer;filter:blur(4px)" onclick="this.style.filter='none'">{{ $senha }}</div>
-            <a class="btn" href="{{ $webmailUrl }}/" target="_blank">Abrir Webmail</a>
+        <div class="campo">
+            <label>E-mail</label>
+            <div class="cred">
+                <span id="campoEmail">{{ $email }}</span>
+                <button type="button" onclick="copiar('campoEmail', this)">Copiar</button>
+            </div>
         </div>
+
+        <div class="campo">
+            <label>Senha</label>
+            <div class="cred">
+                <span id="campoSenha">{{ $senha }}</span>
+                <button type="button" onclick="copiar('campoSenha', this)">Copiar</button>
+            </div>
+        </div>
+
+        <a class="btn" href="{{ $webmailUrl }}/" target="_blank" rel="noopener">Abrir Webmail</a>
+        <p class="aviso">O login automático não está disponível — cole as credenciais na tela do Roundcube.</p>
     </div>
 
-    <form id="roundcube-login" method="POST" action="{{ $webmailUrl }}/" style="display:none">
-        <input type="hidden" name="_task"     value="login">
-        <input type="hidden" name="_action"   value="login">
-        <input type="hidden" name="_timezone" value="America/Sao_Paulo">
-        <input type="hidden" name="_url"      value="">
-        <input type="hidden" name="_user"     value="{{ $email }}">
-        <input type="hidden" name="_pass"     value="{{ $senha }}">
-        @if ($rcToken)
-        <input type="hidden" name="_token"    value="{{ $rcToken }}">
-        @endif
-    </form>
-
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            @if ($rcToken)
-                // Tem token CSRF — submete o formulário
-                document.getElementById('roundcube-login').submit();
-            @else
-                // Sem token — mostra opção manual após 1s
-                setTimeout(function () {
-                    document.getElementById('spinner').style.display = 'none';
-                    document.getElementById('manual').style.display = 'block';
-                }, 1000);
-            @endif
-        });
+        function copiar(id, botao) {
+            var texto = document.getElementById(id).textContent;
+            navigator.clipboard.writeText(texto).then(function () {
+                var original = botao.textContent;
+                botao.textContent = 'Copiado!';
+                setTimeout(function () { botao.textContent = original; }, 1500);
+            });
+        }
     </script>
 </body>
 </html>

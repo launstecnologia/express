@@ -39,7 +39,19 @@
                     <td class="px-5 py-4">R$ {{ number_format($conciliacao->total_tpv, 2, ',', '.') }}</td>
                     <td class="px-5 py-4 font-semibold text-blue-700">R$ {{ number_format($conciliacao->total_comissao, 2, ',', '.') }}</td>
                     <td class="px-5 py-4">
-                        @if ($conciliacao->status === 'confrontado')
+                        @if ($conciliacao->confronto_status === 'na_fila')
+                            <span class="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700">
+                                <i class="fa-solid fa-clock"></i> Na fila
+                            </span>
+                        @elseif ($conciliacao->confronto_status === 'processando')
+                            <span class="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700">
+                                <i class="fa-solid fa-spinner fa-spin"></i> Processando
+                            </span>
+                        @elseif ($conciliacao->confronto_status === 'erro')
+                            <span class="rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">
+                                Falhou
+                            </span>
+                        @elseif ($conciliacao->status === 'confrontado')
                             <span class="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">
                                 {{ $conciliacao->linhas_ok }} OK
                             </span>
@@ -54,7 +66,7 @@
                                 </span>
                             @endif
                         @else
-                            <span class="text-xs text-gray-400">Pendente</span>
+                            <span class="text-xs text-gray-400">Não solicitado</span>
                         @endif
                     </td>
                     <td class="px-5 py-4 text-right">

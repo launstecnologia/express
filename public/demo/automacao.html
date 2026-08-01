@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Automação Força de Vendas · Demonstração</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+    <style>
+        html, body { height: 100%; overflow: hidden; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 antialiased">
+
+<div class="flex h-screen overflow-hidden bg-gray-50">
+
+    <aside class="hidden w-56 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-200 bg-white lg:flex">
+        <div class="flex h-16 shrink-0 items-center px-4"></div>
+
+        <nav class="flex-1 overflow-y-auto pb-4">
+            <p class="mb-1 mt-2 px-4 text-xs font-semibold uppercase tracking-widest text-gray-400">Geral</p>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-gauge-high w-5 text-center text-[15px]"></i><span>Dashboard</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-chart-line w-5 text-center text-[15px]"></i><span>Faturamento</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-hand-holding-dollar w-5 text-center text-[15px]"></i><span>Comissão</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-ticket w-5 text-center text-[15px]"></i><span>Chamados</span>
+            </a>
+
+            <p class="mb-1 mt-6 px-4 text-xs font-semibold uppercase tracking-widest text-gray-400">Operações</p>
+            <a href="automacao.html" class="mx-2 flex items-center gap-3 rounded-lg bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-600">
+                <i class="fa-solid fa-store w-5 text-center text-[15px]"></i><span>Estabelecimentos</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-magnifying-glass w-5 text-center text-[15px]"></i><span>Pesquisar Doc.</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-credit-card w-5 text-center text-[15px]"></i><span>Planos e Taxas</span>
+            </a>
+
+            <p class="mb-1 mt-6 px-4 text-xs font-semibold uppercase tracking-widest text-gray-400">Administração</p>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-users w-5 text-center text-[15px]"></i><span>Usuários</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-tags w-5 text-center text-[15px]"></i><span>Segmentos</span>
+            </a>
+            <a href="kyc.html" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-shield-halved w-5 text-center text-[15px]"></i><span>KYC</span>
+            </a>
+            <a href="conciliacao.html" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-scale-balanced w-5 text-center text-[15px]"></i><span>Conciliação</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-gear w-5 text-center text-[15px]"></i><span>Configurações</span>
+            </a>
+        </nav>
+
+        <div class="mt-auto flex shrink-0 items-center gap-3 border-t border-gray-200 px-4 py-3">
+            <div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">LM</div>
+            <div class="min-w-0">
+                <p class="truncate text-sm font-semibold text-gray-800">Lucas Moraes</p>
+                <p class="text-xs text-gray-400">ADMIN</p>
+            </div>
+            <i class="fa-solid fa-right-from-bracket ml-auto text-gray-400"></i>
+        </div>
+    </aside>
+
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header class="flex h-14 flex-shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 sm:h-16 sm:px-6">
+            <div class="flex min-w-0 flex-1 items-center gap-3">
+                <h1 class="truncate text-lg font-bold text-gray-800 sm:text-xl lg:text-2xl">Pão Dourado</h1>
+            </div>
+            <div class="flex items-center gap-2 sm:gap-3">
+                <span class="hidden items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 md:inline-flex">
+                    <i class="fa-solid fa-desktop"></i> Demonstração
+                </span>
+                <button type="button" class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600">
+                    <i class="fa-solid fa-sun"></i>
+                </button>
+                <button type="button" class="relative flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600">
+                    <i class="fa-solid fa-bell"></i>
+                    <span class="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">3</span>
+                </button>
+                <div class="flex items-center gap-2 rounded-lg border border-gray-200 py-1.5 pl-1.5 pr-3">
+                    <div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">LM</div>
+                    <span class="hidden max-w-[120px] truncate text-sm font-semibold text-gray-700 sm:inline">Lucas Moraes</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 p-4 sm:p-6">
+
+            <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <a href="#" class="mb-2 inline-flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-gray-800">
+                        <i class="fa-solid fa-arrow-left"></i> Estabelecimentos
+                    </a>
+                    <h2 class="text-xl font-bold text-gray-800">Panificadora Pão Dourado LTDA</h2>
+                    <p class="text-sm text-gray-500">CNPJ 34.812.905/0001-47 · Padaria e confeitaria · Marketplace Zona Sul</p>
+                </div>
+                <span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-100 px-3 py-1.5 text-sm font-bold text-emerald-800">
+                    <i class="fa-solid fa-circle-check"></i> Automação concluída
+                </span>
+            </div>
+
+            <nav class="mb-6 flex flex-wrap gap-2">
+                <a href="#" class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:border-indigo-300 hover:text-indigo-700">
+                    <i class="fa-solid fa-circle-info mr-1.5 text-xs"></i> Dados
+                </a>
+                <a href="#" class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:border-indigo-300 hover:text-indigo-700">
+                    <i class="fa-solid fa-folder-open mr-1.5 text-xs"></i> Documentos
+                </a>
+                <a href="#" class="rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700">
+                    <i class="fa-solid fa-robot mr-1.5 text-xs"></i> Automação
+                    <i class="fa-solid fa-circle-check ml-1.5 text-xs text-emerald-600"></i>
+                </a>
+                <a href="kyc.html" class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:border-indigo-300 hover:text-indigo-700">
+                    <i class="fa-solid fa-shield-halved mr-1.5 text-xs"></i> KYC
+                    <i class="fa-solid fa-circle-check ml-1.5 text-xs text-emerald-600"></i>
+                </a>
+            </nav>
+
+            <section class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div class="border-b border-gray-100 bg-gray-50/80 px-6 py-4">
+                    <h3 class="text-base font-bold text-gray-800">Automação Força de Vendas</h3>
+                    <p class="mt-0.5 text-xs text-gray-500">Cadastro automatizado via Selenium no portal PagBank Força de Vendas.</p>
+                </div>
+
+                <div class="space-y-6 p-6">
+
+                    <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3">
+                        <div class="text-sm text-indigo-900">
+                            <i class="fa-solid fa-camera mr-1"></i>
+                            Screenshots disponíveis para debug deste cadastro.
+                        </div>
+                        <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 shadow-sm hover:bg-indigo-100">
+                            <i class="fa-solid fa-images"></i> Ver todos os screenshots
+                        </button>
+                    </div>
+
+                    <!-- Fases -->
+                    <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                            <div class="flex items-start justify-between gap-2">
+                                <p class="text-xs font-bold uppercase tracking-wide text-emerald-700">1 · Cadastro FV</p>
+                                <i class="fa-solid fa-circle-check text-emerald-600"></i>
+                            </div>
+                            <p class="mt-2 text-sm font-bold text-emerald-900">Concluído</p>
+                            <p class="mt-1 text-xs text-emerald-700">12 de 12 etapas · 4m 12s</p>
+                        </div>
+                        <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                            <div class="flex items-start justify-between gap-2">
+                                <p class="text-xs font-bold uppercase tracking-wide text-emerald-700">2 · E-mail e senha</p>
+                                <i class="fa-solid fa-circle-check text-emerald-600"></i>
+                            </div>
+                            <p class="mt-2 text-sm font-bold text-emerald-900">Concluído</p>
+                            <p class="mt-1 text-xs text-emerald-700">7 de 7 passos · 2m 48s</p>
+                        </div>
+                        <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                            <div class="flex items-start justify-between gap-2">
+                                <p class="text-xs font-bold uppercase tracking-wide text-emerald-700">3 · Safepay ID</p>
+                                <i class="fa-solid fa-circle-check text-emerald-600"></i>
+                            </div>
+                            <p class="mt-2 text-sm font-bold text-emerald-900">Encontrado</p>
+                            <p class="mt-1 font-mono text-xs text-emerald-700">88F3A2C9</p>
+                        </div>
+                        <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                            <div class="flex items-start justify-between gap-2">
+                                <p class="text-xs font-bold uppercase tracking-wide text-emerald-700">4 · Proposta comercial</p>
+                                <i class="fa-solid fa-circle-check text-emerald-600"></i>
+                            </div>
+                            <p class="mt-2 text-sm font-bold text-emerald-900">Concluído</p>
+                            <p class="mt-1 text-xs text-emerald-700">5 de 5 passos · 1m 08s</p>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col gap-4">
+                        <div class="flex flex-wrap items-center gap-3">
+                            <span class="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-bold text-emerald-700">
+                                <i class="fa-solid fa-circle-check"></i> Cadastro PagBank: Concluído
+                            </span>
+                            <span class="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-bold text-emerald-700">
+                                <i class="fa-solid fa-circle-check"></i> E-mail / Senha: Concluído
+                            </span>
+                            <span class="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm font-bold text-emerald-700">
+                                <i class="fa-solid fa-circle-check"></i> Proposta comercial: Concluído
+                            </span>
+                        </div>
+
+                        <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                            <p class="text-xs font-semibold uppercase tracking-wide text-emerald-600">Processo finalizado</p>
+                            <p class="mt-1 text-sm font-medium text-emerald-900">Todas as etapas concluídas com sucesso no PagBank.</p>
+                            <p class="mt-1 text-xs text-emerald-700">
+                                <i class="fa-solid fa-circle-check mr-1"></i>
+                                Cadastro, senha, Safepay ID e proposta comercial finalizados
+                            </p>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-3">
+                            <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+                                <i class="fa-solid fa-rotate-right"></i> Reexecutar
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Timeline detalhada -->
+                    <div>
+                        <p class="mb-3 text-xs font-bold uppercase tracking-wide text-gray-400">Progresso detalhado</p>
+                        <div class="rounded-xl border border-gray-200">
+
+                            <div class="border-b border-gray-100 bg-gray-50/60 px-4 py-2.5">
+                                <p class="text-xs font-bold uppercase tracking-wide text-emerald-700">
+                                    <i class="fa-solid fa-circle-check mr-1"></i> Fase 1 — Cadastro no portal Força de Vendas
+                                </p>
+                            </div>
+                            <ol class="divide-y divide-gray-50">
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Iniciando navegador...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:12:04</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Acessando portal Força de Vendas...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:12:19</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Abrindo cadastro de cliente...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:12:41</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Preenchendo dados iniciais...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:12:58</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Preenchendo dados da empresa (PJ)...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:13:22</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Preenchendo dados do proprietário...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:13:47</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Preenchendo endereço...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:14:09</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Preenchendo segmento...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:14:31</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Preenchendo condições comerciais...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:15:02</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Selecionando plano (promoção mobile)...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:15:38</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm font-semibold text-gray-800">Cadastro PagBank concluído</span>
+                                    <span class="font-mono text-xs text-gray-400">09:16:16</span>
+                                </li>
+                            </ol>
+
+                            <div class="border-y border-gray-100 bg-gray-50/60 px-4 py-2.5">
+                                <p class="text-xs font-bold uppercase tracking-wide text-emerald-700">
+                                    <i class="fa-solid fa-circle-check mr-1"></i> Fase 2 — Validação de e-mail e criação de senha
+                                </p>
+                            </div>
+                            <ol class="divide-y divide-gray-50">
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Acessando webmail...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:16:24</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Fazendo login no webmail...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:16:39</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Aguardando e-mail do PagBank <span class="text-gray-400">(“Crie sua senha no PagSeguro”)</span>...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:17:52</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Finalizando cadastro no PagBank...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:18:10</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Criando senha de acesso...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:18:31</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Confirmando senha...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:18:52</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm font-semibold text-gray-800">E-mail e senha concluídos</span>
+                                    <span class="font-mono text-xs text-gray-400">09:19:04</span>
+                                </li>
+                            </ol>
+
+                            <div class="border-y border-gray-100 bg-gray-50/60 px-4 py-2.5">
+                                <p class="text-xs font-bold uppercase tracking-wide text-emerald-700">
+                                    <i class="fa-solid fa-circle-check mr-1"></i> Fase 3 — Safepay ID
+                                </p>
+                            </div>
+                            <ol class="divide-y divide-gray-50">
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Buscando Safepay ID no portal FV...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:19:20</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm font-semibold text-gray-800">Safepay ID <span class="font-mono">88F3A2C9</span> vinculado ao estabelecimento</span>
+                                    <span class="font-mono text-xs text-gray-400">09:19:47</span>
+                                </li>
+                            </ol>
+
+                            <div class="border-y border-gray-100 bg-gray-50/60 px-4 py-2.5">
+                                <p class="text-xs font-bold uppercase tracking-wide text-emerald-700">
+                                    <i class="fa-solid fa-circle-check mr-1"></i> Fase 4 — Aceite da proposta comercial
+                                </p>
+                            </div>
+                            <ol class="divide-y divide-gray-50">
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Acessando portal PagBank...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:20:02</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Informando CPF/CNPJ...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:20:18</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Autenticando conta...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:20:33</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm text-gray-700">Aceitando proposta comercial...</span>
+                                    <span class="font-mono text-xs text-gray-400">09:20:51</span>
+                                </li>
+                                <li class="flex items-center gap-3 px-4 py-2.5">
+                                    <i class="fa-solid fa-circle-check w-4 text-center text-sm text-emerald-500"></i>
+                                    <span class="flex-1 text-sm font-semibold text-gray-800">Proposta aceita com sucesso</span>
+                                    <span class="font-mono text-xs text-gray-400">09:21:10</span>
+                                </li>
+                            </ol>
+                        </div>
+                    </div>
+
+                    <!-- Detalhes da execução -->
+                    <dl class="grid gap-4 sm:grid-cols-2">
+                        <div class="rounded-lg border border-gray-100 bg-gray-50 p-4">
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-gray-400">Iniciado em</dt>
+                            <dd class="mt-1 text-sm font-medium text-gray-800">30/07/2026 09:12:04</dd>
+                        </div>
+                        <div class="rounded-lg border border-gray-100 bg-gray-50 p-4">
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-gray-400">Concluído em</dt>
+                            <dd class="mt-1 text-sm font-medium text-gray-800">30/07/2026 09:21:10</dd>
+                        </div>
+                        <div class="rounded-lg border border-emerald-100 bg-emerald-50/50 p-4">
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-emerald-600">E-mail PagBank</dt>
+                            <dd class="mt-1 break-all text-sm font-medium text-gray-900">paodourado.34812905@express.app.br</dd>
+                        </div>
+                        <div class="rounded-lg border border-emerald-100 bg-emerald-50/50 p-4">
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-emerald-600">Senha PagBank (6 dígitos)</dt>
+                            <dd class="mt-1 flex flex-wrap items-center gap-2">
+                                <span class="font-mono text-sm tracking-widest text-gray-400">••••••</span>
+                                <button type="button" class="text-xs font-semibold text-emerald-700 hover:text-emerald-900">mostrar</button>
+                            </dd>
+                        </div>
+                        <div class="rounded-lg border border-emerald-100 bg-emerald-50/50 p-4">
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-emerald-600">ID PagSeguro (Safepay ID)</dt>
+                            <dd class="mt-1 flex flex-wrap items-center gap-3">
+                                <span class="font-mono text-sm font-bold text-gray-900">88F3A2C9</span>
+                            </dd>
+                        </div>
+                        <div class="rounded-lg border border-emerald-100 bg-emerald-50/50 p-4">
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-emerald-600">Proposta comercial</dt>
+                            <dd class="mt-1 text-sm font-medium text-gray-800">Aceita em 30/07/2026 09:21</dd>
+                        </div>
+                        <div class="rounded-lg border border-gray-100 bg-gray-50 p-4 sm:col-span-2">
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-gray-400">ID do Job (API Python)</dt>
+                            <dd class="mt-1 break-all font-mono text-xs text-gray-700">9f3c81ba-7d2e-4a55-b0c1-6e84f2d90a37</dd>
+                        </div>
+                    </dl>
+
+                    <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                        <p class="text-sm font-bold text-emerald-800">
+                            <i class="fa-solid fa-circle-check mr-1"></i> Automação concluída com sucesso no portal PagBank Força de Vendas.
+                        </p>
+                        <p class="mt-1 text-xs text-emerald-700">Cadastro, e-mail/senha, Safepay ID e proposta comercial finalizados em 30/07/2026 às 09:21.</p>
+                    </div>
+
+                    <!-- Screenshots -->
+                    <div>
+                        <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                            <p class="text-xs font-bold uppercase tracking-wide text-gray-400">Screenshots da execução</p>
+                            <div class="flex items-center gap-2">
+                                <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100">
+                                    <i class="fa-solid fa-up-right-and-down-left-from-center"></i> Abrir galeria
+                                </button>
+                                <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 hover:border-indigo-300 hover:text-indigo-700">
+                                    <i class="fa-solid fa-arrows-rotate"></i> Atualizar
+                                </button>
+                            </div>
+                        </div>
+                        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                            <figure class="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                                <div class="flex h-32 items-center justify-center bg-gray-100 text-gray-300">
+                                    <i class="fa-solid fa-image text-3xl"></i>
+                                </div>
+                                <figcaption class="border-t border-gray-100 px-3 py-2 text-xs text-gray-500">04_dados_empresa.png</figcaption>
+                            </figure>
+                            <figure class="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                                <div class="flex h-32 items-center justify-center bg-gray-100 text-gray-300">
+                                    <i class="fa-solid fa-image text-3xl"></i>
+                                </div>
+                                <figcaption class="border-t border-gray-100 px-3 py-2 text-xs text-gray-500">08_condicoes_comerciais.png</figcaption>
+                            </figure>
+                            <figure class="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                                <div class="flex h-32 items-center justify-center bg-gray-100 text-gray-300">
+                                    <i class="fa-solid fa-image text-3xl"></i>
+                                </div>
+                                <figcaption class="border-t border-gray-100 px-3 py-2 text-xs text-gray-500">11_cadastro_concluido.png</figcaption>
+                            </figure>
+                        </div>
+                    </div>
+
+                    <!-- Log -->
+                    <div>
+                        <p class="mb-2 text-xs font-bold uppercase tracking-wide text-gray-400">Log da automação</p>
+                        <div class="overflow-x-auto rounded-xl border border-gray-200">
+                            <table class="w-full text-xs">
+                                <thead class="bg-gray-50 text-left font-semibold uppercase tracking-wide text-gray-500">
+                                    <tr>
+                                        <th class="whitespace-nowrap px-3 py-2">Horário</th>
+                                        <th class="whitespace-nowrap px-3 py-2">Etapa</th>
+                                        <th class="px-3 py-2">Mensagem</th>
+                                        <th class="whitespace-nowrap px-3 py-2">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    <tr>
+                                        <td class="whitespace-nowrap px-3 py-2 font-mono text-gray-500">09:21:10</td>
+                                        <td class="whitespace-nowrap px-3 py-2 text-gray-600">Proposta comercial</td>
+                                        <td class="px-3 py-2 text-gray-700">Proposta aceita com sucesso</td>
+                                        <td class="whitespace-nowrap px-3 py-2"><span class="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">OK</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="whitespace-nowrap px-3 py-2 font-mono text-gray-500">09:20:51</td>
+                                        <td class="whitespace-nowrap px-3 py-2 text-gray-600">Proposta comercial</td>
+                                        <td class="px-3 py-2 text-gray-700">Aceitando proposta comercial...</td>
+                                        <td class="whitespace-nowrap px-3 py-2"><span class="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">OK</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="whitespace-nowrap px-3 py-2 font-mono text-gray-500">09:20:33</td>
+                                        <td class="whitespace-nowrap px-3 py-2 text-gray-600">Proposta comercial</td>
+                                        <td class="px-3 py-2 text-gray-700">Autenticando conta...</td>
+                                        <td class="whitespace-nowrap px-3 py-2"><span class="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">OK</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="whitespace-nowrap px-3 py-2 font-mono text-gray-500">09:19:47</td>
+                                        <td class="whitespace-nowrap px-3 py-2 text-gray-600">Safepay ID</td>
+                                        <td class="px-3 py-2 text-gray-700">Safepay ID 88F3A2C9 localizado para paodourado.34812905@express.app.br</td>
+                                        <td class="whitespace-nowrap px-3 py-2"><span class="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">OK</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="whitespace-nowrap px-3 py-2 font-mono text-gray-500">09:19:04</td>
+                                        <td class="whitespace-nowrap px-3 py-2 text-gray-600">Validação de e-mail</td>
+                                        <td class="px-3 py-2 text-gray-700">E-mail e senha concluídos</td>
+                                        <td class="whitespace-nowrap px-3 py-2"><span class="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">OK</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="whitespace-nowrap px-3 py-2 font-mono text-gray-500">09:17:52</td>
+                                        <td class="whitespace-nowrap px-3 py-2 text-gray-600">Validação de e-mail</td>
+                                        <td class="px-3 py-2 text-gray-700">E-mail “Crie sua senha no PagSeguro” recebido após 73s de espera</td>
+                                        <td class="whitespace-nowrap px-3 py-2"><span class="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">OK</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="whitespace-nowrap px-3 py-2 font-mono text-gray-500">09:16:16</td>
+                                        <td class="whitespace-nowrap px-3 py-2 text-gray-600">Cadastro FV</td>
+                                        <td class="px-3 py-2 text-gray-700">Cadastro PagBank concluído</td>
+                                        <td class="whitespace-nowrap px-3 py-2"><span class="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">OK</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="whitespace-nowrap px-3 py-2 font-mono text-gray-500">09:15:38</td>
+                                        <td class="whitespace-nowrap px-3 py-2 text-gray-600">Plano / promoção mobile</td>
+                                        <td class="px-3 py-2 text-gray-700">Plano “Link Mobile · Promo 2.99” selecionado</td>
+                                        <td class="whitespace-nowrap px-3 py-2"><span class="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">OK</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="whitespace-nowrap px-3 py-2 font-mono text-gray-500">09:14:52</td>
+                                        <td class="whitespace-nowrap px-3 py-2 text-gray-600">Segmento</td>
+                                        <td class="px-3 py-2 text-gray-700">Campo de segmento não respondeu no primeiro clique — nova tentativa aplicada</td>
+                                        <td class="whitespace-nowrap px-3 py-2"><span class="rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-700">Retentativa</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td class="whitespace-nowrap px-3 py-2 font-mono text-gray-500">09:12:04</td>
+                                        <td class="whitespace-nowrap px-3 py-2 text-gray-600">Navegador</td>
+                                        <td class="px-3 py-2 text-gray-700">Iniciando navegador (modo headless)</td>
+                                        <td class="whitespace-nowrap px-3 py-2"><span class="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-700">OK</span></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <div class="h-6"></div>
+        </main>
+    </div>
+</div>
+
+</body>
+</html>

@@ -10,20 +10,52 @@ class ConciliacaoDimensao
         ?string $parcelamento,
         ?string $bandeira,
         ?string $escrow,
-        ?string $mcc,
         ?string $solucao,
     ): string {
         $partes = [
             self::normalizarTexto($idCliente),
-            self::normalizarTexto($meio),
+            self::meioNormalizado($meio),
             self::normalizarParcelamento($parcelamento),
-            self::normalizarBandeira($bandeira),
-            self::normalizarTexto($escrow),
-            self::normalizarTexto($mcc),
-            self::normalizarTexto($solucao),
+            self::bandeiraNormalizada($bandeira),
+            self::escrowNormalizado($escrow),
+            self::solucaoNormalizada($solucao),
         ];
 
         return hash('sha256', implode('|', $partes));
+    }
+
+    public static function chaveConfrontoDaLinha(
+        string $idCliente,
+        ?string $meio,
+        ?string $parcelamento,
+        ?string $bandeira,
+        ?string $escrow,
+        ?string $solucao,
+    ): string {
+        return self::chaveConfronto($idCliente, $meio, $parcelamento, $bandeira, $escrow, $solucao);
+    }
+
+    public static function meioNormalizado(?string $meio): string
+    {
+        $valor = strtolower(trim((string) $meio));
+
+        return match (true) {
+            $valor === 'pix' => 'pix',
+            str_contains($valor, 'debit') => 'debito',
+            str_contains($valor, 'cred') => 'credito',
+            in_array($valor, ['debito', 'credito'], true) => $valor,
+            default => $valor,
+        };
+    }
+
+    public static function meioDoEdi(
+        ?string $tipoTransacao,
+        ?string $meioPagamento,
+        ?string $arranjoUr,
+    ): string {
+        return self::meioNormalizado(
+            EdiTransacaoCategoria::normalizarParaArmazenamento($tipoTransacao, $meioPagamento, $arranjoUr),
+        );
     }
 
     public static function parcelamentoDoEdi(?string $quantidadeParcela): string
@@ -50,16 +82,7 @@ class ConciliacaoDimensao
         $inst = strtolower(trim((string) $instituicao));
 
         if ($inst !== '') {
-            return match (true) {
-                str_contains($inst, 'visa') => 'visa',
-                str_contains($inst, 'master') => 'master',
-                str_contains($inst, 'elo') => 'elo',
-                str_contains($inst, 'amex'), str_contains($inst, 'american') => 'american express',
-                str_contains($inst, 'banri') => 'banricompras',
-                str_contains($inst, 'cabal') => 'cabal',
-                str_contains($inst, 'hiper') => 'hipercard',
-                default => $inst,
-            };
+            return self::bandeiraNormalizada($inst);
         }
 
         $arranjo = strtoupper(trim((string) $arranjoUr));
@@ -69,31 +92,74 @@ class ConciliacaoDimensao
             str_contains($arranjo, 'MASTERCARD'), str_contains($arranjo, 'MASTER') => 'master',
             str_contains($arranjo, 'ELO') => 'elo',
             str_contains($arranjo, 'AMEX') => 'american express',
+            str_contains($arranjo, 'PIX') => 'falha',
             default => 'demais bandeiras',
+        };
+    }
+
+    public static function bandeiraNormalizada(?string $bandeira): string
+    {
+        $valor = strtolower(trim((string) $bandeira));
+
+        if ($valor === '') {
+            return 'demais bandeiras';
+        }
+
+        return match (true) {
+            $valor === 'pix', $valor === 'falha' => 'falha',
+            str_contains($valor, 'visa') => 'visa',
+            str_contains($valor, 'master') => 'master',
+            str_contains($valor, 'elo') => 'elo',
+            str_contains($valor, 'amex'), str_contains($valor, 'american') => 'american express',
+            str_contains($valor, 'banri') => 'banricompras',
+            str_contains($valor, 'cabal') => 'cabal',
+            str_contains($valor, 'hiper') => 'hipercard',
+            default => $valor,
         };
     }
 
     public static function solucaoDoEdi(?string $meioCaptura, ?string $canalEntrada, ?string $leitor): string
     {
-        $valor = strtolower(trim((string) ($meioCaptura ?: $canalEntrada ?: $leitor)));
+        $partes = array_filter([
+            trim((string) $meioCaptura),
+            trim((string) $canalEntrada),
+            trim((string) $leitor),
+        ], fn (string $valor) => $valor !== '');
+
+        return self::solucaoNormalizada(implode(' ', $partes));
+    }
+
+    public static function solucaoNormalizada(?string $solucao): string
+    {
+        $valor = strtolower(trim((string) $solucao));
 
         return match (true) {
+            $valor === '' => 'mobile',
             str_contains($valor, 'tap') => 'tap on',
             str_contains($valor, 'web'), $valor === 'we' => 'web',
-            default => 'mobile',
+            str_contains($valor, 'link'),
+            str_contains($valor, 'mobile'),
+            str_contains($valor, 'maquininha'),
+            str_contains($valor, 'machine'),
+            in_array($valor, ['01', '1', 'me'], true) => 'mobile',
+            default => $valor,
         };
     }
 
     public static function escrowDoEdi(?string $pagamentoPrazo): string
     {
-        $valor = trim((string) $pagamentoPrazo);
-
-        return $valor !== '' ? $valor : '0';
+        return self::escrowNormalizado($pagamentoPrazo);
     }
 
-    public static function mccDoEstabelecimento(?string $segmento): string
+    public static function escrowNormalizado(?string $escrow): string
     {
-        return trim((string) $segmento);
+        $valor = trim((string) $escrow);
+
+        if ($valor === '') {
+            return '0';
+        }
+
+        return ltrim($valor, '0') === '' ? '0' : ltrim($valor, '0');
     }
 
     private static function normalizarParcelamento(?string $valor): string
@@ -107,11 +173,6 @@ class ConciliacaoDimensao
             '13 a 18', '13-18' => '13 a 18',
             default => $valor,
         };
-    }
-
-    private static function normalizarBandeira(?string $valor): string
-    {
-        return strtolower(trim((string) $valor));
     }
 
     private static function normalizarTexto(?string $valor): string

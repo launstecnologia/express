@@ -49,8 +49,22 @@ class DashboardApuracaoService
         return Cache::remember(
             $this->cacheKey($dias, $usuario),
             self::CACHE_TTL_SECONDS,
-            fn () => $this->calcularApuracao($dias, $usuario),
+            fn () => $this->calcular($dias, $usuario),
         );
+    }
+
+    /**
+     * @return array{
+     *     dias: int,
+     *     planos: list<array<string, mixed>>,
+     *     resumo: array<string, float>,
+     *     transacoes_status: array<string, mixed>,
+     *     faturamento_bandeiras: list<array<string, mixed>>
+     * }
+     */
+    public function calcular(int $dias, ?Authenticatable $usuario): array
+    {
+        return $this->calcularApuracao($this->periodoValido($dias), $usuario);
     }
 
     /**

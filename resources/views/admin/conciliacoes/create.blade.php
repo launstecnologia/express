@@ -26,11 +26,11 @@
 
             <label class="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" name="confrontar" value="1" checked class="rounded">
-                Confrontar automaticamente com EDI após importar
+                Adicionar o confronto com EDI à fila após importar
             </label>
 
             <p class="text-xs text-gray-500">
-                Arquivos grandes (milhares de linhas) podem levar alguns minutos. Não feche a aba enquanto processa.
+                O upload termina rapidamente. O confronto continuará em segundo plano e você poderá sair da página.
             </p>
 
             <button id="btn-importar" type="submit" class="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70">
@@ -39,7 +39,7 @@
 
             <div id="importando" class="hidden rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
                 <i class="fa-solid fa-spinner fa-spin"></i>
-                Importando e confrontando… isso pode demorar. Aguarde.
+                Enviando e preparando a conciliação…
             </div>
         </form>
     </div>

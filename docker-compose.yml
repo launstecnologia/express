@@ -75,6 +75,28 @@ services:
     networks:
       - app-network
 
+  # ── Queue Worker — conciliação pesada e isolada ─────────────────
+  queue-conciliacao:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: express-queue-conciliacao
+    restart: unless-stopped
+    command: php artisan queue:work --queue=conciliacao --tries=1 --sleep=3 --timeout=900
+    volumes:
+      - .:/var/www/html
+      - vendor:/var/www/html/vendor
+      - storage:/var/www/html/storage
+      - ./docker/php/opcache.ini:/usr/local/etc/php/conf.d/opcache.ini:ro
+    env_file: .env
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - app-network
+
   # ── Scheduler — php artisan schedule:run ────────────────────────
   scheduler:
     build:

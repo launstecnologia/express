@@ -175,7 +175,7 @@ cmd_update() {
     $COMPOSE up -d --remove-orphans
 
     log "Reiniciando PHP (OPcache não recarrega arquivos sem restart)..."
-    $COMPOSE restart app queue scheduler 2>/dev/null || $COMPOSE restart app 2>/dev/null || true
+    $COMPOSE restart app queue queue-conciliacao scheduler 2>/dev/null || $COMPOSE restart app 2>/dev/null || true
 
     log "Aguardando app subir..."
     wait_for_app || err "Container app não está rodando — veja: bash deploy.sh logs app"
@@ -212,7 +212,7 @@ cmd_logs() {
     if [ -n "$SERVICE" ]; then
         $COMPOSE logs -f "$SERVICE"
     else
-        $COMPOSE logs -f app queue automacao
+        $COMPOSE logs -f app queue queue-conciliacao automacao
     fi
 }
 

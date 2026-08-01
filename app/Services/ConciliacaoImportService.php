@@ -196,13 +196,12 @@ class ConciliacaoImportService
             'rebate_real' => $this->decimalOpcional($row[13] ?? null),
             'rebate_contrato' => $this->decimalOpcional($row[14] ?? null),
             'check1_sem_antec' => $this->boolOpcional($row[15] ?? null),
-            'chave_confronto' => ConciliacaoDimensao::chaveConfronto(
+            'chave_confronto' => ConciliacaoDimensao::chaveConfrontoDaLinha(
                 $idCliente,
                 $meio,
                 $parcelamento,
                 $bandeira,
                 $escrow,
-                $mcc,
                 $solucao,
             ),
         ];

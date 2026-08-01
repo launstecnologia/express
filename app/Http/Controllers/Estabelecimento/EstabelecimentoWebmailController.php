@@ -66,8 +66,16 @@ class EstabelecimentoWebmailController extends Controller
     }
 
     /**
-     * Abre uma página intermediária que faz login automático (SSO) no Roundcube.
-     * O servidor busca o token CSRF do Roundcube antes de passar ao browser.
+     * Mostra as credenciais da caixa de e-mail da plataforma e um atalho para
+     * abrir o Roundcube (na VPS do e-mail, domínio separado).
+     *
+     * Não é possível fazer login automático de verdade aqui: o Roundcube fica
+     * num domínio diferente (mail.express.app.br) e o token CSRF da tela de
+     * login dele é amarrado à sessão de quem o busca. Se o nosso servidor
+     * busca o token, ele fica preso à sessão do servidor — o POST feito pelo
+     * navegador do usuário (sessão diferente) é sempre rejeitado com 401.
+     * Corrigir isso de verdade exigiria um proxy reverso do Roundcube pelo
+     * nosso próprio domínio ou o SSO nativo do DirectAdmin.
      */
     public function sso(Estabelecimento $estabelecimento)
     {
@@ -75,30 +83,11 @@ class EstabelecimentoWebmailController extends Controller
         abort_unless(filled($estabelecimento->webmail_senha), 404, 'Senha do e-mail não disponível.');
 
         $webmailUrl = rtrim((string) (PlatformSettings::automacaoWebmailUrl() ?? config('directadmin.webmail_url')), '/');
-        $loginUrl   = $webmailUrl . '/';
-
-        // Busca a página de login do Roundcube para extrair o token CSRF
-        $rcToken = null;
-        try {
-            $response = \Illuminate\Support\Facades\Http::withoutVerifying()
-                ->timeout(8)
-                ->get($loginUrl);
-
-            if ($response->ok()) {
-                // Roundcube embeds: <input type="hidden" name="_token" value="...">
-                if (preg_match('/name="_token"\s+value="([^"]+)"/', $response->body(), $m)) {
-                    $rcToken = $m[1];
-                }
-            }
-        } catch (\Throwable) {
-            // Se não conseguir buscar o token, tenta sem ele (versões antigas do RC)
-        }
 
         return view('estabelecimento.webmail-sso', [
             'webmailUrl' => $webmailUrl,
             'email'      => $estabelecimento->webmail_email,
             'senha'      => $estabelecimento->webmail_senha,
-            'rcToken'    => $rcToken,
         ]);
     }
 

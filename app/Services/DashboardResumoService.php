@@ -2,31 +2,42 @@
 
 namespace App\Services;
 
-use App\Models\AggregatedRevenue;
 use App\Models\Estabelecimento;
 use App\Models\SubUsuario;
 use App\Models\Usuario;
 use App\Support\ComissaoAdminSql;
 use Illuminate\Contracts\Auth\Authenticatable;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Calcula e cacheia os cards de resumo do dashboard (estabelecimentos, faturamento
- * do mês e comissões do mês).
- *
- * Extraído do DashboardController para que o cache possa ser aquecido em background
- * pelo comando `dashboard:warm-cache`, evitando que o usuário pague o custo da
- * consulta na hora em que abre o dashboard (cache miss = 30s+ de espera).
+ * Calcula os cards de resumo do dashboard (estabelecimentos, faturamento do mês
+ * e comissões do mês). O cache é gerenciado por DashboardService.
  */
 class DashboardResumoService
 {
-    private const CACHE_TTL_SECONDS = 300;
-
     /**
      * @return array{totalEstabelecimentos: int, faturamentoMes: float, royaltiesMes: float}
      */
     public function resumo(?Authenticatable $usuario): array
+    {
+        return array_merge(
+            $this->calcularRapido($usuario),
+            ['royaltiesMes' => $this->calcularComissaoMes($usuario)],
+        );
+    }
+
+    /**
+     * @return array{totalEstabelecimentos: int, faturamentoMes: float}
+     */
+    public function calcularRapido(?Authenticatable $usuario): array
+    {
+        return [
+            'totalEstabelecimentos' => Estabelecimento::count(),
+            'faturamentoMes' => $this->faturamentoMes(),
+        ];
+    }
+
+    public function calcularComissaoMes(?Authenticatable $usuario): float
     {
         $usuarioResolvido = $usuario;
 
@@ -34,18 +45,22 @@ class DashboardResumoService
             $usuarioResolvido = $usuarioResolvido->dono;
         }
 
-        return Cache::remember(
-            $this->cacheKey($usuarioResolvido),
-            self::CACHE_TTL_SECONDS,
-            fn () => [
-                'totalEstabelecimentos' => Estabelecimento::count(),
-                'faturamentoMes' => (float) AggregatedRevenue::query()
-                    ->where('ano', now()->year)
-                    ->where('mes', now()->month)
-                    ->sum('total_valor'),
-                'royaltiesMes' => $this->royaltiesMes($usuarioResolvido),
-            ],
-        );
+        return $this->royaltiesMes($usuarioResolvido);
+    }
+
+    /**
+     * Faturamento do mês calendário, somado direto do EDI (mesma fonte da apuração).
+     * aggregated_revenue pode ficar defasada até o job diário rodar.
+     */
+    private function faturamentoMes(): float
+    {
+        $inicio = now()->startOfMonth()->toDateString();
+        $fim = now()->endOfMonth()->toDateString();
+
+        return (float) DB::table('edi_movimentos as em')
+            ->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
+            ->whereIn('em.estabelecimento_id', Estabelecimento::query()->select('id'))
+            ->sum('em.valor_total_transacao');
     }
 
     private function royaltiesMes(mixed $usuario): float
@@ -66,18 +81,5 @@ class DashboardResumoService
                 ->whereIn('em.estabelecimento_id', Estabelecimento::query()->select('id'))
                 ->whereNotNull('e.plano_id');
         })->sum(DB::raw(ComissaoAdminSql::valor()));
-    }
-
-    public function cacheKey(mixed $usuario): string
-    {
-        if ($usuario instanceof SubUsuario) {
-            $usuario = $usuario->dono;
-        }
-
-        $tipo = $usuario instanceof Usuario ? $usuario->tipo : 'guest';
-        $id = $usuario?->id ?? 0;
-        $mes = now()->format('Y-m');
-
-        return "dashboard.resumo.v2.{$tipo}.{$id}.{$mes}";
     }
 }

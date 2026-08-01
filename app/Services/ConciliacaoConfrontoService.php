@@ -15,7 +15,13 @@ class ConciliacaoConfrontoService
 
     public function confrontar(Conciliacao $conciliacao): Conciliacao
     {
-        @set_time_limit(300);
+        @set_time_limit(900);
+
+        $conciliacao->update([
+            'confronto_status' => 'processando',
+            'confronto_erro' => null,
+            'confronto_iniciado_em' => now(),
+        ]);
 
         $inicio = $conciliacao->referencia_mes->copy()->startOfMonth()->toDateString();
         $fim = $conciliacao->referencia_mes->copy()->endOfMonth()->toDateString();
@@ -27,16 +33,28 @@ class ConciliacaoConfrontoService
         $semEstabelecimento = 0;
         $semEdi = 0;
 
-        $conciliacao->linhas()->orderBy('id')->chunkById(500, function ($linhas) use (
-            $agregados,
-            &$ok,
-            &$divergentes,
-            &$semEstabelecimento,
-            &$semEdi,
-        ) {
+        $linhas = $conciliacao->linhas()->orderBy('id')->get();
+        $totaisPorChave = [];
+
+        foreach ($linhas as $linha) {
+            if ($linha->sem_estabelecimento) {
+                continue;
+            }
+
+            $chave = $this->chaveDaLinha($linha);
+
+            if (! isset($totaisPorChave[$chave])) {
+                $totaisPorChave[$chave] = ['tpv' => 0.0, 'comissao' => 0.0];
+            }
+
+            $totaisPorChave[$chave]['tpv'] += (float) $linha->tpv;
+            $totaisPorChave[$chave]['comissao'] += (float) $linha->ms_comissao;
+        }
+
+        foreach ($linhas->chunk(500) as $loteLinhas) {
             $lote = [];
 
-            foreach ($linhas as $linha) {
+            foreach ($loteLinhas as $linha) {
                 if ($linha->sem_estabelecimento) {
                     $semEstabelecimento++;
                     $lote[] = [
@@ -52,7 +70,9 @@ class ConciliacaoConfrontoService
                     continue;
                 }
 
-                $edi = $agregados->get($linha->chave_confronto);
+                $chave = $this->chaveDaLinha($linha);
+                $edi = $agregados->get($chave);
+                $grupo = $totaisPorChave[$chave];
 
                 if ($edi === null) {
                     $semEdi++;
@@ -69,9 +89,11 @@ class ConciliacaoConfrontoService
                     continue;
                 }
 
-                $diffTpv = round((float) $linha->tpv - (float) $edi['tpv'], 2);
-                $diffComissao = round((float) $linha->ms_comissao - (float) $edi['comissao'], 4);
-                $bate = abs($diffTpv) <= self::TOLERANCIA && abs($diffComissao) <= self::TOLERANCIA;
+                $grupoTpv = round((float) $grupo['tpv'], 2);
+                $grupoComissao = round((float) $grupo['comissao'], 4);
+                $diffTpvGrupo = round($grupoTpv - (float) $edi['tpv'], 2);
+                $diffComissaoGrupo = round($grupoComissao - (float) $edi['comissao'], 4);
+                $bate = abs($diffTpvGrupo) <= self::TOLERANCIA && abs($diffComissaoGrupo) <= self::TOLERANCIA;
 
                 if ($bate) {
                     $ok++;
@@ -79,22 +101,29 @@ class ConciliacaoConfrontoService
                     $divergentes++;
                 }
 
+                $ratioTpv = $grupoTpv > 0 ? (float) $linha->tpv / $grupoTpv : 0.0;
+                $ratioComissao = $grupoComissao > 0 ? (float) $linha->ms_comissao / $grupoComissao : $ratioTpv;
+                $ediTpvLinha = round((float) $edi['tpv'] * $ratioTpv, 2);
+                $ediComissaoLinha = round((float) $edi['comissao'] * $ratioComissao, 4);
+
                 $lote[] = [
                     'id' => (int) $linha->id,
                     'status' => $bate ? 'ok' : 'divergente',
-                    'edi_tpv' => $edi['tpv'],
-                    'edi_comissao' => $edi['comissao'],
-                    'edi_qtd' => $edi['qtd'],
-                    'diff_tpv' => $diffTpv,
-                    'diff_comissao' => $diffComissao,
+                    'edi_tpv' => $ediTpvLinha,
+                    'edi_comissao' => $ediComissaoLinha,
+                    'edi_qtd' => (int) round($edi['qtd'] * $ratioTpv),
+                    'diff_tpv' => round((float) $linha->tpv - $ediTpvLinha, 2),
+                    'diff_comissao' => round((float) $linha->ms_comissao - $ediComissaoLinha, 4),
                 ];
             }
 
             $this->aplicarLote($lote);
-        });
+        }
 
         $conciliacao->update([
             'status' => 'confrontado',
+            'confronto_status' => 'concluido',
+            'confronto_erro' => null,
             'confrontado_em' => now(),
             'linhas_ok' => $ok,
             'linhas_divergentes' => $divergentes,
@@ -103,6 +132,18 @@ class ConciliacaoConfrontoService
         ]);
 
         return $conciliacao->fresh();
+    }
+
+    private function chaveDaLinha(ConciliacaoLinha $linha): string
+    {
+        return ConciliacaoDimensao::chaveConfrontoDaLinha(
+            (string) $linha->id_cliente,
+            $linha->meio_pagamento,
+            $linha->parcelamento_agrupado,
+            $linha->bandeira,
+            $linha->escrow,
+            $linha->solucao,
+        );
     }
 
     /**
@@ -182,9 +223,10 @@ class ConciliacaoConfrontoService
             ->select([
                 'em.id',
                 'em.tipo_transacao',
+                'em.meio_pagamento',
+                'em.arranjo_ur',
                 'em.quantidade_parcela',
                 'em.instituicao_financeira',
-                'em.arranjo_ur',
                 'em.meio_captura',
                 'em.canal_entrada',
                 'em.leitor',
@@ -192,7 +234,6 @@ class ConciliacaoConfrontoService
                 'em.valor_total_transacao',
                 DB::raw(ComissaoAdminSql::percentual().' as comissao_percentual'),
                 DB::raw('COALESCE(e.token_pagseguro, em.estabelecimento, em.id_cliente) as id_cliente'),
-                DB::raw('e.segmento as mcc_estabelecimento'),
             ]);
 
         $grupos = [];
@@ -204,13 +245,12 @@ class ConciliacaoConfrontoService
                 continue;
             }
 
-            $chave = ConciliacaoDimensao::chaveConfronto(
+            $chave = ConciliacaoDimensao::chaveConfrontoDaLinha(
                 $idCliente,
-                strtolower(trim((string) $mov->tipo_transacao)),
+                ConciliacaoDimensao::meioDoEdi($mov->tipo_transacao, $mov->meio_pagamento, $mov->arranjo_ur),
                 ConciliacaoDimensao::parcelamentoDoEdi($mov->quantidade_parcela),
                 ConciliacaoDimensao::bandeiraDoEdi($mov->instituicao_financeira, $mov->tipo_transacao, $mov->arranjo_ur),
                 ConciliacaoDimensao::escrowDoEdi($mov->pagamento_prazo),
-                ConciliacaoDimensao::mccDoEstabelecimento($mov->mcc_estabelecimento),
                 ConciliacaoDimensao::solucaoDoEdi($mov->meio_captura, $mov->canal_entrada, $mov->leitor),
             );
 

@@ -58,7 +58,9 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth', 'trocar.senha', 'tenant.access'])->group(function () {
     Route::get('/perfil', [PerfilController::class, 'edit'])->name('perfil.edit');
     Route::put('/perfil', [PerfilController::class, 'update'])->name('perfil.update');
-    Route::get('/dashboard', AdminDashboardController::class)->name('dashboard');
+    Route::get('/dashboard', [AdminDashboardController::class, '__invoke'])->name('dashboard');
+    Route::get('/dashboard/comissao', [AdminDashboardController::class, 'comissao'])->name('dashboard.comissao');
+    Route::get('/dashboard/apuracao', [AdminDashboardController::class, 'apuracao'])->name('dashboard.apuracao');
     Route::prefix('admin/chamados')->name('admin.chamados.')->group(function () {
         Route::get('/', [AdminChamadoController::class, 'index'])->name('index');
         Route::get('/{numero}', [AdminChamadoController::class, 'show'])->name('show');

@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>KYC · Demonstração</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+    <style>
+        html, body { height: 100%; overflow: hidden; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 antialiased">
+
+<div class="flex h-screen overflow-hidden bg-gray-50">
+
+    <aside class="hidden w-56 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-200 bg-white lg:flex">
+        <div class="flex h-16 shrink-0 items-center px-4"></div>
+
+        <nav class="flex-1 overflow-y-auto pb-4">
+            <p class="mb-1 mt-2 px-4 text-xs font-semibold uppercase tracking-widest text-gray-400">Geral</p>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-gauge-high w-5 text-center text-[15px]"></i><span>Dashboard</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-chart-line w-5 text-center text-[15px]"></i><span>Faturamento</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-hand-holding-dollar w-5 text-center text-[15px]"></i><span>Comissão</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-ticket w-5 text-center text-[15px]"></i><span>Chamados</span>
+            </a>
+
+            <p class="mb-1 mt-6 px-4 text-xs font-semibold uppercase tracking-widest text-gray-400">Operações</p>
+            <a href="automacao.html" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-store w-5 text-center text-[15px]"></i><span>Estabelecimentos</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-magnifying-glass w-5 text-center text-[15px]"></i><span>Pesquisar Doc.</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-credit-card w-5 text-center text-[15px]"></i><span>Planos e Taxas</span>
+            </a>
+
+            <p class="mb-1 mt-6 px-4 text-xs font-semibold uppercase tracking-widest text-gray-400">Administração</p>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-users w-5 text-center text-[15px]"></i><span>Usuários</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-tags w-5 text-center text-[15px]"></i><span>Segmentos</span>
+            </a>
+            <a href="kyc.html" class="mx-2 flex items-center gap-3 rounded-lg bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-600">
+                <i class="fa-solid fa-shield-halved w-5 text-center text-[15px]"></i><span>KYC</span>
+            </a>
+            <a href="conciliacao.html" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-scale-balanced w-5 text-center text-[15px]"></i><span>Conciliação</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-gear w-5 text-center text-[15px]"></i><span>Configurações</span>
+            </a>
+        </nav>
+
+        <div class="mt-auto flex shrink-0 items-center gap-3 border-t border-gray-200 px-4 py-3">
+            <div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">LM</div>
+            <div class="min-w-0">
+                <p class="truncate text-sm font-semibold text-gray-800">Lucas Moraes</p>
+                <p class="text-xs text-gray-400">ADMIN</p>
+            </div>
+            <i class="fa-solid fa-right-from-bracket ml-auto text-gray-400"></i>
+        </div>
+    </aside>
+
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header class="flex h-14 flex-shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 sm:h-16 sm:px-6">
+            <div class="flex min-w-0 flex-1 items-center gap-3">
+                <h1 class="truncate text-lg font-bold text-gray-800 sm:text-xl lg:text-2xl">KYC</h1>
+            </div>
+            <div class="flex items-center gap-2 sm:gap-3">
+                <span class="hidden items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 md:inline-flex">
+                    <i class="fa-solid fa-desktop"></i> Demonstração
+                </span>
+                <button type="button" class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600">
+                    <i class="fa-solid fa-sun"></i>
+                </button>
+                <button type="button" class="relative flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600">
+                    <i class="fa-solid fa-bell"></i>
+                    <span class="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">3</span>
+                </button>
+                <div class="flex items-center gap-2 rounded-lg border border-gray-200 py-1.5 pl-1.5 pr-3">
+                    <div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">LM</div>
+                    <span class="hidden max-w-[120px] truncate text-sm font-semibold text-gray-700 sm:inline">Lucas Moraes</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 p-4 sm:p-6">
+
+            <div class="mb-4 text-sm text-gray-500">
+                <a href="automacao.html" class="font-semibold text-gray-700 hover:text-blue-600">Estabelecimento</a>
+                <span class="mx-2">›</span>
+                <span>KYC</span>
+            </div>
+
+            <div class="space-y-6">
+
+                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <div class="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                            <h2 class="text-lg font-bold text-gray-800">Panificadora Pão Dourado LTDA</h2>
+                            <p class="mt-1 text-sm text-gray-500">Validação de identidade (KYC) · CNPJ 34.812.905/0001-47</p>
+                        </div>
+                        <span class="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">Aprovado</span>
+                    </div>
+
+                    <div class="mt-4 grid gap-3 rounded-xl bg-gray-50 p-4 text-sm md:grid-cols-3">
+                        <div>
+                            <p class="text-xs font-bold uppercase text-gray-400">Receita Federal</p>
+                            <p class="mt-1 font-semibold text-gray-800">ATIVA</p>
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold uppercase text-gray-400">Nome na Receita</p>
+                            <p class="mt-1 font-semibold text-gray-800">PANIFICADORA PAO DOURADO LTDA</p>
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold uppercase text-gray-400">Consultado em</p>
+                            <p class="mt-1 text-gray-700">30/07/2026 09:21</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Progresso da análise automática -->
+                <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                    <div class="border-b border-gray-100 bg-gray-50/80 px-5 py-4">
+                        <h3 class="text-sm font-semibold text-gray-700">Análise automática (PPID · OCR)</h3>
+                        <p class="text-xs text-gray-400">Extração dos campos do documento e cruzamento com os dados cadastrais.</p>
+                    </div>
+                    <div class="grid gap-3 p-5 md:grid-cols-4">
+                        <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                            <p class="text-xs font-bold uppercase tracking-wide text-emerald-700">Documentos recebidos</p>
+                            <p class="mt-1 text-2xl font-bold text-emerald-800">6</p>
+                            <p class="mt-1 text-xs text-emerald-700">de 8 tipos previstos</p>
+                        </div>
+                        <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                            <p class="text-xs font-bold uppercase tracking-wide text-emerald-700">Aprovados</p>
+                            <p class="mt-1 text-2xl font-bold text-emerald-800">6</p>
+                            <p class="mt-1 text-xs text-emerald-700">OCR + cruzamento OK</p>
+                        </div>
+                        <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                            <p class="text-xs font-bold uppercase tracking-wide text-emerald-700">Com divergência</p>
+                            <p class="mt-1 text-2xl font-bold text-emerald-800">0</p>
+                            <p class="mt-1 text-xs text-emerald-700">nenhuma pendência</p>
+                        </div>
+                        <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                            <p class="text-xs font-bold uppercase tracking-wide text-emerald-700">Status final</p>
+                            <p class="mt-1 text-2xl font-bold text-emerald-800">OK</p>
+                            <p class="mt-1 text-xs text-emerald-700">KYC aprovado</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Documentos -->
+                <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
+                        <div>
+                            <h3 class="text-sm font-semibold text-gray-700">Documentos e análise</h3>
+                            <p class="text-xs text-gray-400">Os arquivos vêm da aba <strong>Documentos</strong> do estabelecimento. Ao anexar lá, a análise KYC dispara automaticamente.</p>
+                        </div>
+                        <a href="#" class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                            <i class="fa-solid fa-file-arrow-up text-xs"></i> Anexar documentos
+                        </a>
+                    </div>
+
+                    <div class="grid gap-4 p-5 md:grid-cols-2">
+
+                        <div class="rounded-xl border border-emerald-100 bg-emerald-50/30 p-4">
+                            <div class="flex items-start justify-between gap-2">
+                                <p class="font-semibold text-gray-800">RG — Frente</p>
+                                <span class="text-xs font-bold text-green-600">Aprovado</span>
+                            </div>
+                            <p class="mt-1 truncate text-xs text-gray-500">rg_frente_marcos_ribeiro.jpg</p>
+                            <dl class="mt-3 space-y-1 text-xs text-gray-600">
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">CPF lido</dt><dd class="font-mono">187.443.628-05</dd></div>
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">Nome lido</dt><dd>MARCOS ANTONIO RIBEIRO</dd></div>
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">Nascimento</dt><dd>14/03/1981</dd></div>
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">Cruzamento</dt><dd class="font-semibold text-emerald-700">Confere com o cadastro</dd></div>
+                            </dl>
+                        </div>
+
+                        <div class="rounded-xl border border-emerald-100 bg-emerald-50/30 p-4">
+                            <div class="flex items-start justify-between gap-2">
+                                <p class="font-semibold text-gray-800">RG — Verso</p>
+                                <span class="text-xs font-bold text-green-600">Aprovado</span>
+                            </div>
+                            <p class="mt-1 truncate text-xs text-gray-500">rg_verso_marcos_ribeiro.jpg</p>
+                            <dl class="mt-3 space-y-1 text-xs text-gray-600">
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">Órgão emissor</dt><dd>SSP/SP</dd></div>
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">Validade</dt><dd>Sem expiração</dd></div>
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">Cruzamento</dt><dd class="font-semibold text-emerald-700">Confere com o cadastro</dd></div>
+                            </dl>
+                        </div>
+
+                        <div class="rounded-xl border border-emerald-100 bg-emerald-50/30 p-4">
+                            <div class="flex items-start justify-between gap-2">
+                                <p class="font-semibold text-gray-800">Comprovante de endereço</p>
+                                <span class="text-xs font-bold text-green-600">Aprovado</span>
+                            </div>
+                            <p class="mt-1 truncate text-xs text-gray-500">conta_energia_julho.pdf</p>
+                            <dl class="mt-3 space-y-1 text-xs text-gray-600">
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">Emissão</dt><dd>08/07/2026 (22 dias)</dd></div>
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">Cidade</dt><dd>São Bernardo do Campo</dd></div>
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">Cruzamento</dt><dd class="font-semibold text-emerald-700">Confere com o cadastro</dd></div>
+                            </dl>
+                        </div>
+
+                        <div class="rounded-xl border border-emerald-100 bg-emerald-50/30 p-4">
+                            <div class="flex items-start justify-between gap-2">
+                                <p class="font-semibold text-gray-800">Contrato social</p>
+                                <span class="text-xs font-bold text-green-600">Aprovado</span>
+                            </div>
+                            <p class="mt-1 truncate text-xs text-gray-500">contrato_social_consolidado.pdf</p>
+                            <dl class="mt-3 space-y-1 text-xs text-gray-600">
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">CNPJ lido</dt><dd class="font-mono">34.812.905/0001-47</dd></div>
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">Razão social</dt><dd class="text-right">PANIFICADORA PAO DOURADO LTDA</dd></div>
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">Cruzamento</dt><dd class="font-semibold text-emerald-700">Confere com o cadastro</dd></div>
+                            </dl>
+                        </div>
+
+                        <div class="rounded-xl border border-emerald-100 bg-emerald-50/30 p-4">
+                            <div class="flex items-start justify-between gap-2">
+                                <p class="font-semibold text-gray-800">Cartão CNPJ</p>
+                                <span class="text-xs font-bold text-green-600">Aprovado</span>
+                            </div>
+                            <p class="mt-1 truncate text-xs text-gray-500">cartao_cnpj_receita.pdf</p>
+                            <dl class="mt-3 space-y-1 text-xs text-gray-600">
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">Situação</dt><dd class="font-semibold text-emerald-700">ATIVA</dd></div>
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">CNAE principal</dt><dd>1091-1/02</dd></div>
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">Cruzamento</dt><dd class="font-semibold text-emerald-700">Confere com o cadastro</dd></div>
+                            </dl>
+                        </div>
+
+                        <div class="rounded-xl border border-emerald-100 bg-emerald-50/30 p-4">
+                            <div class="flex items-start justify-between gap-2">
+                                <p class="font-semibold text-gray-800">Selfie com documento</p>
+                                <span class="text-xs font-bold text-green-600">Aprovado</span>
+                            </div>
+                            <p class="mt-1 truncate text-xs text-gray-500">selfie_marcos.jpg</p>
+                            <dl class="mt-3 space-y-1 text-xs text-gray-600">
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">Similaridade facial</dt><dd>96%</dd></div>
+                                <div class="flex justify-between gap-3"><dt class="text-gray-400">Cruzamento</dt><dd class="font-semibold text-emerald-700">Confere com o documento</dd></div>
+                            </dl>
+                        </div>
+
+                        <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                            <div class="flex items-start justify-between gap-2">
+                                <p class="font-semibold text-gray-800">CNH — Frente</p>
+                                <span class="text-xs font-bold text-gray-400">Não necessário</span>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-400">Alternativa ao RG — dispensado, RG já aprovado.</p>
+                        </div>
+
+                        <div class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                            <div class="flex items-start justify-between gap-2">
+                                <p class="font-semibold text-gray-800">CNH — Verso</p>
+                                <span class="text-xs font-bold text-gray-400">Não necessário</span>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-400">Alternativa ao RG — dispensado, RG já aprovado.</p>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Ações do admin -->
+                <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h3 class="mb-1 text-sm font-semibold text-emerald-900">
+                                <i class="fa-solid fa-circle-check mr-1"></i> KYC aprovado
+                            </h3>
+                            <p class="text-xs text-emerald-700">Todos os documentos obrigatórios foram validados pelo OCR e conferem com o cadastro. Aprovado automaticamente em 30/07/2026 às 09:28.</p>
+                        </div>
+                        <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">
+                            <i class="fa-solid fa-rotate-right"></i> Reanalisar documentos
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Histórico -->
+                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <h3 class="mb-3 text-sm font-semibold text-gray-700">Histórico</h3>
+                    <ul class="space-y-2 text-sm text-gray-600">
+                        <li class="flex justify-between gap-4 border-b border-gray-50 pb-2">
+                            <span>status alterado — KYC aprovado automaticamente: todos os documentos conferem</span>
+                            <span class="shrink-0 text-xs text-gray-400">30/07/2026 09:28</span>
+                        </li>
+                        <li class="flex justify-between gap-4 border-b border-gray-50 pb-2">
+                            <span>documento analisado — Selfie com documento aprovada (similaridade facial 96%)</span>
+                            <span class="shrink-0 text-xs text-gray-400">30/07/2026 09:27</span>
+                        </li>
+                        <li class="flex justify-between gap-4 border-b border-gray-50 pb-2">
+                            <span>documento analisado — Comprovante de endereço aprovado; cidade e prazo conferem</span>
+                            <span class="shrink-0 text-xs text-gray-400">30/07/2026 09:26</span>
+                        </li>
+                        <li class="flex justify-between gap-4 border-b border-gray-50 pb-2">
+                            <span>documento analisado — Cartão CNPJ aprovado pelo OCR (confiança 97%)</span>
+                            <span class="shrink-0 text-xs text-gray-400">30/07/2026 09:25</span>
+                        </li>
+                        <li class="flex justify-between gap-4 border-b border-gray-50 pb-2">
+                            <span>documento analisado — Contrato social aprovado pelo OCR (confiança 95%)</span>
+                            <span class="shrink-0 text-xs text-gray-400">30/07/2026 09:24</span>
+                        </li>
+                        <li class="flex justify-between gap-4 border-b border-gray-50 pb-2">
+                            <span>documento analisado — RG frente e verso aprovados; CPF e nome conferem</span>
+                            <span class="shrink-0 text-xs text-gray-400">30/07/2026 09:23</span>
+                        </li>
+                        <li class="flex justify-between gap-4 border-b border-gray-50 pb-2">
+                            <span>receita consultada — CNPJ 34.812.905/0001-47 com situação ATIVA</span>
+                            <span class="shrink-0 text-xs text-gray-400">30/07/2026 09:21</span>
+                        </li>
+                        <li class="flex justify-between gap-4 border-b border-gray-50 pb-2">
+                            <span>analise iniciada — 6 documentos enviados para o OCR</span>
+                            <span class="shrink-0 text-xs text-gray-400">30/07/2026 09:20</span>
+                        </li>
+                    </ul>
+                </div>
+
+            </div>
+
+            <div class="h-6"></div>
+        </main>
+    </div>
+</div>
+
+</body>
+</html>

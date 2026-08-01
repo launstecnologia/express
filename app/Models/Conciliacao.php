@@ -22,6 +22,9 @@ class Conciliacao extends Model
         'total_comissao',
         'total_chargeback',
         'status',
+        'confronto_status',
+        'confronto_erro',
+        'confronto_iniciado_em',
         'confrontado_em',
         'linhas_ok',
         'linhas_divergentes',
@@ -38,6 +41,7 @@ class Conciliacao extends Model
             'total_tpv' => 'decimal:2',
             'total_comissao' => 'decimal:4',
             'total_chargeback' => 'decimal:4',
+            'confronto_iniciado_em' => 'datetime',
             'confrontado_em' => 'datetime',
         ];
     }

@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Conciliação · Demonstração</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+    <style>
+        html, body { height: 100%; overflow: hidden; }
+        select {
+            min-height: 42px; height: 42px; padding-right: 2rem !important;
+            -webkit-appearance: none; appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%2364758b' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right .75rem center; background-size: 14px 14px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 antialiased">
+
+<div class="flex h-screen overflow-hidden bg-gray-50">
+
+    <aside class="hidden w-56 flex-shrink-0 flex-col overflow-y-auto border-r border-gray-200 bg-white lg:flex">
+        <div class="flex h-16 shrink-0 items-center px-4"></div>
+
+        <nav class="flex-1 overflow-y-auto pb-4">
+            <p class="mb-1 mt-2 px-4 text-xs font-semibold uppercase tracking-widest text-gray-400">Geral</p>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-gauge-high w-5 text-center text-[15px]"></i><span>Dashboard</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-chart-line w-5 text-center text-[15px]"></i><span>Faturamento</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-hand-holding-dollar w-5 text-center text-[15px]"></i><span>Comissão</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-ticket w-5 text-center text-[15px]"></i><span>Chamados</span>
+            </a>
+
+            <p class="mb-1 mt-6 px-4 text-xs font-semibold uppercase tracking-widest text-gray-400">Operações</p>
+            <a href="automacao.html" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-store w-5 text-center text-[15px]"></i><span>Estabelecimentos</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-magnifying-glass w-5 text-center text-[15px]"></i><span>Pesquisar Doc.</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-credit-card w-5 text-center text-[15px]"></i><span>Planos e Taxas</span>
+            </a>
+
+            <p class="mb-1 mt-6 px-4 text-xs font-semibold uppercase tracking-widest text-gray-400">Administração</p>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-users w-5 text-center text-[15px]"></i><span>Usuários</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-tags w-5 text-center text-[15px]"></i><span>Segmentos</span>
+            </a>
+            <a href="kyc.html" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-shield-halved w-5 text-center text-[15px]"></i><span>KYC</span>
+            </a>
+            <a href="conciliacao.html" class="mx-2 flex items-center gap-3 rounded-lg bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-600">
+                <i class="fa-solid fa-scale-balanced w-5 text-center text-[15px]"></i><span>Conciliação</span>
+            </a>
+            <a href="#" class="mx-2 flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900">
+                <i class="fa-solid fa-gear w-5 text-center text-[15px]"></i><span>Configurações</span>
+            </a>
+        </nav>
+
+        <div class="mt-auto flex shrink-0 items-center gap-3 border-t border-gray-200 px-4 py-3">
+            <div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">LM</div>
+            <div class="min-w-0">
+                <p class="truncate text-sm font-semibold text-gray-800">Lucas Moraes</p>
+                <p class="text-xs text-gray-400">ADMIN</p>
+            </div>
+            <i class="fa-solid fa-right-from-bracket ml-auto text-gray-400"></i>
+        </div>
+    </aside>
+
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header class="flex h-14 flex-shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 sm:h-16 sm:px-6">
+            <div class="flex min-w-0 flex-1 items-center gap-3">
+                <h1 class="truncate text-lg font-bold text-gray-800 sm:text-xl lg:text-2xl">Conciliação · Julho/2026</h1>
+            </div>
+            <div class="flex items-center gap-2 sm:gap-3">
+                <span class="hidden items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-500 md:inline-flex">
+                    <i class="fa-solid fa-desktop"></i> Demonstração
+                </span>
+                <button type="button" class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600">
+                    <i class="fa-solid fa-sun"></i>
+                </button>
+                <button type="button" class="relative flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-600">
+                    <i class="fa-solid fa-bell"></i>
+                    <span class="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">3</span>
+                </button>
+                <div class="flex items-center gap-2 rounded-lg border border-gray-200 py-1.5 pl-1.5 pr-3">
+                    <div class="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">LM</div>
+                    <span class="hidden max-w-[120px] truncate text-sm font-semibold text-gray-700 sm:inline">Lucas Moraes</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-gray-50 p-4 sm:p-6">
+
+            <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <a href="#" class="mb-2 inline-flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-gray-800">
+                        <i class="fa-solid fa-arrow-left"></i> Conciliações
+                    </a>
+                    <h2 class="text-xl font-bold text-gray-800">Julho/2026</h2>
+                    <p class="text-sm text-gray-500">
+                        ExpressPag Marketplace · ref. 01/07/2026 · validacao_v2_072026.xlsx
+                    </p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100">
+                        <i class="fa-solid fa-rotate"></i> Reconfrontar EDI
+                    </button>
+                    <button class="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-100">
+                        Remover
+                    </button>
+                </div>
+            </div>
+
+            <div class="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                Confronto concluído: 1.284 linhas processadas contra o EDI de julho/2026 em 6,4 segundos.
+            </div>
+
+            <div class="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <p class="text-xs font-bold uppercase tracking-wide text-gray-400">TPV PagSeguro</p>
+                    <p class="mt-2 text-2xl font-bold text-gray-800">R$ 4.287.913,42</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <p class="text-xs font-bold uppercase tracking-wide text-gray-400">Comissão PagSeguro</p>
+                    <p class="mt-2 text-2xl font-bold text-blue-700">R$ 61.204,88</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <p class="text-xs font-bold uppercase tracking-wide text-gray-400">TPV EDI (confrontado)</p>
+                    <p class="mt-2 text-2xl font-bold text-gray-800">R$ 4.281.556,90</p>
+                </div>
+                <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <p class="text-xs font-bold uppercase tracking-wide text-gray-400">Comissão EDI (calculada)</p>
+                    <p class="mt-2 text-2xl font-bold text-sky-700">R$ 60.998,17</p>
+                </div>
+            </div>
+
+            <div class="mb-5 grid gap-3 md:grid-cols-2">
+                <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                    <p class="text-xs font-bold uppercase text-emerald-700">Com estabelecimento</p>
+                    <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                        <div>
+                            <p class="text-xs text-emerald-600">Linhas</p>
+                            <p class="text-xl font-bold text-emerald-900">1.253</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-emerald-600">Clientes</p>
+                            <p class="text-xl font-bold text-emerald-900">418</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-emerald-600">TPV</p>
+                            <p class="text-lg font-bold text-emerald-900">R$ 4.196.244,71</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-emerald-600">Comissão</p>
+                            <p class="text-lg font-bold text-emerald-900">R$ 59.877,42</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="rounded-xl border border-red-200 bg-red-50 p-4">
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                        <p class="text-xs font-bold uppercase text-red-700">Sem estabelecimento</p>
+                        <a href="#" class="inline-flex items-center gap-1 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100">
+                            <i class="fa-solid fa-download"></i> Baixar relatório CSV
+                        </a>
+                    </div>
+                    <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                        <div>
+                            <p class="text-xs text-red-600">Linhas</p>
+                            <p class="text-xl font-bold text-red-900">31</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-red-600">Clientes</p>
+                            <p class="text-xl font-bold text-red-900">14</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-red-600">TPV</p>
+                            <p class="text-lg font-bold text-red-900">R$ 91.668,71</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-red-600">Comissão</p>
+                            <p class="text-lg font-bold text-red-900">R$ 1.327,46</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-5 grid gap-3 md:grid-cols-4">
+                <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                    <p class="text-xs font-bold uppercase text-emerald-700">OK</p>
+                    <p class="mt-1 text-2xl font-bold text-emerald-800">1.198</p>
+                </div>
+                <div class="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <p class="text-xs font-bold uppercase text-amber-700">Divergentes</p>
+                    <p class="mt-1 text-2xl font-bold text-amber-800">43</p>
+                </div>
+                <div class="rounded-xl border border-red-200 bg-red-50 p-4">
+                    <p class="text-xs font-bold uppercase text-red-700">Sem estabelecimento</p>
+                    <p class="mt-1 text-2xl font-bold text-red-800">31</p>
+                    <p class="mt-1 text-xs text-red-600">14 clientes distintos</p>
+                </div>
+                <div class="rounded-xl border border-orange-200 bg-orange-50 p-4">
+                    <p class="text-xs font-bold uppercase text-orange-700">Sem EDI</p>
+                    <p class="mt-1 text-2xl font-bold text-orange-800">12</p>
+                </div>
+            </div>
+
+            <form class="mb-4 grid gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:grid-cols-5" onsubmit="return false;">
+                <input placeholder="Buscar ID, chave, bandeira..." class="rounded-lg border border-gray-200 px-3 py-2 text-sm md:col-span-2">
+                <input placeholder="ID cliente" class="rounded-lg border border-gray-200 px-3 py-2 text-sm">
+                <select class="rounded-lg border border-gray-200 bg-white px-3 text-sm">
+                    <option value="">Status</option>
+                    <option>Ok</option>
+                    <option>Divergente</option>
+                    <option>Sem estabelecimento</option>
+                    <option>Sem edi</option>
+                    <option>Pendente</option>
+                </select>
+                <button class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Filtrar</button>
+            </form>
+
+            <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        <tr>
+                            <th class="px-4 py-3">Status</th>
+                            <th class="px-4 py-3">ID cliente</th>
+                            <th class="px-4 py-3">Estabelecimento</th>
+                            <th class="px-4 py-3">Meio / Bandeira</th>
+                            <th class="px-4 py-3">Parcelas</th>
+                            <th class="px-4 py-3">Solução</th>
+                            <th class="px-4 py-3 text-right">TPV PS</th>
+                            <th class="px-4 py-3 text-right">TPV EDI</th>
+                            <th class="px-4 py-3 text-right">Com. PS</th>
+                            <th class="px-4 py-3 text-right">Com. EDI</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3"><span class="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">OK</span></td>
+                            <td class="px-4 py-3 font-mono text-xs">88F3A2C9</td>
+                            <td class="px-4 py-3"><a href="automacao.html" class="font-semibold text-blue-600 hover:underline">Pão Dourado</a></td>
+                            <td class="px-4 py-3">Crédito / Visa</td>
+                            <td class="px-4 py-3">1x</td>
+                            <td class="px-4 py-3">Link Mobile</td>
+                            <td class="px-4 py-3 text-right">R$ 128.440,15</td>
+                            <td class="px-4 py-3 text-right">R$ 128.440,15</td>
+                            <td class="px-4 py-3 text-right">R$ 1.798,16</td>
+                            <td class="px-4 py-3 text-right">R$ 1.798,16</td>
+                        </tr>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3"><span class="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">OK</span></td>
+                            <td class="px-4 py-3 font-mono text-xs">88F3A2C9</td>
+                            <td class="px-4 py-3"><a href="automacao.html" class="font-semibold text-blue-600 hover:underline">Pão Dourado</a></td>
+                            <td class="px-4 py-3">Débito / Mastercard</td>
+                            <td class="px-4 py-3">1x</td>
+                            <td class="px-4 py-3">Maquininha</td>
+                            <td class="px-4 py-3 text-right">R$ 84.219,60</td>
+                            <td class="px-4 py-3 text-right">R$ 84.219,60</td>
+                            <td class="px-4 py-3 text-right">R$ 926,42</td>
+                            <td class="px-4 py-3 text-right">R$ 926,42</td>
+                        </tr>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3"><span class="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">Divergente</span></td>
+                            <td class="px-4 py-3 font-mono text-xs">4B71EE02</td>
+                            <td class="px-4 py-3"><a href="#" class="font-semibold text-blue-600 hover:underline">Mercadinho Vila Nova</a></td>
+                            <td class="px-4 py-3">Crédito / Elo</td>
+                            <td class="px-4 py-3">2x a 6x</td>
+                            <td class="px-4 py-3">Maquininha</td>
+                            <td class="px-4 py-3 text-right">R$ 63.109,88</td>
+                            <td class="px-4 py-3 text-right font-semibold text-amber-700">R$ 61.842,30</td>
+                            <td class="px-4 py-3 text-right">R$ 1.104,42</td>
+                            <td class="px-4 py-3 text-right font-semibold text-amber-700">R$ 1.081,24</td>
+                        </tr>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3"><span class="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">OK</span></td>
+                            <td class="px-4 py-3 font-mono text-xs">1D904CA7</td>
+                            <td class="px-4 py-3"><a href="#" class="font-semibold text-blue-600 hover:underline">Auto Peças Trevo</a></td>
+                            <td class="px-4 py-3">Crédito / Visa</td>
+                            <td class="px-4 py-3">7x a 12x</td>
+                            <td class="px-4 py-3">Link de pagamento</td>
+                            <td class="px-4 py-3 text-right">R$ 51.877,04</td>
+                            <td class="px-4 py-3 text-right">R$ 51.877,04</td>
+                            <td class="px-4 py-3 text-right">R$ 1.244,05</td>
+                            <td class="px-4 py-3 text-right">R$ 1.244,05</td>
+                        </tr>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3"><span class="rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">Sem estabelecimento</span></td>
+                            <td class="px-4 py-3 font-mono text-xs">A05C3B18</td>
+                            <td class="px-4 py-3"><span class="text-red-600">Não cadastrado</span></td>
+                            <td class="px-4 py-3">Crédito / Mastercard</td>
+                            <td class="px-4 py-3">1x</td>
+                            <td class="px-4 py-3">Maquininha</td>
+                            <td class="px-4 py-3 text-right">R$ 34.902,17</td>
+                            <td class="px-4 py-3 text-right">—</td>
+                            <td class="px-4 py-3 text-right">R$ 502,18</td>
+                            <td class="px-4 py-3 text-right">—</td>
+                        </tr>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3"><span class="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">OK</span></td>
+                            <td class="px-4 py-3 font-mono text-xs">72E1FD35</td>
+                            <td class="px-4 py-3"><a href="#" class="font-semibold text-blue-600 hover:underline">Clínica Bem Viver</a></td>
+                            <td class="px-4 py-3">Pix / —</td>
+                            <td class="px-4 py-3">1x</td>
+                            <td class="px-4 py-3">Link de pagamento</td>
+                            <td class="px-4 py-3 text-right">R$ 29.451,90</td>
+                            <td class="px-4 py-3 text-right">R$ 29.451,90</td>
+                            <td class="px-4 py-3 text-right">R$ 294,52</td>
+                            <td class="px-4 py-3 text-right">R$ 294,52</td>
+                        </tr>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3"><span class="rounded-full bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-700">Sem EDI</span></td>
+                            <td class="px-4 py-3 font-mono text-xs">C93A6017</td>
+                            <td class="px-4 py-3"><a href="#" class="font-semibold text-blue-600 hover:underline">Barbearia Dom Carlos</a></td>
+                            <td class="px-4 py-3">Crédito / Hipercard</td>
+                            <td class="px-4 py-3">1x</td>
+                            <td class="px-4 py-3">Maquininha</td>
+                            <td class="px-4 py-3 text-right">R$ 18.744,33</td>
+                            <td class="px-4 py-3 text-right">—</td>
+                            <td class="px-4 py-3 text-right">R$ 281,16</td>
+                            <td class="px-4 py-3 text-right">—</td>
+                        </tr>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3"><span class="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">Divergente</span></td>
+                            <td class="px-4 py-3 font-mono text-xs">5F28B4D6</td>
+                            <td class="px-4 py-3"><a href="#" class="font-semibold text-blue-600 hover:underline">Restaurante Sabor Caseiro</a></td>
+                            <td class="px-4 py-3">Crédito / Amex</td>
+                            <td class="px-4 py-3">2x a 6x</td>
+                            <td class="px-4 py-3">Maquininha</td>
+                            <td class="px-4 py-3 text-right">R$ 16.208,74</td>
+                            <td class="px-4 py-3 text-right font-semibold text-amber-700">R$ 16.208,74</td>
+                            <td class="px-4 py-3 text-right">R$ 421,43</td>
+                            <td class="px-4 py-3 text-right font-semibold text-amber-700">R$ 389,01</td>
+                        </tr>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3"><span class="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">OK</span></td>
+                            <td class="px-4 py-3 font-mono text-xs">3A6D71B9</td>
+                            <td class="px-4 py-3"><a href="#" class="font-semibold text-blue-600 hover:underline">Ótica Visão Clara</a></td>
+                            <td class="px-4 py-3">Crédito / Visa</td>
+                            <td class="px-4 py-3">7x a 12x</td>
+                            <td class="px-4 py-3">Maquininha</td>
+                            <td class="px-4 py-3 text-right">R$ 12.905,60</td>
+                            <td class="px-4 py-3 text-right">R$ 12.905,60</td>
+                            <td class="px-4 py-3 text-right">R$ 348,45</td>
+                            <td class="px-4 py-3 text-right">R$ 348,45</td>
+                        </tr>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-3"><span class="rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-700">Sem estabelecimento</span></td>
+                            <td class="px-4 py-3 font-mono text-xs">E4470C82</td>
+                            <td class="px-4 py-3"><span class="text-red-600">Não cadastrado</span></td>
+                            <td class="px-4 py-3">Débito / Elo</td>
+                            <td class="px-4 py-3">1x</td>
+                            <td class="px-4 py-3">Maquininha</td>
+                            <td class="px-4 py-3 text-right">R$ 9.318,22</td>
+                            <td class="px-4 py-3 text-right">—</td>
+                            <td class="px-4 py-3 text-right">R$ 102,50</td>
+                            <td class="px-4 py-3 text-right">—</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <p class="text-sm text-gray-500">Exibindo 1–10 de 1.284 linhas</p>
+                <nav class="flex items-center gap-1">
+                    <span class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm text-gray-400">Anterior</span>
+                    <a href="#" class="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white">1</a>
+                    <a href="#" class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">2</a>
+                    <a href="#" class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">3</a>
+                    <span class="px-2 text-sm text-gray-400">…</span>
+                    <a href="#" class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">129</a>
+                    <a href="#" class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">Próxima</a>
+                </nav>
+            </div>
+
+            <div class="h-6"></div>
+        </main>
+    </div>
+</div>
+
+</body>
+</html>
