@@ -1,6 +1,7 @@
 # main.py
 # Forca de Vendas PagBank — Cadastrar Cliente
 # Aceita dados dinâmicos via parametro (uso pela API) ou DADOS_CLI (uso local)
+from __future__ import annotations
 
 import json
 import re

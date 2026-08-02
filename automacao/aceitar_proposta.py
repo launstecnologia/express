@@ -1,6 +1,8 @@
 # aceitar_proposta.py
 # Login no PagBank (portal do cliente) e aceite da proposta comercial pendente.
 
+from __future__ import annotations
+
 import json
 import logging
 import os

@@ -1,4 +1,6 @@
 # progresso.py — rastreamento de etapa atual por job (thread-safe)
+from __future__ import annotations
+
 import threading
 
 _lock = threading.Lock()

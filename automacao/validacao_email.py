@@ -3,6 +3,8 @@
 # "Crie sua senha no PagSeguro" e clica em "Finalizar cadastro"
 # Aceita dados dinâmicos via parametro (uso pela API) ou constantes CLI
 
+from __future__ import annotations
+
 import json
 import sys
 import time

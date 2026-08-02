@@ -5,6 +5,8 @@
 # Iniciar:  uvicorn api:app --host 0.0.0.0 --port 8001 --workers 1
 # Prod:     gunicorn api:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8001 --workers 1
 
+from __future__ import annotations
+
 import json
 import logging
 import os
