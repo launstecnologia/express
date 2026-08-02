@@ -519,9 +519,26 @@ class CadastradorFV:
         if not faturamento:
             raise Exception('Faturamento mensal não informado no payload.')
 
-        dropdown = self.wait.until(EC.element_to_be_clickable(
-            (By.XPATH, '//*[@data-testid="dropdown-select"]//div[@role="button"][1]')
-        ))
+        xpaths_dropdown = [
+            '//*[@id="info.monthlyRevenue__label"]/ancestor::div[@role="button"][1]',
+            '//*[@data-testid="dropdown-select"][.//*[@id="info.monthlyRevenue__label"]]//div[@role="button"][1]',
+            '//*[@data-testid="dropdown-select"]//div[@role="button"][1]',
+        ]
+
+        dropdown = None
+        for xpath in xpaths_dropdown:
+            try:
+                dropdown = WebDriverWait(self.driver, 5).until(
+                    EC.element_to_be_clickable((By.XPATH, xpath))
+                )
+                break
+            except TimeoutException:
+                continue
+
+        if dropdown is None:
+            self._salvar_screenshot('erro_faturamento_dropdown')
+            raise Exception('Dropdown de faturamento mensal não encontrado no PagBank.')
+
         self.driver.execute_script('arguments[0].scrollIntoView(true);', dropdown)
         time.sleep(0.3)
         dropdown.click()
@@ -537,6 +554,75 @@ class CadastradorFV:
         opcao.click()
         time.sleep(0.5)
 
+    def _configurar_envio_documentos(self):
+        """Seleciona envio do link de documentos por e-mail (exigido em cadastros PJ)."""
+        email = (self.dados.get('email') or '').strip()
+        if not email:
+            return
+
+        try:
+            secao = self.driver.find_elements(
+                By.XPATH,
+                '//*[contains(normalize-space(.), "Envio dos documentos")]',
+            )
+            if not secao:
+                return
+
+            marcado = False
+            for xpath in (
+                '//*[contains(normalize-space(.), "Envio dos documentos")]'
+                '/following::*[self::label[contains(normalize-space(.), "E-mail")]'
+                ' or self::span[contains(normalize-space(.), "E-mail")]][1]',
+                '//*[contains(normalize-space(.), "Envio dos documentos")]'
+                '/following::input[@type="checkbox"][1]',
+            ):
+                for el in self.driver.find_elements(By.XPATH, xpath):
+                    try:
+                        if not el.is_displayed():
+                            continue
+                    except Exception:
+                        continue
+
+                    self.driver.execute_script(
+                        'arguments[0].scrollIntoView({block: "center"});', el
+                    )
+                    time.sleep(0.2)
+                    try:
+                        el.click()
+                    except Exception:
+                        self.driver.execute_script('arguments[0].click();', el)
+                    marcado = True
+                    log.info('Marcou envio de documentos por e-mail')
+                    break
+                if marcado:
+                    break
+
+            for campo in self.driver.find_elements(
+                By.XPATH,
+                '//*[contains(normalize-space(.), "Envio dos documentos")]'
+                '/following::input[contains(@id, "mail") or @type="email"][1]',
+            ):
+                try:
+                    if not campo.is_displayed():
+                        continue
+                except Exception:
+                    continue
+
+                valor_atual = (campo.get_attribute('value') or '').strip()
+                if valor_atual:
+                    break
+
+                campo_id = campo.get_attribute('id')
+                if campo_id:
+                    self._preencher_react(By.ID, campo_id, email, 'email_envio_documentos')
+                else:
+                    self._limpar_campo_react(campo)
+                    campo.send_keys(email)
+                log.info(f'Preencheu e-mail para envio de documentos: {email}')
+                break
+        except Exception as exc:
+            log.warning(f'Envio de documentos (opcional): {exc}')
+
     def _preencher(self, by, seletor, valor, descricao=''):
         try:
             el = self.wait.until(EC.presence_of_element_located((by, seletor)))
@@ -550,23 +636,43 @@ class CadastradorFV:
             self._salvar_screenshot(f'erro_preencher_{descricao}')
             raise Exception(f'Nao encontrou campo: {descricao or seletor}')
 
+    def _limpar_campo_react(self, el) -> None:
+        """Limpa input React sem usar clear() — evita travamento do ChromeDriver em máscaras."""
+        from selenium.webdriver.common.keys import Keys
+
+        try:
+            el.click()
+            time.sleep(0.15)
+            el.send_keys(Keys.CONTROL, 'a')
+            el.send_keys(Keys.BACK_SPACE)
+            time.sleep(0.2)
+        except Exception:
+            self.driver.execute_script(
+                "const el = arguments[0];"
+                "el.value = '';"
+                "el.dispatchEvent(new Event('input', { bubbles: true }));"
+                "el.dispatchEvent(new Event('change', { bubbles: true }));",
+                el,
+            )
+            time.sleep(0.2)
+
     def _preencher_react(self, by, seletor, valor, descricao=''):
         """Preenche campo React disparando evento de input corretamente.
         Simula digitação humana: preenche, apaga última letra e redigita
         para forçar o React a revalidar o campo."""
         from selenium.webdriver.common.keys import Keys
         try:
-            el = self.wait.until(EC.presence_of_element_located((by, seletor)))
+            el = self.wait.until(EC.element_to_be_clickable((by, seletor)))
             self.driver.execute_script('arguments[0].scrollIntoView(true);', el)
             time.sleep(0.3)
-            el.clear()
-            time.sleep(0.2)
+            self._limpar_campo_react(el)
             el.send_keys(str(valor))
             time.sleep(0.3)
-            # Apaga última letra e redigita para disparar validação React
-            el.send_keys(Keys.BACK_SPACE)
-            time.sleep(0.2)
-            el.send_keys(str(valor)[-1])
+            if valor:
+                # Apaga última letra e redigita para disparar validação React
+                el.send_keys(Keys.BACK_SPACE)
+                time.sleep(0.2)
+                el.send_keys(str(valor)[-1])
             time.sleep(0.3)
             log.info(f'Preencheu (react) {descricao or seletor}: {valor}')
             return el
@@ -699,7 +805,7 @@ class CadastradorFV:
     def _aguardar_campo_ou_falhar(self, by, seletor: str, contexto: str, timeout: int = 25):
         try:
             WebDriverWait(self.driver, timeout).until(
-                EC.presence_of_element_located((by, seletor))
+                EC.visibility_of_element_located((by, seletor))
             )
         except TimeoutException:
             erros = self._coletar_erros()
@@ -956,7 +1062,7 @@ class CadastradorFV:
         # Nome fantasia: preenche e força revalidação do React com backspace+redigitar
         campo_fantasia = self.wait.until(EC.presence_of_element_located((By.ID, 'info.trademark')))
         self.driver.execute_script('arguments[0].scrollIntoView(true);', campo_fantasia)
-        campo_fantasia.clear()
+        self._limpar_campo_react(campo_fantasia)
         time.sleep(0.3)
         campo_fantasia.send_keys(self.dados['nome_fantasia'])
         time.sleep(0.5)
@@ -1004,36 +1110,25 @@ class CadastradorFV:
         time.sleep(2)
         self._aguardar_campo_ou_falhar(By.ID, 'info.cpf', 'dados do proprietário')
         self._salvar_screenshot('etapa2_dados_empresa_preenchido')
-        self._salvar_screenshot('etapa3_proprietario')
 
     def _preencher_dados_proprietario(self):
         log.info('--- ETAPA 5: DADOS DO PROPRIETARIO ---')
-        self._aguardar_campo_ou_falhar(By.ID, 'info.cpf', 'dados do proprietário', timeout=5)
+        self._aguardar_campo_ou_falhar(By.ID, 'info.cpf', 'dados do proprietário', timeout=15)
         time.sleep(1)
 
         self._preencher_react(By.ID, 'info.cpf', self.dados['cpf_socio'], 'cpf_socio')
-
-        try:
-            self.wait.until(EC.element_to_be_clickable((By.ID, 'info.birthDate')))
-        except TimeoutException:
-            pass
-
         time.sleep(0.5)
         self._preencher_react(By.ID, 'info.birthDate', self.dados['nascimento'], 'nascimento')
-
-        try:
-            self.wait.until(EC.element_to_be_clickable((By.ID, 'info.name')))
-        except TimeoutException:
-            pass
-
         time.sleep(0.5)
         self._preencher_react(By.ID, 'info.name', self.dados['nome_socio'], 'nome_socio')
         time.sleep(0.5)
 
         self._selecionar_faturamento()
+        self._configurar_envio_documentos()
 
         erros = self._coletar_erros()
         self._exigir_erros_reais('dados do proprietário', erros)
+        self._salvar_screenshot('etapa3_proprietario')
         self._clicar_continuar_form('botao_continuar_etapa3')
         time.sleep(3)
         self._coletar_erros()

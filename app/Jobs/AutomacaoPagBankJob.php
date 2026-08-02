@@ -77,7 +77,7 @@ class AutomacaoPagBankJob implements ShouldQueue
 
             // 2. Polling até concluir ou atingir timeout
             $intervalo   = (int) config('automacao.polling_intervalo_seg', 20);
-            $maxTentativas = (int) config('automacao.polling_max_tentativas', 30);
+            $maxTentativas = (int) config('automacao.polling_max_tentativas', 50);
             $statusFinal = null;
             $resultado   = null;
 
