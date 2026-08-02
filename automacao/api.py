@@ -648,11 +648,10 @@ def _encerrar_jobs_anteriores(conn, estabelecimento_id: int, motivo: str) -> lis
             "UPDATE jobs SET status='erro', erro=?, etapa_atual=?, atualizado_em=? WHERE id=?",
             (motivo, 'Substituído por nova automação', agora, job_id),
         )
-        _append_job_log(
-            job_id,
-            motivo,
-            nivel='warning',
-            etapa='Cancelado',
+        conn.execute(
+            'INSERT INTO job_logs (job_id, nivel, etapa, mensagem, detalhe, criado_em)'
+            ' VALUES (?, ?, ?, ?, ?, ?)',
+            (job_id, 'warning', 'Cancelado', motivo, None, agora),
         )
 
     return ids

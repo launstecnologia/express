@@ -58,13 +58,17 @@ class AutomacaoErroInterpretador
         $detalhe = self::extrairDetalhe($contexto);
         $screenshots = self::coletarScreenshots($contexto, $logsRecentes);
 
-        $etapa = data_get($detalhe, 'etapa_falha_label')
-            ?: self::rotuloEtapa(data_get($detalhe, 'etapa_falha'))
-            ?: self::rotuloEtapaTexto(data_get($contexto, 'etapa_atual'))
-            ?: self::inferirEtapaDeErroFatal($screenshots)
-            ?: self::rotuloEtapaTexto(data_get($contexto, 'etapa_log'))
-            ?: self::inferirEtapaDeLogs($logsRecentes)
-            ?: self::inferirEtapaDeScreenshots($screenshots, $erro);
+        if (self::erroPareceRede($erro)) {
+            $etapa = 'API de automação';
+        } else {
+            $etapa = data_get($detalhe, 'etapa_falha_label')
+                ?: self::rotuloEtapa(data_get($detalhe, 'etapa_falha'))
+                ?: self::rotuloEtapaTexto(data_get($contexto, 'etapa_atual'))
+                ?: self::inferirEtapaDeErroFatal($screenshots)
+                ?: self::rotuloEtapaTexto(data_get($contexto, 'etapa_log'))
+                ?: self::inferirEtapaDeLogs($logsRecentes)
+                ?: self::inferirEtapaDeScreenshots($screenshots, $erro);
+        }
 
         $etapa = self::normalizarRotuloEtapa($etapa);
 
@@ -80,6 +84,9 @@ class AutomacaoErroInterpretador
                 .'Confira se o código FV do plano está correto e aparece na lista "Promoção mobile".';
         } elseif ($resumo === 'Erro desconhecido na automação.' && $etapa) {
             $resumo = 'O portal PagBank não avançou nesta etapa. Confira os screenshots para ver em qual tela parou.';
+        } elseif (self::erroPareceRede($erro)) {
+            $resumo = 'Não foi possível comunicar com o serviço de automação (API Python). '
+                .'Verifique se o container automacao está rodando: docker compose ps automacao';
         } elseif (self::erroPareceTimeout($erro) && $etapa) {
             $ultimaAtualizacao = data_get($contexto, 'atualizado_em');
             $versao = data_get($contexto, 'codigo_versao');
@@ -130,6 +137,21 @@ class AutomacaoErroInterpretador
         }
 
         return implode(' ', $partes);
+    }
+
+    private static function erroPareceRede(?string $erro): bool
+    {
+        if (blank($erro)) {
+            return false;
+        }
+
+        $texto = Str::lower($erro);
+
+        return str_contains($texto, 'curl error')
+            || str_contains($texto, 'could not resolve host')
+            || str_contains($texto, 'connection refused')
+            || str_contains($texto, 'failed to connect')
+            || (str_contains($texto, 'operation timed out') && str_contains($texto, 'automacao'));
     }
 
     private static function erroPareceTimeout(?string $erro): bool
@@ -259,6 +281,9 @@ class AutomacaoErroInterpretador
         $texto = Str::lower($erro);
 
         return match (true) {
+            str_contains($texto, 'curl error') || str_contains($texto, 'could not resolve host')
+            || str_contains($texto, 'connection refused') || str_contains($texto, 'failed to connect')
+            || str_contains($texto, 'operation timed out') && str_contains($texto, 'automacao') => 'API de automação',
             str_contains($texto, 'segmento') => 'Segmento',
             str_contains($texto, 'condições comerciais') || str_contains($texto, 'condicoes comerciais') => 'Plano / promoção mobile',
             str_contains($texto, 'promoção') || str_contains($texto, 'promocao') || str_contains($texto, 'plano') => 'Plano / promoção mobile',

@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 FV_URL = 'https://gestaocomercial.pagbank.com.br/login'
 
 # Incremente a cada deploy — confira em GET /health (campo codigo_versao)
-AUTOMACAO_CODIGO_VERSAO = '2026.08.02-proprietario-v5'
+AUTOMACAO_CODIGO_VERSAO = '2026.08.02-proprietario-v6'
 
 
 class ClienteInternoPagBankError(Exception):

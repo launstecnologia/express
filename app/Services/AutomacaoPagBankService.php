@@ -55,7 +55,7 @@ class AutomacaoPagBankService
     {
         $payload = $this->montarPayload($estab, $senha6);
 
-        $response = Http::timeout(15)
+        $response = $this->http(30)
             ->withHeaders(['X-Api-Key' => $this->apiKey])
             ->post("{$this->apiUrl}/cadastrar", $payload);
 
@@ -67,7 +67,7 @@ class AutomacaoPagBankService
             ]);
 
             sleep(1);
-            $response = Http::timeout(15)
+            $response = $this->http(30)
                 ->withHeaders(['X-Api-Key' => $this->apiKey])
                 ->post("{$this->apiUrl}/cadastrar", $payload);
         }
