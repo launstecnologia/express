@@ -490,6 +490,9 @@ def _executar_job(job_id: str, req: dict) -> None:
         _append_job_log(job_id, 'Execução iniciada', 'info', 'Início')
         _update_job(job_id, 'em_andamento', etapa_atual='Iniciando automação...')
 
+        from main import AUTOMACAO_CODIGO_VERSAO
+        log.info(f'[{job_id}] Versão automação: {AUTOMACAO_CODIGO_VERSAO}')
+
         # --- Etapa 1: Cadastro na Força de Vendas ---
         log.info(f'[{job_id}] Iniciando cadastro FV para estab {req["estabelecimento_id"]}')
         log.info(f'[{job_id}] webmail_url={req.get("webmail_url")}')
@@ -618,7 +621,13 @@ def _executar_aceitar_proposta(job_id: str, req: dict) -> None:
 @app.get('/health', tags=['Sistema'])
 async def health():
     """Verificação de disponibilidade da API."""
-    return {'ok': True, 'timestamp': datetime.now().isoformat()}
+    from main import AUTOMACAO_CODIGO_VERSAO
+
+    return {
+        'ok': True,
+        'timestamp': datetime.now().isoformat(),
+        'codigo_versao': AUTOMACAO_CODIGO_VERSAO,
+    }
 
 
 @app.post('/cadastrar', tags=['Automação'], status_code=202)

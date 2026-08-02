@@ -231,7 +231,12 @@ cmd_status() {
     if $COMPOSE ps automacao | grep -q "Up"; then
         HEALTH=$($COMPOSE exec -T automacao curl -s http://localhost:8001/health 2>/dev/null || echo '{}')
         if echo "$HEALTH" | grep -q '"ok":true'; then
-            ok "API Automação: saudável"
+            VERSAO=$(echo "$HEALTH" | grep -o '"codigo_versao":"[^"]*"' | cut -d'"' -f4)
+            if [ -n "$VERSAO" ]; then
+                ok "API Automação: saudável (versão: $VERSAO)"
+            else
+                ok "API Automação: saudável (versão antiga — faça deploy e restart automacao)"
+            fi
         else
             warn "API Automação: não respondeu (pode estar iniciando)"
         fi

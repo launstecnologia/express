@@ -29,6 +29,9 @@ log = logging.getLogger(__name__)
 
 FV_URL = 'https://gestaocomercial.pagbank.com.br/login'
 
+# Incremente a cada deploy — confira em GET /health (campo codigo_versao)
+AUTOMACAO_CODIGO_VERSAO = '2026.08.02-proprietario-v4'
+
 
 class ClienteInternoPagBankError(Exception):
     """Lançada quando o CNPJ/CPF pertence aos times internos do PagBank (FV-CDS-01)."""
@@ -713,25 +716,98 @@ class CadastradorFV:
             el.send_keys(char)
             time.sleep(intervalo)
 
-    def _preencher_campo_fv(
+    def _localizar_campo_fv(self, ids: list[str], labels: list[str] | None = None):
+        """Encontra input visível por id, seletor CSS ou texto do label."""
+        from selenium.common.exceptions import NoSuchElementException
+
+        labels = labels or []
+        for id_ in ids:
+            for by, sel in (
+                (By.ID, id_),
+                (By.CSS_SELECTOR, f'input#{id_}'),
+                (By.CSS_SELECTOR, f'input[id*="{id_}"]'),
+                (By.CSS_SELECTOR, f'[id="{id_}"] input'),
+            ):
+                try:
+                    for el in self.driver.find_elements(by, sel):
+                        try:
+                            if not el.is_displayed():
+                                continue
+                        except Exception:
+                            continue
+                        return el
+                except Exception:
+                    continue
+
+        for label in labels:
+            xpaths = (
+                f'//label[contains(normalize-space(.), "{label}")]/following::input[1]',
+                f'//label[contains(normalize-space(.), "{label}")]/..//input',
+                f'//input[@placeholder="{label}"]',
+                f'//*[contains(normalize-space(.), "{label}")]/ancestor::div[contains(@class,"input") or @role="group"][1]//input',
+            )
+            for xpath in xpaths:
+                try:
+                    el = self.driver.find_element(By.XPATH, xpath)
+                    if el.is_displayed():
+                        return el
+                except Exception:
+                    continue
+
+        raise NoSuchElementException(
+            f'Campo FV não encontrado (ids={ids}, labels={labels})'
+        )
+
+    def _salvar_diagnostico_formulario(self, contexto: str) -> str:
+        """Salva HTML + lista de inputs visíveis para debug."""
+        stamp = int(time.time())
+        html_path = os.path.join(self.screenshot_dir, f'diag_{contexto}_{stamp}.html')
+        txt_path = os.path.join(self.screenshot_dir, f'diag_{contexto}_{stamp}.txt')
+
+        with open(html_path, 'w', encoding='utf-8') as fh:
+            fh.write(self.driver.page_source)
+
+        linhas = [f'=== Diagnóstico {contexto} — v{AUTOMACAO_CODIGO_VERSAO} ===', '']
+        for inp in self.driver.find_elements(By.CSS_SELECTOR, 'input, textarea, select'):
+            try:
+                if not inp.is_displayed():
+                    continue
+            except Exception:
+                continue
+            linhas.append(
+                ' | '.join([
+                    f'id={inp.get_attribute("id")!r}',
+                    f'name={inp.get_attribute("name")!r}',
+                    f'type={inp.get_attribute("type")!r}',
+                    f'value={inp.get_attribute("value")!r}',
+                    f'placeholder={inp.get_attribute("placeholder")!r}',
+                ])
+            )
+
+        with open(txt_path, 'w', encoding='utf-8') as fh:
+            fh.write('\n'.join(linhas))
+
+        log.warning(f'Diagnóstico salvo: {txt_path}')
+        self._salvar_screenshot(f'diag_{contexto}')
+        return txt_path
+
+    def _preencher_campo_fv_elemento(
         self,
-        by,
-        seletor: str,
+        el,
         valor: str,
         descricao: str = '',
         *,
         apenas_digitos: bool = False,
         variantes: list[str] | None = None,
     ):
-        """Preenche campo React do FV com JS + digitação lenta e valida o resultado."""
+        """Preenche um elemento já localizado."""
         if not (valor or '').strip():
-            raise Exception(f'Valor vazio para campo: {descricao or seletor}')
+            raise Exception(f'Valor vazio para campo: {descricao}')
 
-        el = self.wait.until(EC.visibility_of_element_located((by, seletor)))
         self.driver.execute_script('arguments[0].scrollIntoView({block: "center"});', el)
         time.sleep(0.25)
 
-        tentativas = variantes or [valor]
+        tentativas = list(dict.fromkeys(variantes or [valor]))
         if apenas_digitos:
             digits = self._somente_digitos(valor)
             tentativas = list(dict.fromkeys([digits, valor] + tentativas))
@@ -744,22 +820,49 @@ class CadastradorFV:
                 alvo = self._resolver_input(el)
                 self._set_react_value_js(alvo, tentativa)
                 if self._campo_preenchido(el, valor, apenas_digitos=apenas_digitos):
-                    log.info(f'Preencheu (js) {descricao or seletor}: {tentativa}')
+                    log.info(f'Preencheu (js) {descricao}: {tentativa}')
                     return el
 
                 self._digitar_caractere_a_caractere(alvo, tentativa)
                 if self._campo_preenchido(el, valor, apenas_digitos=apenas_digitos):
-                    log.info(f'Preencheu (digitação) {descricao or seletor}: {tentativa}')
+                    log.info(f'Preencheu (digitação) {descricao}: {tentativa}')
                     return el
             except Exception as exc:
                 ultimo_erro = exc
-                log.warning(f'Tentativa falhou em {descricao or seletor}: {exc}')
+                log.warning(f'Tentativa falhou em {descricao}: {exc}')
 
-        self._salvar_screenshot(f'erro_preencher_{descricao or seletor}')
-        detalhe = f'Campo permaneceu vazio após preenchimento (valor esperado: {valor})'
+        self._salvar_diagnostico_formulario(descricao or 'campo')
+        self._salvar_screenshot(f'erro_preencher_{descricao}')
+        detalhe = f'Campo permaneceu vazio (esperado: {valor})'
         if ultimo_erro:
             detalhe = f'{detalhe} — {ultimo_erro}'
-        raise Exception(f'Nao preencheu campo: {descricao or seletor} — {detalhe}')
+        raise Exception(f'Nao preencheu campo: {descricao} — {detalhe}')
+
+    def _preencher_campo_fv(
+        self,
+        by,
+        seletor: str,
+        valor: str,
+        descricao: str = '',
+        *,
+        ids: list[str] | None = None,
+        labels: list[str] | None = None,
+        apenas_digitos: bool = False,
+        variantes: list[str] | None = None,
+    ):
+        """Preenche campo React do FV com JS + digitação lenta e valida o resultado."""
+        try:
+            el = self._localizar_campo_fv(ids or [seletor], labels)
+        except Exception:
+            el = self.wait.until(EC.visibility_of_element_located((by, seletor)))
+
+        return self._preencher_campo_fv_elemento(
+            el,
+            valor,
+            descricao or seletor,
+            apenas_digitos=apenas_digitos,
+            variantes=variantes,
+        )
 
     def _limpar_campo_react(self, el) -> None:
         """Limpa input React sem usar clear() — evita travamento do ChromeDriver em máscaras."""
@@ -1247,6 +1350,8 @@ class CadastradorFV:
 
         self._preencher_campo_fv(
             By.ID, 'info.cpf', cpf, 'cpf_socio',
+            ids=['info.cpf'],
+            labels=['CPF'],
             apenas_digitos=True,
             variantes=[self._somente_digitos(cpf), cpf],
         )
@@ -1254,12 +1359,18 @@ class CadastradorFV:
 
         self._preencher_campo_fv(
             By.ID, 'info.birthDate', nascimento, 'nascimento',
+            ids=['info.birthDate'],
+            labels=['Data de nascimento', 'Nascimento'],
             apenas_digitos=True,
             variantes=[self._somente_digitos(nascimento), nascimento],
         )
         time.sleep(0.4)
 
-        self._preencher_campo_fv(By.ID, 'info.name', nome, 'nome_socio')
+        self._preencher_campo_fv(
+            By.ID, 'info.name', nome, 'nome_socio',
+            ids=['info.name'],
+            labels=['Nome completo', 'Nome'],
+        )
         time.sleep(0.4)
 
         self._selecionar_faturamento()
