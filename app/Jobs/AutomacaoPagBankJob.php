@@ -197,23 +197,41 @@ class AutomacaoPagBankJob implements ShouldQueue
 
             } else {
                 // Timeout de polling — job ainda em andamento após o limite
+                $statusTimeout = null;
+                try {
+                    $statusTimeout = $service->consultarStatusParaPolling($estab, $jobId)
+                        ?? $service->consultarStatus($jobId);
+                } catch (\Throwable) {
+                    // mantém contexto mínimo
+                }
+
+                $contextoTimeout = $service->montarContextoErroJob($jobId, $statusTimeout);
+                $erroBruto = AutomacaoErroInterpretador::mensagemTimeout($contextoTimeout);
+                $erroInterpretado = AutomacaoErroInterpretador::interpretar($erroBruto, $contextoTimeout);
+                $erro = $erroInterpretado['mensagem_amigavel'];
+
                 $estab->update([
                     'fv_status' => 'timeout',
-                    'fv_erro'   => 'Timeout: automação não concluiu dentro do prazo esperado.',
+                    'fv_erro'   => $erro,
                 ]);
 
                 $automacaoLog->registrarErro(
                     $estab->id,
-                    'Timeout: automação não concluiu dentro do prazo esperado.',
+                    $erro,
                     $jobId ?? null,
-                    'timeout',
-                    ['status_final' => $statusFinal],
+                    $erroInterpretado['etapa'] ?? 'timeout',
+                    array_merge($contextoTimeout, [
+                        'status_final' => $statusFinal,
+                        'tipo' => 'timeout_polling',
+                    ]),
                 );
 
                 Log::warning('AutomacaoPagBankJob: timeout de polling', [
                     'estabelecimento_id' => $estab->id,
                     'job_id'             => $jobId,
                     'status_atual'       => $statusFinal,
+                    'etapa_atual'        => $contextoTimeout['etapa_atual'] ?? null,
+                    'codigo_versao'      => $contextoTimeout['codigo_versao'] ?? null,
                 ]);
             }
 

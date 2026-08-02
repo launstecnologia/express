@@ -60,6 +60,7 @@ class AutomacaoErroInterpretador
 
         $etapa = data_get($detalhe, 'etapa_falha_label')
             ?: self::rotuloEtapa(data_get($detalhe, 'etapa_falha'))
+            ?: self::rotuloEtapaTexto(data_get($contexto, 'etapa_atual'))
             ?: self::inferirEtapaDeErroFatal($screenshots)
             ?: self::rotuloEtapaTexto(data_get($contexto, 'etapa_log'))
             ?: self::inferirEtapaDeLogs($logsRecentes)
@@ -79,6 +80,19 @@ class AutomacaoErroInterpretador
                 .'Confira se o código FV do plano está correto e aparece na lista "Promoção mobile".';
         } elseif ($resumo === 'Erro desconhecido na automação.' && $etapa) {
             $resumo = 'O portal PagBank não avançou nesta etapa. Confira os screenshots para ver em qual tela parou.';
+        } elseif (self::erroPareceTimeout($erro) && $etapa) {
+            $ultimaAtualizacao = data_get($contexto, 'atualizado_em');
+            $versao = data_get($contexto, 'codigo_versao');
+            $extras = [];
+            if ($ultimaAtualizacao) {
+                $extras[] = "última atividade registrada em {$ultimaAtualizacao}";
+            }
+            if ($versao) {
+                $extras[] = "versão da automação: {$versao}";
+            }
+            $resumo = 'A automação não concluiu dentro do prazo esperado'
+                .($extras !== [] ? ' ('.implode('; ', $extras).')' : '')
+                .'. Confira os screenshots — a tela onde parou indica a etapa real.';
         }
 
         $titulo = $etapa ? "Falha na etapa: {$etapa}" : 'Erro no cadastro PagBank';
@@ -92,6 +106,43 @@ class AutomacaoErroInterpretador
             'tecnico' => $tecnico ?: $erro,
             'tem_screenshots' => $screenshots !== [],
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $contexto
+     */
+    public static function mensagemTimeout(?array $contexto): string
+    {
+        $etapa = self::rotuloEtapaTexto(data_get($contexto, 'etapa_atual'))
+            ?: 'desconhecida';
+        $status = data_get($contexto, 'status', 'em_andamento');
+
+        $partes = [
+            "Timeout: automação parou na etapa \"{$etapa}\" (status Python: {$status}).",
+        ];
+
+        if ($erroPython = data_get($contexto, 'erro_tecnico')) {
+            $partes[] = 'Detalhe: '.Str::limit((string) $erroPython, 300);
+        }
+
+        if ($versao = data_get($contexto, 'codigo_versao')) {
+            $partes[] = "Versão automação: {$versao}.";
+        }
+
+        return implode(' ', $partes);
+    }
+
+    private static function erroPareceTimeout(?string $erro): bool
+    {
+        if (blank($erro)) {
+            return false;
+        }
+
+        $texto = Str::lower($erro);
+
+        return str_contains($texto, 'timeout')
+            || str_contains($texto, 'prazo esperado')
+            || str_contains($texto, 'parou na etapa');
     }
 
     public static function logPareceErro(object $log): bool
@@ -333,7 +384,7 @@ class AutomacaoErroInterpretador
     private static function coletarScreenshots(?array $contexto, ?iterable $logsRecentes): array
     {
         $detalhe = self::extrairDetalhe($contexto);
-        $screenshots = data_get($detalhe, 'screenshots');
+        $screenshots = data_get($contexto, 'screenshots') ?? data_get($detalhe, 'screenshots');
 
         if (is_array($screenshots) && $screenshots !== []) {
             return array_values(array_map('strval', $screenshots));

@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 FV_URL = 'https://gestaocomercial.pagbank.com.br/login'
 
 # Incremente a cada deploy — confira em GET /health (campo codigo_versao)
-AUTOMACAO_CODIGO_VERSAO = '2026.08.02-proprietario-v4'
+AUTOMACAO_CODIGO_VERSAO = '2026.08.02-proprietario-v5'
 
 
 class ClienteInternoPagBankError(Exception):
@@ -296,7 +296,7 @@ class CadastradorFV:
         opcoes.add_argument('--disable-extensions')
 
         if self.headless:
-            opcoes.add_argument('--headless')
+            opcoes.add_argument('--headless=new')
 
         opcoes.add_argument('--window-size=1366,768')
         opcoes.add_argument('--disable-blink-features=AutomationControlled')

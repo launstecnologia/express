@@ -632,6 +632,32 @@ async def health():
     }
 
 
+def _encerrar_jobs_anteriores(conn, estabelecimento_id: int, motivo: str) -> list[str]:
+    """Encerra jobs pendente/em_andamento do estabelecimento para permitir nova execução."""
+    rows = conn.execute(
+        "SELECT id FROM jobs WHERE estabelecimento_id=? AND status IN ('pendente','em_andamento')",
+        (estabelecimento_id,),
+    ).fetchall()
+    ids = [row['id'] for row in rows]
+    if not ids:
+        return []
+
+    agora = datetime.now().isoformat()
+    for job_id in ids:
+        conn.execute(
+            "UPDATE jobs SET status='erro', erro=?, etapa_atual=?, atualizado_em=? WHERE id=?",
+            (motivo, 'Substituído por nova automação', agora, job_id),
+        )
+        _append_job_log(
+            job_id,
+            motivo,
+            nivel='warning',
+            etapa='Cancelado',
+        )
+
+    return ids
+
+
 @app.post('/cadastrar', tags=['Automação'], status_code=202)
 async def iniciar_cadastro(request: CadastrarRequest, x_api_key: str = Header(...)):
     """
@@ -640,28 +666,21 @@ async def iniciar_cadastro(request: CadastrarRequest, x_api_key: str = Header(..
     """
     _autenticar(x_api_key)
 
-    # Evita job duplicado para o mesmo estabelecimento em andamento
-    with _db_lock:
-        with _get_conn() as conn:
-            em_andamento = conn.execute(
-                "SELECT id FROM jobs WHERE estabelecimento_id=? AND status IN ('pendente','em_andamento')",
-                (request.estabelecimento_id,),
-            ).fetchone()
-
-    if em_andamento:
-        return JSONResponse(
-            status_code=409,
-            content={
-                'detail': 'Já existe um job em andamento para este estabelecimento.',
-                'job_id': em_andamento['id'],
-            },
-        )
-
     job_id = str(uuid.uuid4())
     agora  = datetime.now().isoformat()
 
     with _db_lock:
         with _get_conn() as conn:
+            cancelados = _encerrar_jobs_anteriores(
+                conn,
+                request.estabelecimento_id,
+                'Cancelado automaticamente — nova automação solicitada pela plataforma.',
+            )
+            if cancelados:
+                log.warning(
+                    f'Jobs anteriores encerrados para estab {request.estabelecimento_id}: {cancelados}'
+                )
+
             conn.execute(
                 'INSERT INTO jobs (id, estabelecimento_id, status, etapa_atual, dados, criado_em, atualizado_em)'
                 ' VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -842,6 +861,8 @@ async def consultar_status(job_id: str, x_api_key: str = Header(...)):
     if not row:
         raise HTTPException(status_code=404, detail='Job não encontrado')
 
+    from main import AUTOMACAO_CODIGO_VERSAO
+
     return {
         'job_id':             row['id'],
         'estabelecimento_id': row['estabelecimento_id'],
@@ -851,6 +872,7 @@ async def consultar_status(job_id: str, x_api_key: str = Header(...)):
         'erro':               row['erro'],
         'criado_em':          row['criado_em'],
         'atualizado_em':      row['atualizado_em'],
+        'codigo_versao':      AUTOMACAO_CODIGO_VERSAO,
         'logs':               _get_job_logs(job_id),
     }
 

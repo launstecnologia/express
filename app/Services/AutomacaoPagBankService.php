@@ -60,14 +60,16 @@ class AutomacaoPagBankService
             ->post("{$this->apiUrl}/cadastrar", $payload);
 
         if ($response->status() === 409) {
-            // Já existe job em andamento — retorna o job_id existente
-            $jobId = $response->json('job_id');
-            Log::info('AutomacaoPagBank: job já em andamento', [
+            // Compatibilidade com API antiga — cancela e tenta de novo
+            Log::warning('AutomacaoPagBank: job em andamento na API antiga — tentando novamente', [
                 'estabelecimento_id' => $estab->id,
-                'job_id' => $jobId,
+                'job_id' => $response->json('job_id'),
             ]);
 
-            return $jobId;
+            sleep(1);
+            $response = Http::timeout(15)
+                ->withHeaders(['X-Api-Key' => $this->apiKey])
+                ->post("{$this->apiUrl}/cadastrar", $payload);
         }
 
         if (! $response->successful()) {
@@ -122,6 +124,53 @@ class AutomacaoPagBankService
         }
 
         return $response->json();
+    }
+
+    /**
+     * Monta contexto rico para interpretação de erro (timeout, falha FV, etc.).
+     *
+     * @return array<string, mixed>
+     */
+    public function montarContextoErroJob(string $jobId, ?array $status = null): array
+    {
+        try {
+            $status ??= $this->consultarStatus($jobId);
+        } catch (\Throwable) {
+            $status = [];
+        }
+
+        $screenshots = [];
+        try {
+            $lista = $this->listarScreenshots($jobId);
+            foreach ($lista['screenshots'] ?? [] as $item) {
+                if (is_array($item) && filled($item['arquivo'] ?? null)) {
+                    $screenshots[] = (string) $item['arquivo'];
+                }
+            }
+        } catch (\Throwable) {
+            // ignora — screenshots podem não existir ainda
+        }
+
+        $resultado = $status['resultado'] ?? null;
+        $detalheFv = is_array($resultado) ? ($resultado['etapa_fv']['detalhe'] ?? $resultado['etapa_fv'] ?? null) : null;
+
+        return [
+            'status' => $status['status'] ?? null,
+            'etapa_atual' => $status['etapa_atual'] ?? null,
+            'etapa_log' => $status['etapa_atual'] ?? null,
+            'atualizado_em' => $status['atualizado_em'] ?? null,
+            'codigo_versao' => $status['codigo_versao'] ?? null,
+            'erro_tecnico' => $status['erro'] ?? null,
+            'resultado' => $resultado,
+            'detalhe' => array_filter([
+                'etapa_falha' => is_array($detalheFv) ? ($detalheFv['etapa_falha'] ?? null) : null,
+                'etapa_falha_label' => is_array($detalheFv) ? ($detalheFv['etapa_falha_label'] ?? null) : null,
+                'erro' => is_array($detalheFv) ? ($detalheFv['erro'] ?? null) : ($status['erro'] ?? null),
+                'erro_resumido' => is_array($detalheFv) ? ($detalheFv['erro_resumido'] ?? null) : null,
+                'screenshots' => is_array($detalheFv) ? ($detalheFv['screenshots'] ?? []) : [],
+            ]),
+            'screenshots' => $screenshots,
+        ];
     }
 
     public function consultarStatusESincronizarLogs(Estabelecimento $estab, string $jobId): array
