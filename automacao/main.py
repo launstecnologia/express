@@ -548,8 +548,14 @@ class CadastradorFV:
                 (By.XPATH, f'//li//div[@role="button"][@aria-label="{faturamento}"]')
             ))
         except TimeoutException:
-            self._salvar_screenshot('erro_faturamento_nao_encontrado')
-            raise Exception(f'Opção de faturamento não encontrada no PagBank: {faturamento}')
+            try:
+                opcao = self.wait.until(EC.element_to_be_clickable(
+                    (By.XPATH,
+                     f'//li//div[@role="button"][contains(@aria-label, "{faturamento[:20]}")]')
+                ))
+            except TimeoutException:
+                self._salvar_screenshot('erro_faturamento_nao_encontrado')
+                raise Exception(f'Opção de faturamento não encontrada no PagBank: {faturamento}')
 
         opcao.click()
         time.sleep(0.5)
@@ -635,6 +641,125 @@ class CadastradorFV:
         except TimeoutException:
             self._salvar_screenshot(f'erro_preencher_{descricao}')
             raise Exception(f'Nao encontrou campo: {descricao or seletor}')
+
+    def _resolver_input(self, el):
+        """Retorna o <input> real quando o seletor aponta para um wrapper React."""
+        tag = (el.tag_name or '').lower()
+        if tag in ('input', 'textarea'):
+            return el
+        for seletor in ('input', 'textarea'):
+            try:
+                inner = el.find_element(By.TAG_NAME, seletor)
+                if inner:
+                    return inner
+            except Exception:
+                continue
+        return el
+
+    @staticmethod
+    def _somente_digitos(valor: str) -> str:
+        return re.sub(r'\D', '', valor or '')
+
+    def _ler_valor_input(self, el) -> str:
+        el = self._resolver_input(el)
+        return (el.get_attribute('value') or '').strip()
+
+    def _campo_preenchido(self, el, esperado: str, apenas_digitos: bool = False) -> bool:
+        atual = self._ler_valor_input(el)
+        if not atual:
+            return False
+        if apenas_digitos:
+            return len(self._somente_digitos(atual)) >= len(self._somente_digitos(esperado))
+        esperado_norm = self._normalizar_texto(esperado)
+        atual_norm = self._normalizar_texto(atual)
+        return esperado_norm in atual_norm or atual_norm in esperado_norm
+
+    def _set_react_value_js(self, el, valor: str) -> None:
+        el = self._resolver_input(el)
+        self.driver.execute_script(
+            """
+            const el = arguments[0];
+            const value = arguments[1];
+            el.focus();
+            const proto = el.tagName === 'TEXTAREA'
+                ? HTMLTextAreaElement.prototype
+                : HTMLInputElement.prototype;
+            const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+            if (setter) {
+                setter.call(el, value);
+            } else {
+                el.value = value;
+            }
+            for (const type of ['input', 'change', 'blur']) {
+                el.dispatchEvent(new Event(type, { bubbles: true }));
+            }
+            """,
+            el,
+            str(valor),
+        )
+        time.sleep(0.35)
+
+    def _digitar_caractere_a_caractere(self, el, texto: str, intervalo: float = 0.06) -> None:
+        el = self._resolver_input(el)
+        from selenium.webdriver.common.action_chains import ActionChains
+        from selenium.webdriver.common.keys import Keys
+
+        ActionChains(self.driver).move_to_element(el).click().perform()
+        time.sleep(0.2)
+        el.send_keys(Keys.CONTROL, 'a')
+        el.send_keys(Keys.BACK_SPACE)
+        time.sleep(0.15)
+        for char in str(texto):
+            el.send_keys(char)
+            time.sleep(intervalo)
+
+    def _preencher_campo_fv(
+        self,
+        by,
+        seletor: str,
+        valor: str,
+        descricao: str = '',
+        *,
+        apenas_digitos: bool = False,
+        variantes: list[str] | None = None,
+    ):
+        """Preenche campo React do FV com JS + digitação lenta e valida o resultado."""
+        if not (valor or '').strip():
+            raise Exception(f'Valor vazio para campo: {descricao or seletor}')
+
+        el = self.wait.until(EC.visibility_of_element_located((by, seletor)))
+        self.driver.execute_script('arguments[0].scrollIntoView({block: "center"});', el)
+        time.sleep(0.25)
+
+        tentativas = variantes or [valor]
+        if apenas_digitos:
+            digits = self._somente_digitos(valor)
+            tentativas = list(dict.fromkeys([digits, valor] + tentativas))
+
+        ultimo_erro = None
+        for tentativa in tentativas:
+            if not tentativa:
+                continue
+            try:
+                alvo = self._resolver_input(el)
+                self._set_react_value_js(alvo, tentativa)
+                if self._campo_preenchido(el, valor, apenas_digitos=apenas_digitos):
+                    log.info(f'Preencheu (js) {descricao or seletor}: {tentativa}')
+                    return el
+
+                self._digitar_caractere_a_caractere(alvo, tentativa)
+                if self._campo_preenchido(el, valor, apenas_digitos=apenas_digitos):
+                    log.info(f'Preencheu (digitação) {descricao or seletor}: {tentativa}')
+                    return el
+            except Exception as exc:
+                ultimo_erro = exc
+                log.warning(f'Tentativa falhou em {descricao or seletor}: {exc}')
+
+        self._salvar_screenshot(f'erro_preencher_{descricao or seletor}')
+        detalhe = f'Campo permaneceu vazio após preenchimento (valor esperado: {valor})'
+        if ultimo_erro:
+            detalhe = f'{detalhe} — {ultimo_erro}'
+        raise Exception(f'Nao preencheu campo: {descricao or seletor} — {detalhe}')
 
     def _limpar_campo_react(self, el) -> None:
         """Limpa input React sem usar clear() — evita travamento do ChromeDriver em máscaras."""
@@ -1116,12 +1241,26 @@ class CadastradorFV:
         self._aguardar_campo_ou_falhar(By.ID, 'info.cpf', 'dados do proprietário', timeout=15)
         time.sleep(1)
 
-        self._preencher_react(By.ID, 'info.cpf', self.dados['cpf_socio'], 'cpf_socio')
-        time.sleep(0.5)
-        self._preencher_react(By.ID, 'info.birthDate', self.dados['nascimento'], 'nascimento')
-        time.sleep(0.5)
-        self._preencher_react(By.ID, 'info.name', self.dados['nome_socio'], 'nome_socio')
-        time.sleep(0.5)
+        cpf = self.dados['cpf_socio']
+        nascimento = self.dados['nascimento']
+        nome = self.dados['nome_socio']
+
+        self._preencher_campo_fv(
+            By.ID, 'info.cpf', cpf, 'cpf_socio',
+            apenas_digitos=True,
+            variantes=[self._somente_digitos(cpf), cpf],
+        )
+        time.sleep(0.4)
+
+        self._preencher_campo_fv(
+            By.ID, 'info.birthDate', nascimento, 'nascimento',
+            apenas_digitos=True,
+            variantes=[self._somente_digitos(nascimento), nascimento],
+        )
+        time.sleep(0.4)
+
+        self._preencher_campo_fv(By.ID, 'info.name', nome, 'nome_socio')
+        time.sleep(0.4)
 
         self._selecionar_faturamento()
         self._configurar_envio_documentos()
