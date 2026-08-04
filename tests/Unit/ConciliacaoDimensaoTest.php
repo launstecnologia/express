@@ -68,6 +68,13 @@ class ConciliacaoDimensaoTest extends TestCase
         $this->assertSame($chaveSemZeros, $chaveComZeros);
     }
 
+    public function test_escrow_edi_recebimento_unico_usa_plano(): void
+    {
+        $this->assertSame('14', ConciliacaoDimensao::escrowDoEdi('U', '14'));
+        $this->assertSame('0', ConciliacaoDimensao::escrowDoEdi('M', '03'));
+        $this->assertSame('0', ConciliacaoDimensao::escrowDoEdi('U', '00'));
+    }
+
     public function test_meio_edi_ignora_tipo_armazenado_outros_quando_arranjo_e_credito(): void
     {
         $this->assertSame(

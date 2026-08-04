@@ -231,6 +231,7 @@ class ConciliacaoConfrontoService
                 'em.canal_entrada',
                 'em.leitor',
                 'em.pagamento_prazo',
+                'em.plano',
                 'em.valor_total_transacao',
                 DB::raw(ComissaoAdminSql::percentual().' as comissao_percentual'),
                 DB::raw('COALESCE(e.token_pagseguro, em.estabelecimento, em.id_cliente) as id_cliente'),
@@ -255,7 +256,7 @@ class ConciliacaoConfrontoService
                 ),
                 ConciliacaoDimensao::parcelamentoDoEdi($mov->quantidade_parcela),
                 ConciliacaoDimensao::bandeiraDoEdi($mov->instituicao_financeira, $mov->tipo_transacao, $mov->arranjo_ur),
-                ConciliacaoDimensao::escrowDoEdi($mov->pagamento_prazo),
+                ConciliacaoDimensao::escrowDoEdi($mov->pagamento_prazo, $mov->plano),
                 ConciliacaoDimensao::solucaoDoEdi($mov->meio_captura, $mov->canal_entrada, $mov->leitor),
             );
 

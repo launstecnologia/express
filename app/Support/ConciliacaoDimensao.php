@@ -179,8 +179,27 @@ class ConciliacaoDimensao
         };
     }
 
-    public static function escrowDoEdi(?string $pagamentoPrazo): string
+    public static function escrowDoEdi(?string $pagamentoPrazo, ?string $plano = null): string
     {
+        $prazo = strtoupper(trim((string) $pagamentoPrazo));
+        $planoValor = trim((string) $plano);
+
+        if ($prazo === 'M') {
+            return '0';
+        }
+
+        if (in_array($prazo, ['U', 'A'], true)) {
+            return self::escrowNormalizado($planoValor !== '' ? $planoValor : '0');
+        }
+
+        if ($prazo !== '' && ctype_digit($prazo)) {
+            return self::escrowNormalizado($prazo);
+        }
+
+        if ($planoValor !== '') {
+            return self::escrowNormalizado($planoValor);
+        }
+
         return self::escrowNormalizado($pagamentoPrazo);
     }
 
@@ -192,7 +211,13 @@ class ConciliacaoDimensao
             return '0';
         }
 
-        return ltrim($valor, '0') === '' ? '0' : ltrim($valor, '0');
+        if (preg_match('/(\d+)/', $valor, $matches) === 1) {
+            $digits = $matches[1];
+
+            return ltrim($digits, '0') === '' ? '0' : ltrim($digits, '0');
+        }
+
+        return strtolower($valor);
     }
 
     private static function normalizarParcelamento(?string $valor): string

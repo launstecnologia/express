@@ -56,22 +56,28 @@ class ConciliacaoDiagnosticarCommand extends Command
             return self::SUCCESS;
         }
 
-        $chavesPag = $conciliacao->linhas()
+        $idsPag = $conciliacao->linhas()
             ->where('sem_estabelecimento', false)
-            ->limit(5000)
-            ->get()
-            ->map(fn ($linha) => ConciliacaoDimensao::chaveConfrontoDaLinha(
+            ->distinct()
+            ->pluck('id_cliente')
+            ->map(fn ($id) => ConciliacaoDimensao::idClienteNormalizado((string) $id))
+            ->flip();
+
+        $chavesPag = [];
+
+        foreach ($conciliacao->linhas()->where('sem_estabelecimento', false)->cursor() as $linha) {
+            $chavesPag[ConciliacaoDimensao::chaveConfrontoDaLinha(
                 (string) $linha->id_cliente,
                 $linha->meio_pagamento,
                 $linha->parcelamento_agrupado,
                 $linha->bandeira,
                 $linha->escrow,
                 $linha->solucao,
-            ))
-            ->unique()
-            ->flip();
+            )] = true;
+        }
 
         $chavesEdi = [];
+        $idsEdi = [];
         $amostrasEdi = [];
 
         $query = DB::table('edi_movimentos as em')
@@ -93,6 +99,7 @@ class ConciliacaoDiagnosticarCommand extends Command
                 'em.canal_entrada',
                 'em.leitor',
                 'em.pagamento_prazo',
+                'em.plano',
                 DB::raw('COALESCE(e.token_pagseguro, em.estabelecimento, em.id_cliente) as id_cliente'),
             ]);
 
@@ -103,18 +110,25 @@ class ConciliacaoDiagnosticarCommand extends Command
                 continue;
             }
 
+            $idNorm = ConciliacaoDimensao::idClienteNormalizado($idCliente);
+            $idsEdi[$idNorm] = true;
+
+            $escrow = ConciliacaoDimensao::escrowDoEdi($mov->pagamento_prazo, $mov->plano);
+            $meio = ConciliacaoDimensao::meioDoEdi(
+                $mov->tipo_transacao,
+                $mov->meio_pagamento,
+                $mov->arranjo_ur,
+                $mov->quantidade_parcela,
+            );
+            $solucao = ConciliacaoDimensao::solucaoDoEdi($mov->meio_captura, $mov->canal_entrada, $mov->leitor);
+
             $chave = ConciliacaoDimensao::chaveConfrontoDaLinha(
                 $idCliente,
-                ConciliacaoDimensao::meioDoEdi(
-                    $mov->tipo_transacao,
-                    $mov->meio_pagamento,
-                    $mov->arranjo_ur,
-                    $mov->quantidade_parcela,
-                ),
+                $meio,
                 ConciliacaoDimensao::parcelamentoDoEdi($mov->quantidade_parcela),
                 ConciliacaoDimensao::bandeiraDoEdi($mov->instituicao_financeira, $mov->tipo_transacao, $mov->arranjo_ur),
-                ConciliacaoDimensao::escrowDoEdi($mov->pagamento_prazo),
-                ConciliacaoDimensao::solucaoDoEdi($mov->meio_captura, $mov->canal_entrada, $mov->leitor),
+                $escrow,
+                $solucao,
             );
 
             $chavesEdi[$chave] = true;
@@ -122,41 +136,49 @@ class ConciliacaoDiagnosticarCommand extends Command
             if (count($amostrasEdi) < 5) {
                 $amostrasEdi[] = [
                     $idCliente,
-                    ConciliacaoDimensao::meioDoEdi($mov->tipo_transacao, $mov->meio_pagamento, $mov->arranjo_ur, $mov->quantidade_parcela),
-                    ConciliacaoDimensao::solucaoDoEdi($mov->meio_captura, $mov->canal_entrada, $mov->leitor),
+                    $meio,
+                    $escrow,
+                    $solucao,
                     substr($chave, 0, 12).'…',
                 ];
             }
         }
 
-        $sobreposicao = count(array_intersect_key($chavesEdi, $chavesPag->all()));
+        $idsEmComum = count(array_intersect_key($idsEdi, $idsPag->all()));
+        $sobreposicao = count(array_intersect_key($chavesEdi, $chavesPag));
 
         $this->newLine();
-        $this->info("Chaves únicas PagSeguro: {$chavesPag->count()}");
+        $this->info('IDs cliente distintos PagSeguro: '.$idsPag->count());
+        $this->info('IDs cliente distintos EDI: '.count($idsEdi));
+        $this->info("IDs cliente em comum: {$idsEmComum}");
+        $this->info('Chaves únicas PagSeguro: '.count($chavesPag));
         $this->info('Chaves únicas EDI: '.count($chavesEdi));
         $this->info("Chaves em comum: {$sobreposicao}");
 
-        if ($sobreposicao === 0 && $chavesPag->isNotEmpty() && $chavesEdi !== []) {
-            $this->warn('Nenhuma chave em comum — verifique dimensões (solução, meio, id_cliente).');
+        if ($idsEmComum === 0) {
+            $this->warn('Nenhum id_cliente em comum — tokens da planilha não batem com o EDI vinculado.');
+        } elseif ($sobreposicao === 0) {
+            $this->warn('IDs coincidem, mas nenhuma chave completa — verifique escrow, bandeira ou parcelamento.');
         }
 
         $amostrasPag = $conciliacao->linhas()
             ->where('sem_estabelecimento', false)
             ->limit(5)
-            ->get(['id_cliente', 'meio_pagamento', 'solucao'])
+            ->get(['id_cliente', 'meio_pagamento', 'escrow', 'solucao'])
             ->map(fn ($l) => [
                 $l->id_cliente,
                 ConciliacaoDimensao::meioNormalizado($l->meio_pagamento),
+                ConciliacaoDimensao::escrowNormalizado($l->escrow),
                 ConciliacaoDimensao::solucaoNormalizada($l->solucao),
             ])
             ->all();
 
         $this->newLine();
-        $this->comment('Amostra PagSeguro (id_cliente, meio, solução):');
-        $this->table(['ID cliente', 'Meio', 'Solução'], $amostrasPag);
+        $this->comment('Amostra PagSeguro (id_cliente, meio, escrow, solução):');
+        $this->table(['ID cliente', 'Meio', 'Escrow', 'Solução'], $amostrasPag);
 
-        $this->comment('Amostra EDI (id_cliente, meio, solução):');
-        $this->table(['ID cliente', 'Meio', 'Solução', 'Chave'], $amostrasEdi);
+        $this->comment('Amostra EDI (id_cliente, meio, escrow, solução):');
+        $this->table(['ID cliente', 'Meio', 'Escrow', 'Solução', 'Chave'], $amostrasEdi);
 
         return self::SUCCESS;
     }
