@@ -862,6 +862,7 @@ class EstabelecimentoController extends Controller
         $marketplaceFiltro = (string) ($request->input('marketplace_id') ?? '');
         $revendaFiltro = (string) ($request->input('revenda_id') ?? '');
         $planoFiltro = (string) ($request->input('plano_id') ?? '');
+        $masterFiltro = (string) ($request->input('master_id') ?? '');
         $status = (string) ($request->input('status') ?? '');
         $pagbank = (string) ($request->input('pagbank') ?? '');
 
@@ -869,7 +870,21 @@ class EstabelecimentoController extends Controller
             return true;
         }
 
+        // Filtro por marketplace/revenda/master específico: mostra a carteira completa
+        // (incluindo negados/inativos). Sem isso o admin vê só ativo=1 e parece que o filtro falhou.
+        if ($marketplaceFiltro !== '' && ctype_digit($marketplaceFiltro)) {
+            return true;
+        }
+
         if ($revendaFiltro === 'sem_revenda') {
+            return true;
+        }
+
+        if ($revendaFiltro !== '' && ctype_digit($revendaFiltro)) {
+            return true;
+        }
+
+        if ($masterFiltro !== '' && ctype_digit($masterFiltro)) {
             return true;
         }
 
