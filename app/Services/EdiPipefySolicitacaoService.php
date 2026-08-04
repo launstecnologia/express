@@ -250,4 +250,40 @@ class EdiPipefySolicitacaoService
 
         return $response->json() ?? [];
     }
+
+    /**
+     * @return list<string>
+     */
+    public function listarArquivosScreenshots(string $jobId): array
+    {
+        if ($jobId === '' || ! PlatformSettings::automacaoConfigurado()) {
+            return [];
+        }
+
+        try {
+            $apiUrl = PlatformSettings::automacaoApiUrl();
+            $apiKey = PlatformSettings::automacaoApiKey();
+
+            $response = Http::timeout(10)
+                ->withHeaders(['X-Api-Key' => $apiKey])
+                ->get("{$apiUrl}/jobs/{$jobId}/screenshots");
+
+            if (! $response->successful()) {
+                return [];
+            }
+
+            $itens = $response->json('screenshots') ?? [];
+            $nomes = [];
+            foreach ($itens as $item) {
+                $arquivo = is_array($item) ? ($item['arquivo'] ?? null) : $item;
+                if (is_string($arquivo) && $arquivo !== '') {
+                    $nomes[] = basename($arquivo);
+                }
+            }
+
+            return array_values(array_unique($nomes));
+        } catch (\Throwable) {
+            return [];
+        }
+    }
 }

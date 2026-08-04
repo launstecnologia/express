@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\EdiPipefySolicitacao;
+use App\Services\AutomacaoPagBankService;
 use App\Services\DirectAdminService;
 use App\Services\EdiPipefySolicitacaoService;
+use App\Support\PlatformSettings;
 use Illuminate\Http\Request;
 
 class EdiPipefyController extends Controller
@@ -29,11 +31,29 @@ class EdiPipefyController extends Controller
         ]);
     }
 
-    public function show(EdiPipefySolicitacao $solicitacao)
+    public function show(EdiPipefySolicitacao $solicitacao, EdiPipefySolicitacaoService $service)
     {
         $solicitacao->load(['itens.estabelecimento', 'solicitadoPor']);
 
-        return view('admin.edi-pipefy.show', compact('solicitacao'));
+        $screenshots = [];
+        if (filled($solicitacao->automacao_job_id)) {
+            $screenshots = $service->listarArquivosScreenshots($solicitacao->automacao_job_id);
+        }
+        if ($screenshots === [] && is_array($solicitacao->screenshots)) {
+            $screenshots = array_values(array_filter(array_map(
+                fn ($s) => is_string($s) ? basename($s) : null,
+                $solicitacao->screenshots
+            )));
+        }
+
+        $etapaAtual = data_get($solicitacao->resultado, 'etapa_atual')
+            ?: data_get($solicitacao->resultado, 'detalhe.etapa');
+
+        return view('admin.edi-pipefy.show', [
+            'solicitacao' => $solicitacao,
+            'screenshots' => $screenshots,
+            'etapaAtual' => $etapaAtual,
+        ]);
     }
 
     public function solicitar(Request $request, EdiPipefySolicitacaoService $service)
@@ -70,5 +90,56 @@ class EdiPipefyController extends Controller
         }
 
         return back()->with('status', $msg);
+    }
+
+    public function screenshots(EdiPipefySolicitacao $solicitacao, EdiPipefySolicitacaoService $service)
+    {
+        if (blank($solicitacao->automacao_job_id)) {
+            $locais = is_array($solicitacao->screenshots) ? $solicitacao->screenshots : [];
+
+            return response()->json([
+                'job_id' => null,
+                'screenshots' => array_map(
+                    fn ($arquivo) => ['arquivo' => basename((string) $arquivo)],
+                    $locais
+                ),
+            ]);
+        }
+
+        $arquivos = $service->listarArquivosScreenshots($solicitacao->automacao_job_id);
+
+        return response()->json([
+            'job_id' => $solicitacao->automacao_job_id,
+            'screenshots' => array_map(fn ($arquivo) => ['arquivo' => $arquivo], $arquivos),
+        ]);
+    }
+
+    public function screenshot(EdiPipefySolicitacao $solicitacao, string $filename)
+    {
+        $arquivo = basename($filename);
+        if ($arquivo === '' || ! str_ends_with(strtolower($arquivo), '.png')) {
+            abort(404, 'Screenshot não encontrado');
+        }
+
+        if (blank($solicitacao->automacao_job_id) || ! PlatformSettings::automacaoConfigurado()) {
+            abort(404, 'Screenshot não disponível (job de automação ausente)');
+        }
+
+        try {
+            $response = app(AutomacaoPagBankService::class)
+                ->baixarScreenshot($solicitacao->automacao_job_id, $arquivo);
+
+            if (! $response->successful()) {
+                abort(404, 'Screenshot não encontrado');
+            }
+
+            return response($response->body(), 200, [
+                'Content-Type' => 'image/png',
+                'Content-Disposition' => 'inline; filename="'.$arquivo.'"',
+                'Cache-Control' => 'private, max-age=300',
+            ]);
+        } catch (\Throwable $e) {
+            abort(502, $e->getMessage());
+        }
     }
 }

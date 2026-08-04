@@ -54,14 +54,25 @@ class AbrirChamadoEdiPipefyJob implements ShouldQueue
                 if (in_array($estado, ['concluido', 'erro', 'erro_email', 'erro_proposta'], true)) {
                     $resultado = $status['resultado'] ?? null;
                     $detalhe = is_array($resultado) ? ($resultado['detalhe'] ?? $resultado) : null;
+                    $screenshots = $this->normalizarScreenshots(
+                        data_get($detalhe, 'screenshots') ?: data_get($resultado, 'screenshots')
+                    );
+
+                    if ($screenshots === []) {
+                        $screenshots = $service->listarArquivosScreenshots($jobId);
+                    }
+
+                    $payloadResultado = is_array($resultado) ? $resultado : ['raw' => $resultado];
+                    $payloadResultado['etapa_atual'] = $status['etapa_atual'] ?? null;
+                    $payloadResultado['status_api'] = $estado;
 
                     if ($estado === 'concluido') {
                         $solicitacao->update([
                             'status' => 'concluido',
                             'concluido_em' => now(),
                             'pipefy_card_id' => data_get($detalhe, 'card_id') ?: data_get($resultado, 'card_id'),
-                            'resultado' => is_array($resultado) ? $resultado : ['raw' => $resultado],
-                            'screenshots' => data_get($detalhe, 'screenshots') ?: data_get($resultado, 'screenshots'),
+                            'resultado' => $payloadResultado,
+                            'screenshots' => $screenshots,
                             'erro' => null,
                         ]);
 
@@ -73,27 +84,37 @@ class AbrirChamadoEdiPipefyJob implements ShouldQueue
                         return;
                     }
 
+                    $erro = (string) ($status['erro'] ?? 'Falha na automação Pipefy EDI');
+                    $etapa = (string) ($status['etapa_atual'] ?? '');
+                    if ($etapa !== '' && ! str_contains($erro, $etapa)) {
+                        $erro = trim($etapa.' — '.$erro);
+                    }
+
                     $solicitacao->update([
                         'status' => 'erro',
                         'concluido_em' => now(),
-                        'erro' => $status['erro'] ?? 'Falha na automação Pipefy EDI',
-                        'resultado' => is_array($resultado) ? $resultado : null,
-                        'screenshots' => data_get($detalhe, 'screenshots'),
+                        'erro' => $erro,
+                        'resultado' => $payloadResultado,
+                        'screenshots' => $screenshots,
                     ]);
 
                     Log::error('AbrirChamadoEdiPipefyJob: falhou', [
                         'solicitacao_id' => $solicitacao->id,
                         'erro' => $solicitacao->erro,
+                        'screenshots' => count($screenshots),
                     ]);
 
                     return;
                 }
             }
 
+            $screenshots = $service->listarArquivosScreenshots($jobId);
             $solicitacao->update([
                 'status' => 'erro',
                 'concluido_em' => now(),
                 'erro' => 'Timeout aguardando automação Pipefy EDI',
+                'screenshots' => $screenshots,
+                'resultado' => ['status_api' => 'timeout', 'etapa_atual' => 'Timeout'],
             ]);
         } catch (\Throwable $e) {
             Log::error('AbrirChamadoEdiPipefyJob: exceção', [
@@ -107,5 +128,29 @@ class AbrirChamadoEdiPipefyJob implements ShouldQueue
                 'erro' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * @param  mixed  $screenshots
+     * @return list<string>
+     */
+    private function normalizarScreenshots(mixed $screenshots): array
+    {
+        if (! is_array($screenshots)) {
+            return [];
+        }
+
+        $nomes = [];
+        foreach ($screenshots as $item) {
+            if (is_array($item)) {
+                $item = $item['arquivo'] ?? $item['path'] ?? null;
+            }
+            if (! is_string($item) || $item === '') {
+                continue;
+            }
+            $nomes[] = basename($item);
+        }
+
+        return array_values(array_unique($nomes));
     }
 }

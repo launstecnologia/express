@@ -88,6 +88,7 @@
                 <th class="px-5 py-3">IDs</th>
                 <th class="px-5 py-3">ID Origem</th>
                 <th class="px-5 py-3">Status</th>
+                <th class="px-5 py-3">Falha</th>
                 <th class="px-5 py-3">Card</th>
                 <th class="px-5 py-3"></th>
             </tr>
@@ -105,6 +106,13 @@
                     <td class="px-5 py-4">
                         <span class="rounded-full px-2.5 py-1 text-xs font-semibold {{ $badgeClass }}">{{ $badgeLabel }}</span>
                     </td>
+                    <td class="max-w-[220px] px-5 py-4 text-xs text-red-700 dark:text-red-300">
+                        @if ($solicitacao->erro)
+                            <span title="{{ $solicitacao->erro }}">{{ \Illuminate\Support\Str::limit($solicitacao->erro, 80) }}</span>
+                        @else
+                            <span class="text-gray-400">—</span>
+                        @endif
+                    </td>
                     <td class="px-5 py-4 font-mono text-xs text-gray-600">{{ $solicitacao->pipefy_card_id ?: '—' }}</td>
                     <td class="px-5 py-4 text-right">
                         <a href="{{ route('admin.edi-pipefy.show', $solicitacao) }}" class="font-semibold text-blue-600 hover:underline">Ver</a>
@@ -112,7 +120,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7" class="px-5 py-10 text-center text-gray-500">Nenhum chamado registrado ainda.</td>
+                    <td colspan="8" class="px-5 py-10 text-center text-gray-500">Nenhum chamado registrado ainda.</td>
                 </tr>
             @endforelse
         </tbody>
