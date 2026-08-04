@@ -198,18 +198,20 @@ class EdiPipefySolicitacaoService
     {
         $apiUrl = PlatformSettings::automacaoApiUrl();
         $apiKey = PlatformSettings::automacaoApiKey();
+        $cfg = (array) config('pagbank.pipefy_edi', []);
 
         $payload = [
             'solicitacao_id' => $solicitacao->id,
-            'page_url' => config('pagbank.pipefy_edi.page_url'),
-            'email' => $solicitacao->email_devolutiva,
-            'tipo_solicitacao' => config('pagbank.pipefy_edi.tipo_solicitacao'),
-            'token' => PlatformSettings::ediToken(),
-            'id_origem' => $solicitacao->id_origem,
-            'descricao' => $solicitacao->descricao,
-            'razao_social' => config('pagbank.pipefy_edi.razao_social'),
-            'cnpj' => config('pagbank.pipefy_edi.cnpj'),
-            'telefone' => config('pagbank.pipefy_edi.telefone') ?: null,
+            'page_url' => (string) ($cfg['page_url']
+                ?: 'https://app.pipefy.com/organizations/142456/interfaces/3668b8ed-d930-4bcf-8038-8a00d3ed6901/pages/243d9728-5742-47d1-b791-ce04f061ac13'),
+            'email' => (string) $solicitacao->email_devolutiva,
+            'tipo_solicitacao' => (string) ($cfg['tipo_solicitacao'] ?: 'Replicação do token API EDI'),
+            'token' => (string) PlatformSettings::ediToken(),
+            'id_origem' => (string) $solicitacao->id_origem,
+            'descricao' => (string) ($solicitacao->descricao ?? ''),
+            'razao_social' => (string) ($cfg['razao_social'] ?: 'Expresspay Pagamentos Ltda'),
+            'cnpj' => (string) ($cfg['cnpj'] ?: '22402704000123'),
+            'telefone' => filled($cfg['telefone'] ?? null) ? (string) $cfg['telefone'] : null,
             'headless' => (bool) config('automacao.headless', true),
         ];
 
