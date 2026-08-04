@@ -8,13 +8,34 @@
     $totalComissao = $linhas->sum('total_comissao');
 @endphp
 
+<form method="GET" action="{{ route('comissoes.index') }}" class="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div class="min-w-[220px] flex-1">
+        <label for="mes" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Mês de referência</label>
+        <select id="mes" name="mes" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm" onchange="this.form.submit()">
+            @forelse ($mesesDisponiveis as $opcao)
+                <option value="{{ $opcao->valor }}" @selected($mesSelecionado === $opcao->valor)>{{ $opcao->rotulo }}</option>
+            @empty
+                <option value="">Nenhuma planilha importada</option>
+            @endforelse
+        </select>
+    </div>
+    @if ($conciliacao)
+        <div class="flex items-center gap-2 pb-2">
+            <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                <i class="fa-solid fa-circle-check mr-1"></i> Conciliado
+            </span>
+            <span class="text-xs text-gray-400">Fonte: planilha PagSeguro</span>
+        </div>
+    @endif
+</form>
+
 <div class="mb-6 grid grid-cols-1 gap-3 md:grid-cols-2">
     <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <p class="mb-1 text-xs font-medium text-gray-500">Faturamento (página)</p>
+        <p class="mb-1 text-xs font-medium text-gray-500">Faturamento{{ $periodoRotulo ? " · {$periodoRotulo}" : '' }}</p>
         <span class="text-2xl font-bold text-green-600">R$ {{ number_format($totalFaturamento, 2, ',', '.') }}</span>
     </div>
     <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <p class="mb-1 text-xs font-medium text-gray-500">Comissões (página)</p>
+        <p class="mb-1 text-xs font-medium text-gray-500">Comissões{{ $periodoRotulo ? " · {$periodoRotulo}" : '' }}</p>
         <span class="text-2xl font-bold text-sky-600">R$ {{ number_format($totalComissao, 2, ',', '.') }}</span>
     </div>
 </div>
@@ -23,7 +44,13 @@
     <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
         <div>
             <h3 class="text-sm font-semibold text-gray-700">Extrato de comissões</h3>
-            <p class="text-xs text-gray-400">{{ $linhas->total() }} resultado(s) · resumo por marketplace e período</p>
+            <p class="text-xs text-gray-400">
+                {{ $linhas->total() }} marketplace(s)
+                @if ($periodoRotulo)
+                    · {{ $periodoRotulo }}
+                @endif
+                · dados da planilha PagSeguro
+            </p>
         </div>
         <button type="button" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">Exportar</button>
     </div>
@@ -32,6 +59,7 @@
             <tr class="border-b border-gray-100 bg-gray-50">
                 <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Marketplace</th>
                 <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Período</th>
+                <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
                 <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Faturamento</th>
                 <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Comissão</th>
             </tr>
@@ -45,12 +73,25 @@
                     <td class="px-5 py-4">
                         <span class="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-700">{{ $linha->periodo }}</span>
                     </td>
+                    <td class="px-5 py-4">
+                        @if ($linha->conciliado)
+                            <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">Conciliado</span>
+                        @else
+                            <span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-600">Sem planilha</span>
+                        @endif
+                    </td>
                     <td class="px-5 py-4 font-semibold text-green-600">R$ {{ number_format($linha->total_faturamento, 2, ',', '.') }}</td>
                     <td class="px-5 py-4 font-semibold text-sky-600">R$ {{ number_format($linha->total_comissao, 2, ',', '.') }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="4" class="px-5 py-10 text-center text-sm text-gray-500">Nenhuma comissão encontrada no período.</td>
+                    <td colspan="5" class="px-5 py-10 text-center text-sm text-gray-500">
+                        @if ($mesesDisponiveis->isEmpty())
+                            Nenhuma planilha PagSeguro importada. Importe em Admin → Conciliação.
+                        @else
+                            Nenhuma comissão de marketplace encontrada para o período selecionado.
+                        @endif
+                    </td>
                 </tr>
             @endforelse
         </tbody>
