@@ -81,22 +81,56 @@ class DirectAdminService
 
     public function emailExistePlataforma(string $user): bool
     {
-        $response = $this->client()->get('/CMD_API_EMAIL_POP', [
+        // Em alguns DirectAdmin a listagem exige action=list (CMD_API_POP).
+        $response = $this->client()->asForm()->post('/CMD_API_POP', [
+            'action' => 'list',
             'domain' => config('directadmin.dominio'),
         ]);
+
+        if (! $response->successful()) {
+            // Fallback legado
+            $response = $this->client()->get('/CMD_API_EMAIL_POP', [
+                'domain' => config('directadmin.dominio'),
+            ]);
+        }
 
         if (! $response->successful()) {
             return false;
         }
 
         parse_str($response->body(), $dados);
-        $lista = $dados['list'] ?? [];
+        if (($dados['error'] ?? null) === '1') {
+            return false;
+        }
 
-        return in_array(strtolower($user), array_map('strtolower', (array) $lista), true);
+        // DirectAdmin pode devolver list[]=a&list[]=b
+        $lista = $dados['list'] ?? $dados['list[]'] ?? [];
+        if (! is_array($lista)) {
+            $lista = array_filter(explode(',', (string) $lista));
+        }
+
+        return in_array(strtolower($user), array_map('strtolower', array_map('strval', $lista)), true);
     }
 
     public function criarEmailPlataforma(string $user, string $senha, int $cota = 500): bool
     {
+        $response = $this->client()->post('/CMD_API_POP', [
+            'action' => 'create',
+            'domain' => config('directadmin.dominio'),
+            'user' => $user,
+            'passwd' => $senha,
+            'passwd2' => $senha,
+            'quota' => $cota,
+        ]);
+
+        if ($response->successful()) {
+            parse_str($response->body(), $dados);
+            if (($dados['error'] ?? '1') === '0') {
+                return true;
+            }
+        }
+
+        // Fallback legado
         $response = $this->client()->post('/CMD_API_EMAIL_POP', [
             'action' => 'create',
             'domain' => config('directadmin.dominio'),
@@ -106,11 +140,32 @@ class DirectAdminService
             'quota' => $cota,
         ]);
 
-        return $response->successful();
+        if (! $response->successful()) {
+            return false;
+        }
+
+        parse_str($response->body(), $dados);
+
+        return ($dados['error'] ?? '1') === '0';
     }
 
     public function alterarSenhaEmailPlataforma(string $user, string $novaSenha): bool
     {
+        $response = $this->client()->post('/CMD_API_POP', [
+            'action' => 'modify',
+            'domain' => config('directadmin.dominio'),
+            'user' => $user,
+            'passwd' => $novaSenha,
+            'passwd2' => $novaSenha,
+        ]);
+
+        if ($response->successful()) {
+            parse_str($response->body(), $dados);
+            if (($dados['error'] ?? '1') === '0') {
+                return true;
+            }
+        }
+
         $response = $this->client()->post('/CMD_API_EMAIL_POP', [
             'action' => 'modify',
             'domain' => config('directadmin.dominio'),
@@ -119,7 +174,13 @@ class DirectAdminService
             'passwd2' => $novaSenha,
         ]);
 
-        return $response->successful();
+        if (! $response->successful()) {
+            return false;
+        }
+
+        parse_str($response->body(), $dados);
+
+        return ($dados['error'] ?? '1') === '0';
     }
 
     public function redirecionarEmailPlataforma(string $user, string $destino): bool

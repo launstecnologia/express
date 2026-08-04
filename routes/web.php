@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\ChamadoController as AdminChamadoController;
 use App\Http\Controllers\Admin\AdminKycController;
 use App\Http\Controllers\Admin\ConciliacaoController;
 use App\Http\Controllers\Admin\ConfiguracaoPlataformaController;
+use App\Http\Controllers\Admin\EdiPipefyController;
 use App\Http\Controllers\Admin\EstabelecimentoAutomacaoController;
 use App\Http\Controllers\Admin\EstabelecimentoPagBankController;
 use App\Http\Controllers\Admin\EmailTemplateController;
@@ -189,6 +190,12 @@ Route::middleware(['auth', 'trocar.senha', 'tenant.access'])->group(function () 
         Route::get('admin/email-templates/{emailTemplate}/edit', [EmailTemplateController::class, 'edit'])->name('admin.email-templates.edit');
         Route::put('admin/email-templates/{emailTemplate}', [EmailTemplateController::class, 'update'])->name('admin.email-templates.update');
         Route::post('admin/email-templates/{emailTemplate}/teste', [EmailTemplateController::class, 'teste'])->name('admin.email-templates.teste');
+        Route::prefix('admin/edi-pipefy')->name('admin.edi-pipefy.')->group(function () {
+            Route::get('/', [EdiPipefyController::class, 'index'])->name('index');
+            Route::post('/solicitar', [EdiPipefyController::class, 'solicitar'])->name('solicitar');
+            Route::post('/criar-email', [EdiPipefyController::class, 'criarEmail'])->name('criar-email');
+            Route::get('/{solicitacao}', [EdiPipefyController::class, 'show'])->name('show');
+        });
         Route::prefix('admin/conciliacoes')->name('admin.conciliacoes.')->group(function () {
             Route::get('/', [ConciliacaoController::class, 'index'])->name('index');
             Route::get('/importar', [ConciliacaoController::class, 'create'])->name('create');

@@ -319,6 +319,20 @@ class AceitarPropostaRequest(BaseModel):
     headless: bool = Field(default=True, description='Rodar Chrome em modo headless')
 
 
+class PipefyEdiRequest(BaseModel):
+    solicitacao_id: int = Field(..., description='ID da solicitação no Laravel')
+    page_url: str = Field(..., description='URL da página Pipefy EDI')
+    email: str = Field(..., description='E-mail de devolutiva')
+    tipo_solicitacao: str = Field(default='Replicação do token API EDI')
+    token: str = Field(..., description='Token EDI a replicar')
+    id_origem: str = Field(..., description='USER/ID origem do token')
+    descricao: str = Field(..., description='Texto com lista de Safepay IDs')
+    razao_social: str = Field(default='')
+    cnpj: str = Field(default='')
+    telefone: str | None = Field(default=None)
+    headless: bool = Field(default=True)
+
+
 # ----------------------------------------------------------------
 # Autenticação
 # ----------------------------------------------------------------
@@ -617,6 +631,61 @@ def _executar_aceitar_proposta(job_id: str, req: dict) -> None:
         remover(job_id)
 
 
+def _executar_pipefy_edi(job_id: str, req: dict) -> None:
+    from progresso import registrar, remover
+
+    screenshot_dir = os.path.join(SCREENSHOT_DIR, job_id)
+    os.makedirs(screenshot_dir, exist_ok=True)
+
+    registrar(job_id, lambda etapa: _set_etapa(job_id, etapa))
+
+    try:
+        _append_job_log(job_id, 'Execução iniciada', 'info', 'Início')
+        _update_job(job_id, 'em_andamento', etapa_atual='Abrindo chamado Pipefy EDI...')
+        log.info(f'[{job_id}] Pipefy EDI solicitação Laravel #{req.get("solicitacao_id")}')
+
+        from pipefy_edi import abrir_chamado_pipefy_edi
+
+        resultado = abrir_chamado_pipefy_edi(
+            page_url=req.get('page_url') or '',
+            email=req.get('email') or '',
+            token=req.get('token') or '',
+            id_origem=req.get('id_origem') or '',
+            descricao=req.get('descricao') or '',
+            tipo_solicitacao=req.get('tipo_solicitacao') or 'Replicação do token API EDI',
+            razao_social=req.get('razao_social') or '',
+            cnpj=req.get('cnpj') or '',
+            telefone=req.get('telefone') or '',
+            headless=req.get('headless', True),
+            screenshot_dir=screenshot_dir,
+            job_id=job_id,
+        )
+
+        if resultado.get('sucesso'):
+            _update_job(
+                job_id, 'concluido',
+                resultado={
+                    'tipo_job': 'pipefy_edi',
+                    'detalhe': resultado,
+                    'card_id': resultado.get('card_id'),
+                },
+                etapa_atual='Chamado Pipefy EDI enviado',
+            )
+            log.info(f'[{job_id}] Pipefy EDI OK card={resultado.get("card_id")}')
+        else:
+            _update_job(
+                job_id, 'erro',
+                resultado={'tipo_job': 'pipefy_edi', 'detalhe': resultado},
+                erro=resultado.get('erro', 'Falha ao abrir chamado Pipefy EDI'),
+                etapa_atual='Erro no Pipefy EDI',
+            )
+    except Exception as e:
+        log.exception(f'[{job_id}] Erro inesperado Pipefy EDI')
+        _update_job(job_id, 'erro', erro=str(e), etapa_atual='Erro inesperado')
+    finally:
+        remover(job_id)
+
+
 # ----------------------------------------------------------------
 # Endpoints
 # ----------------------------------------------------------------
@@ -836,6 +905,43 @@ async def aceitar_proposta_endpoint(request: AceitarPropostaRequest, x_api_key: 
     thread.start()
 
     log.info(f'Job proposta {job_id} criado para estab {request.estabelecimento_id}')
+    return {'job_id': job_id, 'status': 'pendente'}
+
+
+@app.post('/pipefy-edi', tags=['Automação'], status_code=202)
+async def pipefy_edi_endpoint(request: PipefyEdiRequest, x_api_key: str = Header(...)):
+    """
+    Abre chamado no Pipefy PagBank (Novas Ativações — replicação de token EDI 1xN).
+    """
+    _autenticar(x_api_key)
+
+    job_id = str(uuid.uuid4())
+    agora = datetime.now().isoformat()
+    dados = request.model_dump()
+    # Não persiste token em claro nos logs da API além do necessário ao job
+    dados_log = {**dados, 'token': '***'}
+
+    with _db_lock:
+        with _get_conn() as conn:
+            conn.execute(
+                'INSERT INTO jobs (id, estabelecimento_id, status, etapa_atual, dados, criado_em, atualizado_em)'
+                ' VALUES (?, ?, ?, ?, ?, ?, ?)',
+                (
+                    job_id, 0, 'pendente', 'Aguardando Pipefy EDI',
+                    json.dumps(dados_log, ensure_ascii=False),
+                    agora, agora,
+                ),
+            )
+            conn.commit()
+
+    thread = threading.Thread(
+        target=_executar_pipefy_edi,
+        args=(job_id, dados),
+        daemon=True,
+    )
+    thread.start()
+
+    log.info(f'Job Pipefy EDI {job_id} criado para solicitação {request.solicitacao_id}')
     return {'job_id': job_id, 'status': 'pendente'}
 
 

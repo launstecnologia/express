@@ -21,6 +21,13 @@ Schedule::job(new CalcularRoyaltiesJob)->everyFifteenMinutes();
 Schedule::job(new AgregarFaturamentoJob)->dailyAt('02:00');
 Schedule::job(new SincronizarEmailsJob)->everyFiveMinutes();
 
+// Chamado semanal Pipefy — replicação de token EDI com Safepay IDs novos
+Schedule::command('edi:pipefy-solicitar')
+    ->weeklyOn(1, '09:00')
+    ->name('edi-pipefy-solicitar-semanal')
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Mantém o cache do dashboard sempre quente (TTL é 5min) para que o admin
 // nunca pague o custo da agregação em edi_movimentos ao abrir a tela.
 Schedule::command('dashboard:warm-cache')
