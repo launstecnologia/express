@@ -284,34 +284,47 @@ class PipefyEdiSolicitador:
         ))
 
     def _preencher_formulario(self) -> None:
+        # 1) Quem é você? — libera os demais campos condicionais
         self._responder_quem_e_voce()
-        self._preencher_contatos_iniciais()
+        self._aguardar_campos_replicacao()
+        self._salvar_screenshot('apos_quem_e_voce')
 
-        # E-mail / domínio
+        # 2) E-mail de mesmo domínio (devolutiva)
         self._preencher_por_label(
             [
                 'mail de mesmo domínio',
                 'mesmo domínio',
-                'e-mail',
-                'email',
+                'exemplo@dominio',
                 'E-mail',
+                'Email',
+                'e-mail',
             ],
             self.email,
             opcional=True,
         )
 
+        # 3) Tipo = Replicação do token API EDI
         self._selecionar_tipo_solicitacao()
-
-        # Token e ID Origem só aparecem depois do tipo "Replicação"
         time.sleep(1)
         self._salvar_screenshot('apos_tipo')
 
-        self._preencher_por_label(['* Token', 'Token'], self.token, opcional=False)
-        self._preencher_por_label(['ID Origem', 'ID origem', 'Id Origem'], self.id_origem, opcional=False)
+        # 4) Token + ID Origem = credenciais da matriz (Admin → PagBank)
         self._preencher_por_label(
-            ['Descrição', 'Descricao', 'descrição'],
+            ['Informe o token a ser replicado', '* Token', 'Token'],
+            self.token,
+            opcional=False,
+        )
+        self._preencher_por_label(
+            ['ID em que token foi originalmente', 'ID Origem', 'ID origem', 'Id Origem'],
+            self.id_origem,
+            opcional=False,
+        )
+
+        # 5) IDs dos estabelecimentos (Safepay) vão na Descrição / observação
+        self._preencher_por_label(
+            ['Descrição', 'Descricao', 'descrição', 'Observação', 'Observacao', 'observação'],
             self.descricao,
-            opcional=True,
+            opcional=False,
             multilinha=True,
         )
 
@@ -328,55 +341,107 @@ class PipefyEdiSolicitador:
 
     def _responder_quem_e_voce(self) -> None:
         texto = self._texto_pagina()
-        if 'Quem é você' not in texto and 'Quem é você?' not in texto:
+        if 'Quem é você' not in texto:
+            log.info('Campo "Quem é você?" não visível — seguindo')
             return
 
         log.info('Respondendo "Quem é você?"')
-        # Matriz Expresspay: Cliente. Replicação de token também aparece para Conciliador.
+        # Opções reais do modal Pipefy (prints): Cliente / Contador-Empresa / Consultoria
+        # Expresspay (matriz 1xN) → Contador/Empresa; fallback Cliente / Consultoria
         opcoes = [
-            'Cliente PagBank',
-            'Sou um Cliente',
+            'Contador/Empresa',
+            'Contador / Empresa',
+            'Contabilidade',
+            'Consultor/Parceiro',
+            'Consultoria',
             'Cliente',
-            'Conciliador',
-            'Integrante do time Comercial',
-            'Comercial',
         ]
+
         for opcao in opcoes:
-            if self._clicar_por_js_texto(opcao) or self._clicar_texto_visivel(opcao, exato=False):
+            if self._selecionar_radio(opcao):
                 log.info(f'Selecionou quem é você: {opcao}')
-                time.sleep(1.5)
+                time.sleep(2)
                 self._salvar_screenshot('quem_e_voce')
                 return
 
-    def _preencher_contatos_iniciais(self) -> None:
-        # Campos comuns da 1ª etapa do formulário PagBank
-        nome = self.razao_social or 'Expresspay Pagamentos'
-        self._preencher_por_label(
-            ['Seu nome', 'Nome completo', 'Nome'],
-            nome,
-            opcional=True,
+        raise Exception(
+            'Não foi possível selecionar "Quem é você?" '
+            '(esperado: Cliente, Contador/Empresa ou Consultoria).'
         )
-        self._clicar_por_js_texto('Empresa') or self._clicar_texto_visivel('Empresa', exato=False)
-        self._clicar_por_js_texto('Pessoa Jurídica') or self._clicar_texto_visivel('Pessoa Jurídica', exato=False)
-        if self.razao_social:
-            self._preencher_por_label(
-                ['Razão social', 'Razao social', 'Nome da empresa'],
-                self.razao_social,
-                opcional=True,
-            )
-        if self.email:
-            self._preencher_por_label(
-                ['E-mail', 'Email', 'e-mail para contato', 'mail de mesmo domínio', 'mesmo domínio'],
-                self.email,
-                opcional=True,
-            )
-        if self.telefone:
-            self._preencher_por_label(['Telefone', 'Celular'], self.telefone, opcional=True)
 
-        # Alguns formulários exigem avançar antes do tipo
-        self._clicar_por_js_texto('Continuar') or self._clicar_texto_visivel('Continuar', exato=False)
-        self._clicar_por_js_texto('Próximo') or self._clicar_texto_visivel('Próximo', exato=False)
-        time.sleep(1)
+    def _selecionar_radio(self, rotulo: str) -> bool:
+        """Clica no radio/label do Pipefy pelo texto visível."""
+        # 1) input radio + label
+        xpaths = [
+            f'//label[contains(normalize-space(.),"{rotulo}")]//input[@type="radio"]',
+            f'//label[contains(normalize-space(.),"{rotulo}")]',
+            f'//input[@type="radio"]/following-sibling::*[contains(normalize-space(.),"{rotulo}")]',
+            f'//*[contains(@class,"radio") or @role="radio"][contains(normalize-space(.),"{rotulo}")]',
+            f'//span[contains(normalize-space(.),"{rotulo}")]/ancestor::label[1]',
+            f'//div[contains(@class,"option") or contains(@class,"Radio")][contains(normalize-space(.),"{rotulo}")]',
+        ]
+        for xpath in xpaths:
+            try:
+                for el in self.driver.find_elements(By.XPATH, xpath):
+                    if not el.is_displayed():
+                        continue
+                    self._clicar_js(el)
+                    time.sleep(0.4)
+                    # Confirma se o formulário expandiu
+                    if self._campos_replicacao_visiveis() or self._radio_marcado(rotulo):
+                        return True
+            except Exception:
+                continue
+
+        # 2) JS: clica no menor nó com o texto exato/parcial
+        if self._clicar_por_js_texto(rotulo):
+            time.sleep(0.6)
+            if self._campos_replicacao_visiveis() or self._radio_marcado(rotulo):
+                return True
+
+        return False
+
+    def _radio_marcado(self, rotulo: str) -> bool:
+        try:
+            return bool(self.driver.execute_script(
+                """
+                const alvo = (arguments[0] || '').toLowerCase();
+                const radios = Array.from(document.querySelectorAll('input[type="radio"]'));
+                for (const r of radios) {
+                  let txt = '';
+                  if (r.id) {
+                    const lab = document.querySelector('label[for="'+r.id+'"]');
+                    if (lab) txt = lab.innerText || '';
+                  }
+                  if (!txt && r.closest('label')) txt = r.closest('label').innerText || '';
+                  if (!txt && r.parentElement) txt = r.parentElement.innerText || '';
+                  if (txt.toLowerCase().includes(alvo) && r.checked) return true;
+                }
+                return false;
+                """,
+                rotulo,
+            ))
+        except Exception:
+            return False
+
+    def _campos_replicacao_visiveis(self) -> bool:
+        texto = self._texto_pagina().lower()
+        return (
+            'tipo da sua solicitação' in texto
+            or 'id origem' in texto
+            or 'informe o token' in texto
+            or self._existe_campo_token()
+        )
+
+    def _aguardar_campos_replicacao(self) -> None:
+        for i in range(20):
+            if self._campos_replicacao_visiveis():
+                log.info(f'Campos de replicação visíveis após {i * 0.5:.1f}s')
+                return
+            time.sleep(0.5)
+        log.warning('Campos Token/Tipo ainda não apareceram após Quem é você?')
+        amostra = self._texto_pagina()[:600].replace('\n', ' | ')
+        log.warning(f'Texto modal: {amostra}')
 
     def _tipo_ja_selecionado(self) -> bool:
         texto = self._texto_pagina()

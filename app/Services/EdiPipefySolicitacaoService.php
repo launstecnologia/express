@@ -179,17 +179,18 @@ class EdiPipefySolicitacaoService
             ->implode("\n");
 
         return implode("\n", array_filter([
-            'Solicitação de replicação/ativação do fluxo EDI via API (modelo 1xN).',
+            'Observação — solicitação de replicação/ativação do fluxo EDI via API (modelo 1xN).',
             '',
             'Contratante: '.($cfg['razao_social'] ?? 'Expresspay Pagamentos Ltda'),
             $cnpjFmt ? 'CNPJ: '.$cnpjFmt : null,
             filled($cfg['representante'] ?? null) ? 'Representante: '.$cfg['representante'] : null,
             '',
+            'Credenciais da matriz (já informadas nos campos Token e ID Origem):',
             'ID Origem (USER): '.$idOrigem,
             'E-mail para devolutiva: '.$email,
             '',
-            'Quantidade de IDs: '.count($ids),
-            'IDs PagSeguro (Safepay) para ativação:',
+            'Quantidade de estabelecimentos: '.count($ids),
+            'IDs PagSeguro (Safepay) dos estabelecimentos para ativação:',
             $lista,
         ]));
     }
