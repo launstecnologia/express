@@ -195,7 +195,9 @@ Route::middleware(['auth', 'trocar.senha', 'tenant.access'])->group(function () 
             Route::post('/solicitar', [EdiPipefyController::class, 'solicitar'])->name('solicitar');
             Route::post('/criar-email', [EdiPipefyController::class, 'criarEmail'])->name('criar-email');
             Route::get('/{solicitacao}/screenshots', [EdiPipefyController::class, 'screenshots'])->name('screenshots');
-            Route::get('/{solicitacao}/screenshots/{filename}', [EdiPipefyController::class, 'screenshot'])->name('screenshot');
+            Route::get('/{solicitacao}/screenshots/{filename}', [EdiPipefyController::class, 'screenshot'])
+                ->where('filename', '[a-zA-Z0-9_\-\.]+\.png')
+                ->name('screenshot');
             Route::get('/{solicitacao}', [EdiPipefyController::class, 'show'])->name('show');
         });
         Route::prefix('admin/conciliacoes')->name('admin.conciliacoes.')->group(function () {

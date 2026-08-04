@@ -107,22 +107,22 @@
             </div>
         @else
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                @foreach ($screenshots as $arquivo)
-                    @php
-                        $url = route('admin.edi-pipefy.screenshot', [$solicitacao, $arquivo]);
-                        $rotulo = preg_replace('/^pipefy_|\.png$/i', '', $arquivo);
-                        $rotulo = preg_replace('/_\d+$/', '', (string) $rotulo);
-                    @endphp
-                    <a href="{{ $url }}" target="_blank" rel="noopener"
+                @foreach ($screenshots as $shot)
+                    <a href="{{ $shot['url'] }}" target="_blank" rel="noopener"
                        class="group overflow-hidden rounded-lg border border-gray-200 bg-gray-50 hover:border-blue-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-800">
                         <div class="aspect-video overflow-hidden bg-gray-100 dark:bg-gray-900">
-                            <img src="{{ $url }}" alt="{{ $arquivo }}"
-                                 class="h-full w-full object-cover object-top transition group-hover:scale-[1.02]"
-                                 loading="lazy">
+                            @if (! empty($shot['src']))
+                                <img src="{{ $shot['src'] }}" alt="{{ $shot['arquivo'] }}"
+                                     class="h-full w-full object-cover object-top transition group-hover:scale-[1.02]">
+                            @else
+                                <div class="flex h-full items-center justify-center text-xs text-gray-400">
+                                    Falha ao carregar print
+                                </div>
+                            @endif
                         </div>
                         <div class="border-t border-gray-100 px-3 py-2 dark:border-gray-700">
-                            <p class="truncate text-xs font-semibold text-gray-800 dark:text-gray-100">{{ $rotulo }}</p>
-                            <p class="truncate font-mono text-[10px] text-gray-400">{{ $arquivo }}</p>
+                            <p class="truncate text-xs font-semibold text-gray-800 dark:text-gray-100">{{ $shot['rotulo'] }}</p>
+                            <p class="truncate font-mono text-[10px] text-gray-400">{{ $shot['arquivo'] }}</p>
                         </div>
                     </a>
                 @endforeach

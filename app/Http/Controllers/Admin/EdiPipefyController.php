@@ -35,15 +35,38 @@ class EdiPipefyController extends Controller
     {
         $solicitacao->load(['itens.estabelecimento', 'solicitadoPor']);
 
-        $screenshots = [];
+        $arquivos = [];
         if (filled($solicitacao->automacao_job_id)) {
-            $screenshots = $service->listarArquivosScreenshots($solicitacao->automacao_job_id);
+            $arquivos = $service->listarArquivosScreenshots($solicitacao->automacao_job_id);
         }
-        if ($screenshots === [] && is_array($solicitacao->screenshots)) {
-            $screenshots = array_values(array_filter(array_map(
+        if ($arquivos === [] && is_array($solicitacao->screenshots)) {
+            $arquivos = array_values(array_filter(array_map(
                 fn ($s) => is_string($s) ? basename($s) : null,
                 $solicitacao->screenshots
             )));
+        }
+
+        $screenshots = [];
+        foreach ($arquivos as $arquivo) {
+            $src = null;
+            if (filled($solicitacao->automacao_job_id) && PlatformSettings::automacaoConfigurado()) {
+                try {
+                    $response = app(AutomacaoPagBankService::class)
+                        ->baixarScreenshot($solicitacao->automacao_job_id, $arquivo);
+                    if ($response->successful() && filled($response->body())) {
+                        $src = 'data:image/png;base64,'.base64_encode($response->body());
+                    }
+                } catch (\Throwable) {
+                    $src = null;
+                }
+            }
+
+            $screenshots[] = [
+                'arquivo' => $arquivo,
+                'rotulo' => preg_replace('/_\d+$/', '', (string) preg_replace('/^pipefy_|\.png$/i', '', $arquivo)),
+                'url' => route('admin.edi-pipefy.screenshot', [$solicitacao, $arquivo]),
+                'src' => $src,
+            ];
         }
 
         $etapaAtual = data_get($solicitacao->resultado, 'etapa_atual')

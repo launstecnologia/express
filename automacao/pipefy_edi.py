@@ -332,68 +332,114 @@ class PipefyEdiSolicitador:
             return
 
         log.info('Respondendo "Quem é você?"')
-        # Preferência: Cliente (matriz própria). Fallback: Conciliador / Comercial
-        opcoes = ['Cliente', 'Conciliador', 'Comercial', 'Cliente PagBank']
+        # Matriz Expresspay: Cliente. Replicação de token também aparece para Conciliador.
+        opcoes = [
+            'Cliente PagBank',
+            'Sou um Cliente',
+            'Cliente',
+            'Conciliador',
+            'Integrante do time Comercial',
+            'Comercial',
+        ]
         for opcao in opcoes:
-            if self._clicar_texto_visivel(opcao, exato=False):
+            if self._clicar_por_js_texto(opcao) or self._clicar_texto_visivel(opcao, exato=False):
                 log.info(f'Selecionou quem é você: {opcao}')
-                time.sleep(1)
+                time.sleep(1.5)
                 self._salvar_screenshot('quem_e_voce')
                 return
 
     def _preencher_contatos_iniciais(self) -> None:
         # Campos comuns da 1ª etapa do formulário PagBank
+        nome = self.razao_social or 'Expresspay Pagamentos'
+        self._preencher_por_label(
+            ['Seu nome', 'Nome completo', 'Nome'],
+            nome,
+            opcional=True,
+        )
+        self._clicar_por_js_texto('Empresa') or self._clicar_texto_visivel('Empresa', exato=False)
+        self._clicar_por_js_texto('Pessoa Jurídica') or self._clicar_texto_visivel('Pessoa Jurídica', exato=False)
         if self.razao_social:
             self._preencher_por_label(
-                ['Nome', 'Seu nome', 'nome completo'],
+                ['Razão social', 'Razao social', 'Nome da empresa'],
                 self.razao_social,
                 opcional=True,
             )
-        self._clicar_texto_visivel('Empresa', exato=False)
-        self._clicar_texto_visivel('Pessoa Jurídica', exato=False)
         if self.email:
-            self._preencher_por_label(['E-mail', 'Email', 'e-mail para contato'], self.email, opcional=True)
+            self._preencher_por_label(
+                ['E-mail', 'Email', 'e-mail para contato', 'mail de mesmo domínio', 'mesmo domínio'],
+                self.email,
+                opcional=True,
+            )
         if self.telefone:
             self._preencher_por_label(['Telefone', 'Celular'], self.telefone, opcional=True)
+
+        # Alguns formulários exigem avançar antes do tipo
+        self._clicar_por_js_texto('Continuar') or self._clicar_texto_visivel('Continuar', exato=False)
+        self._clicar_por_js_texto('Próximo') or self._clicar_texto_visivel('Próximo', exato=False)
+        time.sleep(1)
 
     def _tipo_ja_selecionado(self) -> bool:
         texto = self._texto_pagina()
         return 'Replicação do token' in texto or 'Replicacao do token' in texto or 'já possui um token' in texto
 
     def _selecionar_tipo_solicitacao(self) -> None:
+        # Aguarda o campo aparecer após "Quem é você?" / contatos
+        for _ in range(12):
+            if 'tipo da sua solicitação' in self._texto_pagina().lower() or self._tipo_ja_selecionado():
+                break
+            time.sleep(0.5)
+
         if self._tipo_ja_selecionado() and self._existe_campo_token():
             log.info('Tipo já parece selecionado e campo Token visível — seguindo')
             return
+
+        # 0) Clique direto via JS no texto da opção (quando já listada)
+        if self._clicar_por_js_texto('Replicação do token API EDI') or self._clicar_por_js_texto('já possui um token'):
+            time.sleep(1)
+            if self._tipo_ja_selecionado() or self._existe_campo_token():
+                log.info('Tipo selecionado via JS direto')
+                return
 
         # 1) select nativo
         if self._selecionar_select_nativo():
             return
 
         # 2) Abrir dropdown custom perto do label
-        if not self._abrir_dropdown_tipo():
-            # Pode ser que o label ainda não carregou — tenta avançar etapas
-            self._clicar_texto_visivel('Continuar', exato=False)
+        aberto = self._abrir_dropdown_tipo()
+        if not aberto:
+            self._clicar_por_js_texto('Continuar')
             self._clicar_texto_visivel('Avançar', exato=False)
             time.sleep(1)
-            self._abrir_dropdown_tipo()
+            aberto = self._abrir_dropdown_tipo()
+            # fallback: qualquer "Selecione"
+            if not aberto:
+                self._clicar_por_js_texto('Selecione')
 
-        time.sleep(0.8)
+        time.sleep(1.0)
+        self._salvar_screenshot('dropdown_tipo_aberto')
 
         # 3) Escolher opção
-        if self._escolher_opcao_replicacao():
+        if self._escolher_opcao_replicacao() or self._clicar_por_js_texto('Replicação do token'):
             time.sleep(1)
             return
 
         # 4) Digitar no combobox ativo
         try:
             ativo = self.driver.switch_to.active_element
-            ativo.send_keys('Replicação')
-            time.sleep(0.6)
-            ativo.send_keys(Keys.ENTER)
-            time.sleep(0.8)
-            if self._tipo_ja_selecionado() or self._existe_campo_token():
-                log.info('Tipo selecionado via teclado')
-                return
+            for termo in ('Replicação', 'Replicacao', 'token API'):
+                try:
+                    ativo.clear()
+                except Exception:
+                    pass
+                ativo.send_keys(termo)
+                time.sleep(0.7)
+                ativo.send_keys(Keys.ARROW_DOWN)
+                time.sleep(0.2)
+                ativo.send_keys(Keys.ENTER)
+                time.sleep(0.8)
+                if self._tipo_ja_selecionado() or self._existe_campo_token():
+                    log.info(f'Tipo selecionado via teclado ({termo})')
+                    return
         except Exception:
             pass
 
@@ -417,6 +463,40 @@ class PipefyEdiSolicitador:
         amostra = self._texto_pagina()[:800].replace('\n', ' | ')
         log.error(f'Texto da página ao falhar tipo: {amostra}')
         raise Exception('Não foi possível selecionar "Replicação do token API EDI".')
+
+    def _clicar_por_js_texto(self, trecho: str) -> bool:
+        if not trecho:
+            return False
+        try:
+            encontrado = self.driver.execute_script(
+                """
+                const alvo = (arguments[0] || '').toLowerCase();
+                const nos = Array.from(document.querySelectorAll('button,a,li,label,div,span,p,[role="option"],[role="button"],[role="radio"]'));
+                let melhor = null;
+                let melhorLen = 1e9;
+                for (const el of nos) {
+                  const style = window.getComputedStyle(el);
+                  if (style && (style.visibility === 'hidden' || style.display === 'none')) continue;
+                  const txt = (el.innerText || el.textContent || '').trim().replace(/\\s+/g, ' ');
+                  if (!txt || txt.length > 180) continue;
+                  if (txt.toLowerCase().includes(alvo) && txt.length < melhorLen) {
+                    melhor = el;
+                    melhorLen = txt.length;
+                  }
+                }
+                if (!melhor) return null;
+                melhor.scrollIntoView({block:'center'});
+                melhor.click();
+                return (melhor.innerText || melhor.textContent || '').trim().slice(0, 120);
+                """,
+                trecho,
+            )
+            if encontrado:
+                log.info(f'Clique JS: {encontrado}')
+                return True
+        except Exception as e:
+            log.debug(f'JS click falhou ({trecho}): {e}')
+        return False
 
     def _selecionar_select_nativo(self) -> bool:
         selects = self.driver.find_elements(By.TAG_NAME, 'select')
