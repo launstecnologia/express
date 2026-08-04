@@ -346,15 +346,15 @@ class PipefyEdiSolicitador:
             return
 
         log.info('Respondendo "Quem é você?"')
-        # Opções reais do modal Pipefy (prints): Cliente / Contador-Empresa / Consultoria
-        # Expresspay (matriz 1xN) → Contador/Empresa; fallback Cliente / Consultoria
+        # Opções reais do modal: Cliente / Contador-Empresa / Consultoria
+        # Expresspay usa Cliente
         opcoes = [
+            'Cliente',
             'Contador/Empresa',
             'Contador / Empresa',
             'Contabilidade',
             'Consultor/Parceiro',
             'Consultoria',
-            'Cliente',
         ]
 
         for opcao in opcoes:
