@@ -13,7 +13,7 @@ class ConciliacaoDimensao
         ?string $solucao,
     ): string {
         $partes = [
-            self::normalizarTexto($idCliente),
+            self::idClienteNormalizado($idCliente),
             self::meioNormalizado($meio),
             self::normalizarParcelamento($parcelamento),
             self::bandeiraNormalizada($bandeira),
@@ -52,10 +52,27 @@ class ConciliacaoDimensao
         ?string $tipoTransacao,
         ?string $meioPagamento,
         ?string $arranjoUr,
+        ?string $quantidadeParcela = null,
     ): string {
-        return self::meioNormalizado(
-            EdiTransacaoCategoria::normalizarParaArmazenamento($tipoTransacao, $meioPagamento, $arranjoUr),
+        $tipoBruto = strtolower(trim((string) $tipoTransacao));
+        $tipoParaResolver = in_array($tipoBruto, ['debito', 'credito', 'pix', 'outros', 'parcelado'], true)
+            ? null
+            : $tipoTransacao;
+
+        $categoria = EdiTransacaoCategoria::resolver(
+            $tipoParaResolver,
+            $meioPagamento,
+            $arranjoUr,
+            $quantidadeParcela,
         );
+
+        $meio = match ($categoria) {
+            'debito', 'credito', 'pix' => $categoria,
+            'parcelado' => 'credito',
+            default => 'outros',
+        };
+
+        return self::meioNormalizado($meio);
     }
 
     public static function parcelamentoDoEdi(?string $quantidadeParcela): string
@@ -120,6 +137,21 @@ class ConciliacaoDimensao
 
     public static function solucaoDoEdi(?string $meioCaptura, ?string $canalEntrada, ?string $leitor): string
     {
+        $canal = strtoupper(trim((string) $canalEntrada));
+
+        if ($canal !== '') {
+            $solucao = match ($canal) {
+                'TP' => 'tap on',
+                'W' => 'web',
+                'ME', 'AP', 'MD', 'MP', 'MT', 'N', 'WT', 'TF', 'QR', 'LK' => 'mobile',
+                default => null,
+            };
+
+            if ($solucao !== null) {
+                return $solucao;
+            }
+        }
+
         $partes = array_filter([
             trim((string) $meioCaptura),
             trim((string) $canalEntrada),
@@ -135,12 +167,13 @@ class ConciliacaoDimensao
 
         return match (true) {
             $valor === '' => 'mobile',
-            str_contains($valor, 'tap') => 'tap on',
-            str_contains($valor, 'web'), $valor === 'we' => 'web',
+            str_contains($valor, 'tap'), str_contains($valor, ' tp'), $valor === 'tp' => 'tap on',
+            str_contains($valor, 'web'), $valor === 'we', $valor === 'w' => 'web',
             str_contains($valor, 'link'),
             str_contains($valor, 'mobile'),
             str_contains($valor, 'maquininha'),
             str_contains($valor, 'machine'),
+            preg_match('/\bme\b/', $valor) === 1 => 'mobile',
             in_array($valor, ['01', '1', 'me'], true) => 'mobile',
             default => $valor,
         };
@@ -173,6 +206,21 @@ class ConciliacaoDimensao
             '13 a 18', '13-18' => '13 a 18',
             default => $valor,
         };
+    }
+
+    public static function idClienteNormalizado(?string $id): string
+    {
+        $id = trim((string) $id);
+
+        if ($id === '') {
+            return '';
+        }
+
+        if (ctype_digit($id)) {
+            return ltrim($id, '0') ?: '0';
+        }
+
+        return strtolower($id);
     }
 
     private static function normalizarTexto(?string $valor): string

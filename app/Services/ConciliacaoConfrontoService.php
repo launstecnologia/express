@@ -247,7 +247,12 @@ class ConciliacaoConfrontoService
 
             $chave = ConciliacaoDimensao::chaveConfrontoDaLinha(
                 $idCliente,
-                ConciliacaoDimensao::meioDoEdi($mov->tipo_transacao, $mov->meio_pagamento, $mov->arranjo_ur),
+                ConciliacaoDimensao::meioDoEdi(
+                    $mov->tipo_transacao,
+                    $mov->meio_pagamento,
+                    $mov->arranjo_ur,
+                    $mov->quantidade_parcela,
+                ),
                 ConciliacaoDimensao::parcelamentoDoEdi($mov->quantidade_parcela),
                 ConciliacaoDimensao::bandeiraDoEdi($mov->instituicao_financeira, $mov->tipo_transacao, $mov->arranjo_ur),
                 ConciliacaoDimensao::escrowDoEdi($mov->pagamento_prazo),
