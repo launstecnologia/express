@@ -31,6 +31,7 @@ use App\Support\KycTipoDocumentoMapper;
 use App\Support\NotificacaoVars;
 use App\Support\AutomacaoErroInterpretador;
 use App\Support\PlatformSettings;
+use App\Scopes\ExcluirInativoSistemaScope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Request;
@@ -78,7 +79,9 @@ class EstabelecimentoController extends Controller
             return $this->indexSemVinculoEspecial($request, $filtros, $marketplaceFiltro, $revendaFiltro, $planoFiltro);
         }
 
-        $query = Estabelecimento::withoutGlobalScopes()
+        // Mantém HierarquiaScope (marketplace/revenda/master só veem a própria carteira).
+        // Remove só o escopo de ativo — admin com filtro precisa ver inativos.
+        $query = Estabelecimento::withoutGlobalScope(ExcluirInativoSistemaScope::class)
             ->with(['marketplace', 'revenda'])
             ->latest('estabelecimentos.id');
 
@@ -86,6 +89,7 @@ class EstabelecimentoController extends Controller
             $query->where('estabelecimentos.ativo', true);
         }
 
+        $this->aplicarEscopoHierarquiaEloquent($query);
         $this->aplicarFiltrosIndex($query, $request);
 
         return view('estabelecimento.index', [
@@ -141,16 +145,7 @@ class EstabelecimentoController extends Controller
             $base->whereNull('plano_id');
         }
 
-        $actor = UsuarioComercial::principal();
-        if ($actor && $actor->tipo !== 'admin') {
-            match ($actor->tipo) {
-                'master' => $base->where('master_id', $actor->id),
-                'marketplace' => $base->where('marketplace_id', $actor->id),
-                'revenda' => $base->where('revenda_id', $actor->id),
-                default => null,
-            };
-        }
-
+        $this->aplicarEscopoHierarquiaQuery($base);
         $this->aplicarFiltrosIndexSemVinculoQuery($base, $request);
 
         $paginator = $base->paginate(20)->withQueryString();
@@ -702,6 +697,40 @@ class EstabelecimentoController extends Controller
             'marketplace_id' => $dados['marketplace_id'] ?? null,
             'revenda_id' => $dados['revenda_id'] ?? null,
         ]);
+    }
+
+    /**
+     * Isola a listagem à carteira do usuário logado (mesmo critério do HierarquiaScope).
+     * Obrigatório em qualquer caminho que use withoutGlobalScopes / Query Builder.
+     */
+    private function aplicarEscopoHierarquiaEloquent(Builder $query): void
+    {
+        $actor = UsuarioComercial::principal();
+        if (! $actor || $actor->tipo === 'admin') {
+            return;
+        }
+
+        match ($actor->tipo) {
+            'master' => $query->where('estabelecimentos.master_id', $actor->id),
+            'marketplace' => $query->where('estabelecimentos.marketplace_id', $actor->id),
+            'revenda' => $query->where('estabelecimentos.revenda_id', $actor->id),
+            default => null,
+        };
+    }
+
+    private function aplicarEscopoHierarquiaQuery(QueryBuilder $query): void
+    {
+        $actor = UsuarioComercial::principal();
+        if (! $actor || $actor->tipo === 'admin') {
+            return;
+        }
+
+        match ($actor->tipo) {
+            'master' => $query->where('master_id', $actor->id),
+            'marketplace' => $query->where('marketplace_id', $actor->id),
+            'revenda' => $query->where('revenda_id', $actor->id),
+            default => null,
+        };
     }
 
     /**
