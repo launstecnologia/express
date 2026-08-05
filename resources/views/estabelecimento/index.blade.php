@@ -9,6 +9,8 @@
 
     $filtrosAtivos = collect($filtros ?? [])->filter(fn ($v) => $v !== null && $v !== '')->count();
     $podeCadastrarEstabelecimento = UsuarioComercial::podeCadastrarEstabelecimento();
+    $ehAdmin = UsuarioComercial::ehAdmin();
+    $podeFiltrarRevenda = $ehAdmin || UsuarioComercial::ehMarketplace() || UsuarioComercial::ehMaster();
     $marketplaceFiltro = (string) ($filtros['marketplace_id'] ?? '');
     if (($filtros['vinculo'] ?? '') === 'sem' && $marketplaceFiltro === '') {
         $marketplaceFiltro = 'sem_vinculo';
@@ -201,39 +203,45 @@
                         <p class="mt-1 text-xs text-gray-400">ID do estabelecimento no EDI PagSeguro (<code class="text-[10px]">token_pagseguro</code>).</p>
                     </div>
 
-                    <div>
-                        <label for="filtro-master" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Master</label>
-                        <select id="filtro-master" name="master_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="">Todos</option>
-                            @foreach ($masters as $master)
-                                <option value="{{ $master['id'] }}" @selected(($filtros['master_id'] ?? '') == $master['id'])>{{ $master['nome'] }}</option>
-                            @endforeach
-                        </select>
-                    </div>
+                    @if ($ehAdmin)
+                        <div>
+                            <label for="filtro-master" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Master</label>
+                            <select id="filtro-master" name="master_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="">Todos</option>
+                                @foreach ($masters as $master)
+                                    <option value="{{ $master['id'] }}" @selected(($filtros['master_id'] ?? '') == $master['id'])>{{ $master['nome'] }}</option>
+                                @endforeach
+                            </select>
+                        </div>
 
-                    <div>
-                        <label for="filtro-marketplace" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Marketplace</label>
-                        <select id="filtro-marketplace" name="marketplace_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="">Todos</option>
-                            <option value="sem_marketplace" @selected($marketplaceFiltro === 'sem_marketplace')>— Sem marketplace —</option>
-                            <option value="sem_vinculo" @selected($marketplaceFiltro === 'sem_vinculo')>— Sem marketplace e sem revenda —</option>
-                            @foreach ($marketplaces as $marketplace)
-                                <option value="{{ $marketplace['id'] }}" @selected($marketplaceFiltro === (string) $marketplace['id'])>{{ $marketplace['nome'] }}</option>
-                            @endforeach
-                        </select>
-                    </div>
+                        <div>
+                            <label for="filtro-marketplace" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Marketplace</label>
+                            <select id="filtro-marketplace" name="marketplace_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="">Todos</option>
+                                <option value="sem_marketplace" @selected($marketplaceFiltro === 'sem_marketplace')>— Sem marketplace —</option>
+                                <option value="sem_vinculo" @selected($marketplaceFiltro === 'sem_vinculo')>— Sem marketplace e sem revenda —</option>
+                                @foreach ($marketplaces as $marketplace)
+                                    <option value="{{ $marketplace['id'] }}" @selected($marketplaceFiltro === (string) $marketplace['id'])>{{ $marketplace['nome'] }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    @endif
 
-                    <div>
-                        <label for="filtro-revenda" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Revenda</label>
-                        @php $revendaFiltro = (string) ($filtros['revenda_id'] ?? ''); @endphp
-                        <select id="filtro-revenda" name="revenda_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" @disabled($filtroSemVinculoTotal)>
-                            <option value="">Todos</option>
-                            <option value="sem_revenda" @selected($revendaFiltro === 'sem_revenda')>— Sem revenda —</option>
-                            @foreach ($revendas as $revenda)
-                                <option value="{{ $revenda['id'] }}" @selected($revendaFiltro === (string) $revenda['id'])>{{ $revenda['nome'] }}</option>
-                            @endforeach
-                        </select>
-                    </div>
+                    @if ($podeFiltrarRevenda)
+                        <div>
+                            <label for="filtro-revenda" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Revenda</label>
+                            @php $revendaFiltro = (string) ($filtros['revenda_id'] ?? ''); @endphp
+                            <select id="filtro-revenda" name="revenda_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" @disabled($filtroSemVinculoTotal)>
+                                <option value="">Todos</option>
+                                @if ($ehAdmin)
+                                    <option value="sem_revenda" @selected($revendaFiltro === 'sem_revenda')>— Sem revenda —</option>
+                                @endif
+                                @foreach ($revendas as $revenda)
+                                    <option value="{{ $revenda['id'] }}" @selected($revendaFiltro === (string) $revenda['id'])>{{ $revenda['nome'] }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    @endif
 
                     <div>
                         <label for="filtro-status" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Status do cadastro</label>

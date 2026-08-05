@@ -45,6 +45,16 @@ class EstabelecimentoController extends Controller
     public function __construct(private MarketplacePlanoService $marketplacePlano) {}
     public function index(Request $request)
     {
+        // Filtro Master/Marketplace (e "sem vínculo") é ferramenta do admin.
+        // No acesso marketplace/revenda/master a carteira já vem pelo escopo de hierarquia.
+        if (! UsuarioComercial::ehAdmin()) {
+            $request->merge([
+                'master_id' => null,
+                'marketplace_id' => null,
+                'vinculo' => null,
+            ]);
+        }
+
         $filtros = $request->only([
             'busca',
             'codigo_edi',
@@ -1159,6 +1169,25 @@ class EstabelecimentoController extends Controller
         // Admin vê também inativos no filtro — estabelecimentos podem continuar
         // apontando para marketplace/revenda desativados.
         $incluirInativos = UsuarioComercial::ehAdmin();
+
+        if ($tipo === 'revenda' && UsuarioComercial::ehMarketplace()) {
+            $marketplace = UsuarioComercial::principal();
+
+            return $marketplace
+                ? UsuarioComercial::revendasDo($marketplace)
+                    ->when(! $incluirInativos, fn (Builder $q) => $q->where('ativo', true))
+                    ->orderByRaw('COALESCE(nome_fantasia, razao_social, nome_completo, email)')
+                    ->get()
+                    ->map(fn (Usuario $usuario) => [
+                        'id' => $usuario->id,
+                        'nome' => $usuario->nomeExibicao().($usuario->ativo ? '' : ' (inativo)'),
+                    ])
+                : collect();
+        }
+
+        if (! UsuarioComercial::ehAdmin() && in_array($tipo, ['master', 'marketplace'], true)) {
+            return collect();
+        }
 
         return Usuario::query()
             ->where('tipo', $tipo)
