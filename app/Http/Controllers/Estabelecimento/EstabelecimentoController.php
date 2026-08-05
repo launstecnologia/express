@@ -927,7 +927,19 @@ class EstabelecimentoController extends Controller
         if ($marketplaceFiltro === 'sem_marketplace') {
             $query->whereNull('estabelecimentos.marketplace_id');
         } elseif ($marketplaceFiltro !== '' && ctype_digit($marketplaceFiltro)) {
-            $query->where('estabelecimentos.marketplace_id', (int) $marketplaceFiltro);
+            $marketplaceId = (int) $marketplaceFiltro;
+            $marketplace = Usuario::query()->find($marketplaceId);
+            $revendaIds = $marketplace
+                ? UsuarioComercial::revendasDo($marketplace)->pluck('id')->all()
+                : [];
+
+            // Carteira do marketplace = vínculo direto OU via revenda filha.
+            $query->where(function (Builder $q) use ($marketplaceId, $revendaIds) {
+                $q->where('estabelecimentos.marketplace_id', $marketplaceId);
+                if ($revendaIds !== []) {
+                    $q->orWhereIn('estabelecimentos.revenda_id', $revendaIds);
+                }
+            });
         }
 
         if ($revendaFiltro === 'sem_revenda') {
@@ -1097,14 +1109,18 @@ class EstabelecimentoController extends Controller
 
     private function usuariosPorTipo(string $tipo)
     {
+        // Admin vê também inativos no filtro — estabelecimentos podem continuar
+        // apontando para marketplace/revenda desativados.
+        $incluirInativos = UsuarioComercial::ehAdmin();
+
         return Usuario::query()
             ->where('tipo', $tipo)
-            ->where('ativo', true)
+            ->when(! $incluirInativos, fn (Builder $q) => $q->where('ativo', true))
             ->orderByRaw('COALESCE(nome_fantasia, razao_social, nome_completo, email)')
             ->get()
             ->map(fn (Usuario $usuario) => [
                 'id' => $usuario->id,
-                'nome' => $usuario->nomeExibicao(),
+                'nome' => $usuario->nomeExibicao().($usuario->ativo ? '' : ' (inativo)'),
             ]);
     }
 }
