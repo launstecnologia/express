@@ -31,7 +31,6 @@ use App\Support\KycTipoDocumentoMapper;
 use App\Support\NotificacaoVars;
 use App\Support\AutomacaoErroInterpretador;
 use App\Support\PlatformSettings;
-use App\Scopes\ExcluirInativoSistemaScope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Request;
@@ -65,17 +64,21 @@ class EstabelecimentoController extends Controller
         $marketplaceFiltro = (string) ($request->input('marketplace_id') ?? '');
         $revendaFiltro = (string) ($request->input('revenda_id') ?? '');
         $planoFiltro = (string) ($request->input('plano_id') ?? '');
+        // Marketplace/revenda por ID também vão pelo Query Builder: evita ativo/scopes
+        // esconderem a carteira (ex.: MUNDIAL PAY com 44 no banco e 3 na UI).
         $filtroSemVinculoEspecial = in_array($marketplaceFiltro, ['sem_marketplace', 'sem_vinculo'], true)
             || $revendaFiltro === 'sem_revenda'
             || $planoFiltro === 'sem_plano'
-            || ($request->filled('vinculo') && $request->string('vinculo') === 'sem');
+            || ($request->filled('vinculo') && $request->string('vinculo') === 'sem')
+            || ($marketplaceFiltro !== '' && ctype_digit($marketplaceFiltro))
+            || ($revendaFiltro !== '' && ctype_digit($revendaFiltro));
 
-        // Filtros "sem X": Query Builder puro (igual ao artisan), sem escopos de ativo.
+        // Query Builder puro (igual ao artisan), sem escopos de ativo.
         if ($filtroSemVinculoEspecial) {
             return $this->indexSemVinculoEspecial($request, $filtros, $marketplaceFiltro, $revendaFiltro, $planoFiltro);
         }
 
-        $query = Estabelecimento::withoutGlobalScope(ExcluirInativoSistemaScope::class)
+        $query = Estabelecimento::withoutGlobalScopes()
             ->with(['marketplace', 'revenda'])
             ->latest('estabelecimentos.id');
 
@@ -113,10 +116,25 @@ class EstabelecimentoController extends Controller
             $base->whereNull('marketplace_id')->whereNull('revenda_id');
         } elseif ($marketplaceFiltro === 'sem_marketplace') {
             $base->whereNull('marketplace_id');
+        } elseif ($marketplaceFiltro !== '' && ctype_digit($marketplaceFiltro)) {
+            $marketplaceId = (int) $marketplaceFiltro;
+            $marketplace = Usuario::withoutGlobalScopes()->find($marketplaceId);
+            $revendaIds = $marketplace
+                ? UsuarioComercial::revendasDo($marketplace)->pluck('id')->all()
+                : [];
+
+            $base->where(function (QueryBuilder $q) use ($marketplaceId, $revendaIds) {
+                $q->where('marketplace_id', $marketplaceId);
+                if ($revendaIds !== []) {
+                    $q->orWhereIn('revenda_id', $revendaIds);
+                }
+            });
         }
 
         if ($revendaFiltro === 'sem_revenda') {
             $base->whereNull('revenda_id');
+        } elseif ($revendaFiltro !== '' && ctype_digit($revendaFiltro)) {
+            $base->where('revenda_id', (int) $revendaFiltro);
         }
 
         if ($planoFiltro === 'sem_plano') {
