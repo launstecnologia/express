@@ -722,7 +722,7 @@ class EstabelecimentoController extends Controller
 
         match ($actor->tipo) {
             'master' => $query->where('estabelecimentos.master_id', $actor->id),
-            'marketplace' => $query->where('estabelecimentos.marketplace_id', $actor->id),
+            'marketplace' => $this->aplicarCarteiraMarketplaceEloquent($query, $actor),
             'revenda' => $query->where('estabelecimentos.revenda_id', $actor->id),
             default => null,
         };
@@ -737,10 +737,35 @@ class EstabelecimentoController extends Controller
 
         match ($actor->tipo) {
             'master' => $query->where('master_id', $actor->id),
-            'marketplace' => $query->where('marketplace_id', $actor->id),
+            'marketplace' => $this->aplicarCarteiraMarketplaceQuery($query, $actor),
             'revenda' => $query->where('revenda_id', $actor->id),
             default => null,
         };
+    }
+
+    /** Mesmo critério do filtro admin: vínculo direto OU via revenda filha. */
+    private function aplicarCarteiraMarketplaceEloquent(Builder $query, Usuario $marketplace): void
+    {
+        $revendaIds = UsuarioComercial::revendasDo($marketplace)->pluck('id')->all();
+
+        $query->where(function (Builder $q) use ($marketplace, $revendaIds) {
+            $q->where('estabelecimentos.marketplace_id', $marketplace->id);
+            if ($revendaIds !== []) {
+                $q->orWhereIn('estabelecimentos.revenda_id', $revendaIds);
+            }
+        });
+    }
+
+    private function aplicarCarteiraMarketplaceQuery(QueryBuilder $query, Usuario $marketplace): void
+    {
+        $revendaIds = UsuarioComercial::revendasDo($marketplace)->pluck('id')->all();
+
+        $query->where(function (QueryBuilder $q) use ($marketplace, $revendaIds) {
+            $q->where('marketplace_id', $marketplace->id);
+            if ($revendaIds !== []) {
+                $q->orWhereIn('revenda_id', $revendaIds);
+            }
+        });
     }
 
     /**
@@ -916,6 +941,11 @@ class EstabelecimentoController extends Controller
 
     private function deveIncluirInativosNaListagem(Request $request): bool
     {
+        // Login marketplace/revenda/master: mesma carteira do filtro admin (inclui ativo=0).
+        if (in_array(UsuarioComercial::tipo(), ['marketplace', 'revenda', 'master'], true)) {
+            return true;
+        }
+
         $marketplaceFiltro = (string) ($request->input('marketplace_id') ?? '');
         $revendaFiltro = (string) ($request->input('revenda_id') ?? '');
         $planoFiltro = (string) ($request->input('plano_id') ?? '');
