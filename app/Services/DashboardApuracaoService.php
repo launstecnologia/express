@@ -23,9 +23,30 @@ class DashboardApuracaoService
         private readonly ComissaoPagService $comissaoPag,
     ) {}
 
-    public function periodoValido(int $dias): int
+    /** 0 = mês calendário atual; 7/30/90 = últimos N dias. */
+    public function periodoValido(int $periodo): int
     {
-        return in_array($dias, [7, 30, 90], true) ? $dias : 30;
+        return in_array($periodo, [0, 7, 30, 90], true) ? $periodo : 0;
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    public function intervalo(int $periodo): array
+    {
+        $periodo = $this->periodoValido($periodo);
+
+        if ($periodo === 0) {
+            return [
+                now()->startOfMonth()->toDateString(),
+                now()->endOfMonth()->toDateString(),
+            ];
+        }
+
+        return [
+            now()->subDays($periodo)->toDateString(),
+            now()->toDateString(),
+        ];
     }
 
     /**
@@ -46,14 +67,14 @@ class DashboardApuracaoService
      *     faturamento_bandeiras: list<array{codigo: string, label: string, valor: float, barra_pct: float, icon_url: ?string}>
      * }
      */
-    public function apurar(int $dias = 30, ?Authenticatable $usuario = null): array
+    public function apurar(int $periodo = 0, ?Authenticatable $usuario = null): array
     {
-        $dias = $this->periodoValido($dias);
+        $periodo = $this->periodoValido($periodo);
 
         return Cache::remember(
-            $this->cacheKey($dias, $usuario),
+            $this->cacheKey($periodo, $usuario),
             self::CACHE_TTL_SECONDS,
-            fn () => $this->calcular($dias, $usuario),
+            fn () => $this->calcular($periodo, $usuario),
         );
     }
 
@@ -66,9 +87,9 @@ class DashboardApuracaoService
      *     faturamento_bandeiras: list<array<string, mixed>>
      * }
      */
-    public function calcular(int $dias, ?Authenticatable $usuario): array
+    public function calcular(int $periodo, ?Authenticatable $usuario): array
     {
-        return $this->calcularApuracao($this->periodoValido($dias), $usuario);
+        return $this->calcularApuracao($this->periodoValido($periodo), $usuario);
     }
 
     /**
@@ -87,12 +108,12 @@ class DashboardApuracaoService
      *     resumo: array{faturamento_total: float, comissao_total: float, pix_total: float, debito_total: float, credito_total: float, parcelado_total: float}
      * }
      */
-    private function calcularApuracao(int $dias, ?Authenticatable $usuario): array
+    private function calcularApuracao(int $periodo, ?Authenticatable $usuario): array
     {
-        $desde = now()->subDays($dias)->toDateString();
+        [$inicio, $fim] = $this->intervalo($periodo);
 
         if (! $this->temEstabelecimentosVisiveis()) {
-            $vazia = $this->respostaVazia($dias);
+            $vazia = $this->respostaVazia($periodo);
 
             return array_merge($vazia, [
                 'transacoes_status' => ['itens' => [], 'gradiente' => 'conic-gradient(#e5e7eb 0 100%)', 'total' => 0],
@@ -102,10 +123,9 @@ class DashboardApuracaoService
 
         $parceiro = $this->usuarioParceiro($usuario);
 
-        $faturamentoPorPlano = $this->agregarFaturamento($desde);
-        $comissaoPorPlano = $parceiro
-            ? $this->agregarComissao($desde, $parceiro->id)
-            : $this->agregarComissaoAdmin($desde);
+        $faturamentoPorPlano = $this->agregarFaturamento($inicio, $fim);
+        // Mesma base do admin (taxa do plano), escopada à carteira; parceiro recebe líquida.
+        $comissaoPorPlano = $this->agregarComissaoAdmin($inicio, $fim);
 
         $planoIds = $faturamentoPorPlano->keys()
             ->merge($comissaoPorPlano->keys())
@@ -159,21 +179,21 @@ class DashboardApuracaoService
         ];
 
         return [
-            'dias' => $dias,
+            'dias' => $periodo,
             'planos' => $planosResumo,
             'resumo' => $resumo,
-            'transacoes_status' => $this->transacoesPorStatus($desde),
-            'faturamento_bandeiras' => $this->faturamentoPorBandeira($desde),
+            'transacoes_status' => $this->transacoesPorStatus($inicio, $fim),
+            'faturamento_bandeiras' => $this->faturamentoPorBandeira($inicio, $fim),
         ];
     }
 
     /**
      * @return array{itens: list<array{label: string, cor: string, quantidade: int, percentual: float}>, gradiente: string, total: int}
      */
-    private function transacoesPorStatus(string $desde): array
+    private function transacoesPorStatus(string $inicio, string $fim): array
     {
         $linhas = DB::table('edi_movimentos as em')
-            ->where('em.data_inicial_transacao', '>=', $desde)
+            ->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
             ->whereIn('em.estabelecimento_id', $this->estabelecimentosVisiveisSubquery())
             ->selectRaw('COALESCE(NULLIF(em.status_pagamento, ""), "sem") as status_codigo, COUNT(*) as quantidade')
             ->groupByRaw('COALESCE(NULLIF(em.status_pagamento, ""), "sem")')
@@ -218,10 +238,10 @@ class DashboardApuracaoService
     /**
      * @return list<array{codigo: string, label: string, valor: float, barra_pct: float, icon_url: ?string}>
      */
-    private function faturamentoPorBandeira(string $desde): array
+    private function faturamentoPorBandeira(string $inicio, string $fim): array
     {
         $linhas = DB::table('edi_movimentos as em')
-            ->where('em.data_inicial_transacao', '>=', $desde)
+            ->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
             ->whereIn('em.estabelecimento_id', $this->estabelecimentosVisiveisSubquery())
             ->whereNotNull('em.instituicao_financeira')
             ->selectRaw('em.instituicao_financeira as instituicao, SUM(em.valor_total_transacao) as valor')
@@ -268,13 +288,13 @@ class DashboardApuracaoService
         };
     }
 
-    private function agregarFaturamento(string $desde): Collection
+    private function agregarFaturamento(string $inicio, string $fim): Collection
     {
         $categoriaSql = EdiTransacaoCategoria::sqlCategoria('em');
 
         return DB::table('edi_movimentos as em')
             ->join('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
-            ->where('em.data_inicial_transacao', '>=', $desde)
+            ->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
             ->whereIn('em.estabelecimento_id', $this->estabelecimentosVisiveisSubquery())
             ->whereNotNull('e.plano_id')
             ->selectRaw("e.plano_id, {$categoriaSql} as categoria, SUM(em.valor_total_transacao) as total")
@@ -285,10 +305,10 @@ class DashboardApuracaoService
             ->map(fn (Collection $rows) => $rows->pluck('total', 'categoria'));
     }
 
-    private function agregarComissaoAdmin(string $desde): Collection
+    private function agregarComissaoAdmin(string $inicio, string $fim): Collection
     {
-        return ComissaoAdminSql::queryMovimentosComComissaoAdmin(function ($query) use ($desde) {
-            $query->where('em.data_inicial_transacao', '>=', $desde)
+        return ComissaoAdminSql::queryMovimentosComComissaoAdmin(function ($query) use ($inicio, $fim) {
+            $query->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
                 ->whereIn('em.estabelecimento_id', $this->estabelecimentosVisiveisSubquery())
                 ->whereNotNull('e.plano_id');
         })
@@ -296,24 +316,6 @@ class DashboardApuracaoService
             ->groupBy('e.plano_id')
             ->get()
             ->pluck('total', 'plano_id');
-    }
-
-    private function agregarComissao(string $desde, ?int $usuarioIdFiltro): Collection
-    {
-        $query = DB::table('transacao_royalties as tr')
-            ->join('edi_movimentos as em', 'em.id', '=', 'tr.edi_movimento_id')
-            ->join('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
-            ->where('em.data_inicial_transacao', '>=', $desde)
-            ->whereIn('em.estabelecimento_id', $this->estabelecimentosVisiveisSubquery())
-            ->whereNotNull('e.plano_id')
-            ->selectRaw('e.plano_id, SUM(tr.valor_royalty) as total')
-            ->groupBy('e.plano_id');
-
-        if ($usuarioIdFiltro) {
-            $query->where('tr.usuario_id', $usuarioIdFiltro);
-        }
-
-        return $query->get()->pluck('total', 'plano_id');
     }
 
     private function usuarioParceiro(?Authenticatable $usuario): ?Usuario
@@ -340,7 +342,7 @@ class DashboardApuracaoService
         return Estabelecimento::query()->select('id');
     }
 
-    private function cacheKey(int $dias, ?Authenticatable $usuario): string
+    private function cacheKey(int $periodo, ?Authenticatable $usuario): string
     {
         if ($usuario instanceof SubUsuario) {
             $usuario = $usuario->dono;
@@ -349,13 +351,13 @@ class DashboardApuracaoService
         $tipo = $usuario instanceof Usuario ? $usuario->tipo : 'guest';
         $id = $usuario?->id ?? 0;
 
-        return "dashboard.apuracao.v4.{$tipo}.{$id}.{$dias}";
+        return "dashboard.apuracao.v5.{$tipo}.{$id}.{$periodo}";
     }
 
-    private function respostaVazia(int $dias): array
+    private function respostaVazia(int $periodo): array
     {
         return [
-            'dias' => $dias,
+            'dias' => $periodo,
             'planos' => [],
             'resumo' => [
                 'faturamento_total' => 0,

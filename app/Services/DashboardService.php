@@ -25,7 +25,7 @@ class DashboardService
      *
      * @return array{totalEstabelecimentos: int, faturamentoMes: float}
      */
-    public function resumoRapido(?Authenticatable $usuario, int $periodo = 30): array
+    public function resumoRapido(?Authenticatable $usuario, int $periodo = 0): array
     {
         $periodo = $this->apuracaoService->periodoValido($periodo);
 
@@ -37,11 +37,11 @@ class DashboardService
     }
 
     /**
-     * Comissão do período — com desconto de royalty para parceiros.
+     * Comissão do período — mesma base do admin; parceiro já com royalty descontado.
      *
      * @return array{royaltiesMes: float}
      */
-    public function comissaoMes(?Authenticatable $usuario, int $periodo = 30): array
+    public function comissaoMes(?Authenticatable $usuario, int $periodo = 0): array
     {
         $periodo = $this->apuracaoService->periodoValido($periodo);
 
@@ -85,10 +85,10 @@ class DashboardService
     /** Aquece todos os fragmentos do dashboard para um usuário admin. */
     public function aquecerCacheAdmin(Usuario $admin): void
     {
-        foreach ([7, 30, 90] as $dias) {
-            $this->resumoRapido($admin, $dias);
-            $this->comissaoMes($admin, $dias);
-            $this->apuracao($dias, $admin);
+        foreach ([0, 7, 30, 90] as $periodo) {
+            $this->resumoRapido($admin, $periodo);
+            $this->comissaoMes($admin, $periodo);
+            $this->apuracao($periodo, $admin);
         }
     }
 
@@ -103,6 +103,6 @@ class DashboardService
         $dia = now()->toDateString();
         $periodoSuffix = $periodo !== null ? ".p{$periodo}" : '';
 
-        return "dashboard.{$fragmento}.v4.{$tipo}.{$id}.{$dia}{$periodoSuffix}";
+        return "dashboard.{$fragmento}.v5.{$tipo}.{$id}.{$dia}{$periodoSuffix}";
     }
 }

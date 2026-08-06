@@ -22,26 +22,26 @@ class DashboardResumoService
     /**
      * @return array{totalEstabelecimentos: int, faturamentoMes: float, royaltiesMes: float}
      */
-    public function resumo(?Authenticatable $usuario, int $dias = 30): array
+    public function resumo(?Authenticatable $usuario, int $periodo = 0): array
     {
         return array_merge(
-            $this->calcularRapido($usuario, $dias),
-            ['royaltiesMes' => $this->calcularComissaoMes($usuario, $dias)],
+            $this->calcularRapido($usuario, $periodo),
+            ['royaltiesMes' => $this->calcularComissaoMes($usuario, $periodo)],
         );
     }
 
     /**
      * @return array{totalEstabelecimentos: int, faturamentoMes: float}
      */
-    public function calcularRapido(?Authenticatable $usuario, int $dias = 30): array
+    public function calcularRapido(?Authenticatable $usuario, int $periodo = 0): array
     {
         return [
             'totalEstabelecimentos' => Estabelecimento::count(),
-            'faturamentoMes' => $this->faturamentoPeriodo($dias),
+            'faturamentoMes' => $this->faturamentoPeriodo($periodo),
         ];
     }
 
-    public function calcularComissaoMes(?Authenticatable $usuario, int $dias = 30): float
+    public function calcularComissaoMes(?Authenticatable $usuario, int $periodo = 0): float
     {
         $usuarioResolvido = $usuario;
 
@@ -49,41 +49,58 @@ class DashboardResumoService
             $usuarioResolvido = $usuarioResolvido->dono;
         }
 
-        return $this->comissaoPeriodo($usuarioResolvido, $dias);
+        return $this->comissaoPeriodo($usuarioResolvido, $periodo);
     }
 
     /**
-     * Faturamento do período rolling, somado direto do EDI (mesma janela da apuração).
+     * Faturamento EDI na mesma janela da apuração (mês atual ou últimos N dias).
      */
-    private function faturamentoPeriodo(int $dias): float
+    private function faturamentoPeriodo(int $periodo): float
     {
-        $desde = now()->subDays($dias)->toDateString();
+        [$inicio, $fim] = $this->intervalo($periodo);
 
         return (float) DB::table('edi_movimentos as em')
-            ->where('em.data_inicial_transacao', '>=', $desde)
+            ->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
             ->whereIn('em.estabelecimento_id', Estabelecimento::query()->select('id'))
             ->sum('em.valor_total_transacao');
     }
 
-    private function comissaoPeriodo(mixed $usuario, int $dias): float
+    /**
+     * Mesma fórmula do admin (ComissaoAdminSql), escopada à carteira.
+     * Marketplace/revenda: desconta percentual_retencao_pai sobre essa base.
+     */
+    private function comissaoPeriodo(mixed $usuario, int $periodo): float
     {
-        $desde = now()->subDays($dias)->toDateString();
+        [$inicio, $fim] = $this->intervalo($periodo);
 
-        if ($usuario instanceof Usuario && $usuario->tipo !== 'admin') {
-            $bruta = (float) DB::table('transacao_royalties')
-                ->join('edi_movimentos', 'edi_movimentos.id', '=', 'transacao_royalties.edi_movimento_id')
-                ->where('edi_movimentos.data_inicial_transacao', '>=', $desde)
-                ->where('transacao_royalties.usuario_id', $usuario->id)
-                ->whereIn('edi_movimentos.estabelecimento_id', Estabelecimento::query()->select('id'))
-                ->sum('transacao_royalties.valor_royalty');
-
-            return $this->comissaoPag->comissaoLiquidaMarketplace($bruta, $usuario)['liquida'];
-        }
-
-        return (float) ComissaoAdminSql::queryMovimentosComComissaoAdmin(function ($query) use ($desde) {
-            $query->where('em.data_inicial_transacao', '>=', $desde)
+        $bruta = (float) ComissaoAdminSql::queryMovimentosComComissaoAdmin(function ($query) use ($inicio, $fim) {
+            $query->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
                 ->whereIn('em.estabelecimento_id', Estabelecimento::query()->select('id'))
                 ->whereNotNull('e.plano_id');
         })->sum(DB::raw(ComissaoAdminSql::valor()));
+
+        if ($usuario instanceof Usuario && $usuario->tipo !== 'admin') {
+            return $this->comissaoPag->comissaoLiquidaMarketplace($bruta, $usuario)['liquida'];
+        }
+
+        return round($bruta, 2);
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    private function intervalo(int $periodo): array
+    {
+        if ($periodo === 0) {
+            return [
+                now()->startOfMonth()->toDateString(),
+                now()->endOfMonth()->toDateString(),
+            ];
+        }
+
+        return [
+            now()->subDays($periodo)->toDateString(),
+            now()->toDateString(),
+        ];
     }
 }

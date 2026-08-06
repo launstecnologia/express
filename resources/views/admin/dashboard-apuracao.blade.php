@@ -2,7 +2,10 @@
     <div class="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
             <h2 class="text-lg font-bold text-gray-900 dark:text-gray-100">Apuração das Transações</h2>
-            <p class="text-sm text-gray-500 dark:text-gray-400">Detalhamento por plano com base no EDI (últimos {{ $periodo }} dias).</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+                Detalhamento por plano com base no EDI
+                ({{ $periodo === 0 ? now()->translatedFormat('F/Y') : "últimos {$periodo} dias" }}).
+            </p>
         </div>
         <span class="inline-flex w-fit items-center gap-2 rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white shadow-sm">
             <i class="fa-solid fa-layer-group"></i>

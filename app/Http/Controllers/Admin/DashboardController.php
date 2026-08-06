@@ -10,8 +10,7 @@ class DashboardController extends Controller
 {
     public function __invoke(Request $request, DashboardService $dashboardService)
     {
-        $periodo = (int) $request->integer('periodo', 30);
-        $periodo = in_array($periodo, [7, 30, 90], true) ? $periodo : 30;
+        $periodo = $this->resolverPeriodo($request);
         $usuario = $request->user();
 
         $resumo = $dashboardService->resumoRapido($usuario, $periodo);
@@ -32,8 +31,7 @@ class DashboardController extends Controller
 
     public function comissao(Request $request, DashboardService $dashboardService)
     {
-        $periodo = (int) $request->integer('periodo', 30);
-        $periodo = in_array($periodo, [7, 30, 90], true) ? $periodo : 30;
+        $periodo = $this->resolverPeriodo($request);
         $dados = $dashboardService->comissaoMes($request->user(), $periodo);
 
         return response()->json([
@@ -44,9 +42,16 @@ class DashboardController extends Controller
 
     public function apuracao(Request $request, DashboardService $dashboardService)
     {
-        $periodo = (int) $request->integer('periodo', 30);
+        $periodo = $this->resolverPeriodo($request);
         $dados = $dashboardService->apuracao($periodo, $request->user());
 
         return view('admin.dashboard-apuracao', $dados);
+    }
+
+    private function resolverPeriodo(Request $request): int
+    {
+        $periodo = (int) $request->integer('periodo', 0);
+
+        return in_array($periodo, [0, 7, 30, 90], true) ? $periodo : 0;
     }
 }
