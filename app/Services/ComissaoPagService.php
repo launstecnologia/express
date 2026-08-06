@@ -17,10 +17,6 @@ class ComissaoPagService
         9 => 'Setembro', 10 => 'Outubro', 11 => 'Novembro', 12 => 'Dezembro',
     ];
 
-    public function __construct(
-        private readonly RoyaltyCalculadorService $royaltyCalculador,
-    ) {}
-
     /**
      * @return Collection<int, object{valor: string, rotulo: string}>
      */
@@ -115,7 +111,6 @@ class ComissaoPagService
         $conciliado = $conciliacao !== null;
 
         $marketplaces = Usuario::query()
-            ->with('hierarquia.pai.usuario')
             ->whereIn('id', $rows->pluck('marketplace_id'))
             ->get()
             ->keyBy('id');
@@ -142,31 +137,34 @@ class ComissaoPagService
     }
 
     /**
-     * Aplica a retenção (royalty) do pai sobre a comissão bruta do marketplace.
+     * Aplica a retenção (royalty) configurada no cadastro do marketplace.
+     *
+     * No painel PagSeguro o desconto usa o % cadastrado mesmo sem pai hierárquico
+     * resolvido — o vínculo do pai só é obrigatório na distribuição EDI.
      *
      * @return array{bruta: float, royalty: float, liquida: float, percentual: float}
      */
     public function comissaoLiquidaMarketplace(float $comissaoBruta, ?Usuario $marketplace): array
     {
         $bruta = round($comissaoBruta, 4);
+        $percentual = (float) ($marketplace?->percentual_retencao_pai ?? 0);
 
-        if (! $marketplace || $bruta <= 0) {
+        if (! $marketplace || $bruta <= 0 || $percentual <= 0) {
             return [
                 'bruta' => $bruta,
                 'royalty' => 0.0,
                 'liquida' => round($bruta, 2),
-                'percentual' => 0.0,
+                'percentual' => $percentual,
             ];
         }
 
-        $retencao = $this->royaltyCalculador->calcularRetencaoPai($marketplace, $bruta);
-        $royalty = (float) $retencao['valor'];
+        $royalty = round($bruta * $percentual / 100, 2);
 
         return [
             'bruta' => $bruta,
             'royalty' => $royalty,
             'liquida' => round($bruta - $royalty, 2),
-            'percentual' => (float) ($marketplace->percentual_retencao_pai ?? 0),
+            'percentual' => $percentual,
         ];
     }
 

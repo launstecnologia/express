@@ -114,11 +114,11 @@
                                 @if (($linha->total_royalty ?? 0) > 0)
                                     <p class="font-semibold text-amber-700">−R$ {{ number_format($linha->total_royalty, 2, ',', '.') }}</p>
                                     <p class="mt-0.5 text-[11px] text-gray-400">{{ number_format($linha->percentual_retencao, 0, ',', '.') }}%</p>
+                                @elseif (($linha->percentual_retencao ?? 0) > 0)
+                                    <p class="text-sm text-gray-400">R$ 0,00</p>
+                                    <p class="mt-0.5 text-[11px] text-gray-400">{{ number_format($linha->percentual_retencao, 0, ',', '.') }}%</p>
                                 @else
                                     <p class="text-sm text-gray-400">—</p>
-                                    @if (($linha->percentual_retencao ?? 0) > 0)
-                                        <p class="mt-0.5 text-[11px] text-amber-600">{{ number_format($linha->percentual_retencao, 0, ',', '.') }}% sem pai</p>
-                                    @endif
                                 @endif
                             </td>
                         @endif
