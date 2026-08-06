@@ -77,52 +77,52 @@
         <button type="button" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">Exportar</button>
     </div>
     <div class="overflow-x-auto">
-        <table class="w-full text-sm">
+        <table class="w-full text-sm" style="min-width: {{ ($ehAdmin ?? false) ? '1100px' : '860px' }}">
             <thead>
                 <tr class="border-b border-gray-100 bg-gray-50">
-                    <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Marketplace</th>
-                    <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Período</th>
-                    <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
-                    <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Faturamento</th>
+                    <th class="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Marketplace</th>
+                    <th class="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Período</th>
+                    <th class="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
+                    <th class="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Faturamento</th>
                     @if ($ehAdmin ?? false)
-                        <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Comissão bruta</th>
-                        <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Royalty</th>
+                        <th class="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Comissão bruta</th>
+                        <th class="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Royalty</th>
                     @endif
-                    <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Comissão líquida</th>
+                    <th class="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Comissão líquida</th>
                 </tr>
             </thead>
             <tbody>
                 @forelse ($linhas as $linha)
                     <tr class="border-b border-gray-50 transition-colors hover:bg-gray-50">
-                        <td class="px-5 py-4">
-                            <p class="font-semibold text-gray-800">{{ $linha->marketplace_nome }}</p>
+                        <td class="max-w-[280px] px-5 py-4">
+                            <p class="truncate font-semibold text-gray-800" title="{{ $linha->marketplace_nome }}">{{ $linha->marketplace_nome }}</p>
                         </td>
-                        <td class="px-5 py-4">
+                        <td class="whitespace-nowrap px-5 py-4">
                             <span class="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-700">{{ $linha->periodo }}</span>
                         </td>
-                        <td class="px-5 py-4">
+                        <td class="whitespace-nowrap px-5 py-4">
                             @if ($linha->conciliado)
                                 <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">Conciliado</span>
                             @else
                                 <span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-600">Sem planilha</span>
                             @endif
                         </td>
-                        <td class="px-5 py-4 font-semibold text-green-600">R$ {{ number_format($linha->total_faturamento, 2, ',', '.') }}</td>
+                        <td class="whitespace-nowrap px-5 py-4 text-right font-semibold tabular-nums text-green-600">R$&nbsp;{{ number_format($linha->total_faturamento, 2, ',', '.') }}</td>
                         @if ($ehAdmin ?? false)
-                            <td class="px-5 py-4 font-semibold text-slate-700">R$ {{ number_format($linha->total_comissao_bruta, 2, ',', '.') }}</td>
-                            <td class="px-5 py-4">
+                            <td class="whitespace-nowrap px-5 py-4 text-right font-semibold tabular-nums text-slate-700">R$&nbsp;{{ number_format($linha->total_comissao_bruta, 2, ',', '.') }}</td>
+                            <td class="whitespace-nowrap px-5 py-4 text-right tabular-nums">
                                 @if (($linha->total_royalty ?? 0) > 0)
-                                    <p class="font-semibold text-amber-700">−R$ {{ number_format($linha->total_royalty, 2, ',', '.') }}</p>
-                                    <p class="mt-0.5 text-[11px] text-gray-400">{{ number_format($linha->percentual_retencao, 0, ',', '.') }}%</p>
+                                    <span class="font-semibold text-amber-700">−R$&nbsp;{{ number_format($linha->total_royalty, 2, ',', '.') }}</span>
+                                    <span class="ml-1 text-[11px] text-gray-400">({{ number_format($linha->percentual_retencao, 0, ',', '.') }}%)</span>
                                 @elseif (($linha->percentual_retencao ?? 0) > 0)
-                                    <p class="text-sm text-gray-400">R$ 0,00</p>
-                                    <p class="mt-0.5 text-[11px] text-gray-400">{{ number_format($linha->percentual_retencao, 0, ',', '.') }}%</p>
+                                    <span class="text-sm text-gray-400">R$&nbsp;0,00</span>
+                                    <span class="ml-1 text-[11px] text-gray-400">({{ number_format($linha->percentual_retencao, 0, ',', '.') }}%)</span>
                                 @else
-                                    <p class="text-sm text-gray-400">—</p>
+                                    <span class="text-sm text-gray-400">—</span>
                                 @endif
                             </td>
                         @endif
-                        <td class="px-5 py-4 font-semibold text-sky-600">R$ {{ number_format($linha->total_comissao, 2, ',', '.') }}</td>
+                        <td class="whitespace-nowrap px-5 py-4 text-right font-semibold tabular-nums text-sky-600">R$&nbsp;{{ number_format($linha->total_comissao, 2, ',', '.') }}</td>
                     </tr>
                 @empty
                     <tr>
