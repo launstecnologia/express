@@ -23,6 +23,15 @@ class RoyaltyController extends Controller
             $usuario = $usuario->dono;
         }
 
+        $ehAdmin = $usuario instanceof Usuario && $usuario->tipo === 'admin';
+        $ehMaster = $usuario instanceof Usuario && $usuario->tipo === 'master';
+        $ehRevenda = $usuario instanceof Usuario && $usuario->tipo === 'revenda';
+        $podeSelecionarVisao = $ehAdmin || $ehMaster;
+
+        $visao = $podeSelecionarVisao && $request->input('visao') === 'revenda'
+            ? 'revenda'
+            : 'marketplace';
+
         $mesesDisponiveis = $this->comissaoPag->mesesDisponiveis(
             $usuario instanceof Usuario ? $usuario : null
         );
@@ -36,7 +45,7 @@ class RoyaltyController extends Controller
             : null;
 
         $linhas = $referenciaMes
-            ? $this->comissaoPag->extratoMarketplace($referenciaMes, $usuarioFiltro)
+            ? $this->comissaoPag->extratoMarketplace($referenciaMes, $usuarioFiltro, $visao)
             : collect();
 
         $conciliacao = $referenciaMes
@@ -53,8 +62,6 @@ class RoyaltyController extends Controller
             ['path' => $request->url(), 'query' => $request->query()],
         );
 
-        $ehAdmin = $usuario instanceof Usuario && $usuario->tipo === 'admin';
-
         return view('relatorio.royalties', [
             'linhas' => $paginado,
             'mesesDisponiveis' => $mesesDisponiveis,
@@ -64,7 +71,9 @@ class RoyaltyController extends Controller
                 : null,
             'conciliacao' => $conciliacao,
             'ehAdmin' => $ehAdmin,
-            'ehRevenda' => $usuario instanceof Usuario && $usuario->tipo === 'revenda',
+            'ehRevenda' => $ehRevenda || $visao === 'revenda',
+            'visao' => $visao,
+            'podeSelecionarVisao' => $podeSelecionarVisao,
         ]);
     }
 }
