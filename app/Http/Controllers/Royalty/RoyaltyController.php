@@ -49,6 +49,8 @@ class RoyaltyController extends Controller
             ['path' => $request->url(), 'query' => $request->query()],
         );
 
+        $ehAdmin = $usuario instanceof Usuario && $usuario->tipo === 'admin';
+
         return view('relatorio.royalties', [
             'linhas' => $paginado,
             'mesesDisponiveis' => $mesesDisponiveis,
@@ -57,6 +59,7 @@ class RoyaltyController extends Controller
                 ? $this->comissaoPag->formatarPeriodo((int) $referenciaMes->month, (int) $referenciaMes->year)
                 : null,
             'conciliacao' => $conciliacao,
+            'ehAdmin' => $ehAdmin,
         ]);
     }
 }
