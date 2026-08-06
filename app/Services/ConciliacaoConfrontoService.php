@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Conciliacao;
 use App\Models\ConciliacaoLinha;
+use App\Models\Estabelecimento;
 use App\Support\ComissaoAdminSql;
 use App\Support\ConciliacaoDimensao;
 use Illuminate\Support\Collection;
@@ -22,6 +23,9 @@ class ConciliacaoConfrontoService
             'confronto_erro' => null,
             'confronto_iniciado_em' => now(),
         ]);
+
+        // Religa clientes cadastrados depois da importação (token_pagseguro = id_cliente).
+        $this->religarEstabelecimentos($conciliacao);
 
         $inicio = $conciliacao->referencia_mes->copy()->startOfMonth()->toDateString();
         $fim = $conciliacao->referencia_mes->copy()->endOfMonth()->toDateString();
@@ -132,6 +136,53 @@ class ConciliacaoConfrontoService
         ]);
 
         return $conciliacao->fresh();
+    }
+
+    /**
+     * Vincula linhas ainda sem estabelecimento a cadastros novos/atualizados
+     * pelo token PagSeguro (id_cliente da planilha).
+     */
+    public function religarEstabelecimentos(Conciliacao $conciliacao): int
+    {
+        $estabelecimentos = Estabelecimento::withoutGlobalScopes()
+            ->whereNotNull('token_pagseguro')
+            ->where('token_pagseguro', '!=', '')
+            ->pluck('id', 'token_pagseguro');
+
+        if ($estabelecimentos->isEmpty()) {
+            return 0;
+        }
+
+        $atualizados = 0;
+        $agora = now();
+
+        ConciliacaoLinha::query()
+            ->where('conciliacao_id', $conciliacao->id)
+            ->where(function ($q) {
+                $q->where('sem_estabelecimento', true)
+                    ->orWhereNull('estabelecimento_id');
+            })
+            ->orderBy('id')
+            ->chunkById(500, function ($linhas) use ($estabelecimentos, &$atualizados, $agora) {
+                foreach ($linhas as $linha) {
+                    $estabelecimentoId = $estabelecimentos[$linha->id_cliente] ?? null;
+
+                    if (! $estabelecimentoId) {
+                        continue;
+                    }
+
+                    $linha->update([
+                        'estabelecimento_id' => $estabelecimentoId,
+                        'sem_estabelecimento' => false,
+                        'status' => 'pendente',
+                        'updated_at' => $agora,
+                    ]);
+
+                    $atualizados++;
+                }
+            });
+
+        return $atualizados;
     }
 
     private function chaveDaLinha(ConciliacaoLinha $linha): string

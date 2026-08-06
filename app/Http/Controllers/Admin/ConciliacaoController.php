@@ -164,7 +164,7 @@ class ConciliacaoController extends Controller
 
         return redirect()
             ->route('admin.conciliacoes.show', $conciliacao)
-            ->with('status', 'Confronto adicionado à fila. Você pode sair desta página.');
+            ->with('status', 'Atualização enfileirada: os estabelecimentos cadastrados depois da importação serão vinculados e o EDI confrontado de novo. Você pode sair desta página.');
     }
 
     public function destroy(Conciliacao $conciliacao)

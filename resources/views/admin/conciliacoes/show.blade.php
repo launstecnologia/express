@@ -33,9 +33,9 @@
     <div class="flex flex-wrap gap-2">
         <form method="POST" action="{{ route('admin.conciliacoes.confrontar', $conciliacao) }}">
             @csrf
-            <button @disabled($confrontoEmAndamento) class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-wait disabled:opacity-60">
+            <button @disabled($confrontoEmAndamento) class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-wait disabled:opacity-60" title="Religa estabelecimentos cadastrados depois da importação e confronta de novo com o EDI">
                 <i class="fa-solid {{ $confrontoEmAndamento ? 'fa-spinner fa-spin' : 'fa-rotate' }}"></i>
-                {{ $confrontoEmAndamento ? 'Confronto em andamento' : 'Reconfrontar EDI' }}
+                {{ $confrontoEmAndamento ? 'Atualização em andamento' : 'Atualizar vínculos e reconfrontar' }}
             </button>
         </form>
         <form method="POST" action="{{ route('admin.conciliacoes.destroy', $conciliacao) }}" onsubmit="return confirm('Remover esta conciliação?')">
