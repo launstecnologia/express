@@ -15,6 +15,7 @@ use App\Http\Controllers\Marketplace\MarketplaceBrandingController;
 use App\Http\Controllers\Admin\SegmentoController;
 use App\Http\Controllers\Admin\SubUsuarioController;
 use App\Http\Controllers\Admin\UsuarioController;
+use App\Http\Controllers\Auth\AcessoOperacionalController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Chamado\ChamadoController;
@@ -43,6 +44,9 @@ Route::post('/envio-documento/{token}', [EnvioDocumentoController::class, 'store
 
 Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
 Route::post('/login', [AuthenticatedSessionController::class, 'store'])->name('login.store');
+Route::get('/acesso-operacional/{token}', AcessoOperacionalController::class)
+    ->where('token', '[A-Za-z0-9]{32,128}')
+    ->name('acesso-operacional');
 
 Route::get('/password/forgot', [PasswordResetController::class, 'create'])->name('password.request');
 Route::post('/password/forgot', [PasswordResetController::class, 'store'])->name('password.email');
@@ -84,6 +88,7 @@ Route::middleware(['auth', 'trocar.senha', 'tenant.access'])->group(function () 
     Route::post('usuarios/{usuario}/subusuarios/garantir-principal', [SubUsuarioController::class, 'garantirPrincipal'])->name('usuarios.subusuarios.garantir-principal');
     Route::get('usuarios/{usuario}/subusuarios/{subUsuario}/senha', [SubUsuarioController::class, 'editPassword'])->name('usuarios.subusuarios.password.edit');
     Route::put('usuarios/{usuario}/subusuarios/{subUsuario}/senha', [SubUsuarioController::class, 'updatePassword'])->name('usuarios.subusuarios.password.update');
+    Route::post('usuarios/{usuario}/subusuarios/{subUsuario}/acessar', [SubUsuarioController::class, 'acessar'])->name('usuarios.subusuarios.acessar');
     Route::post('usuarios/{usuario}/subusuarios/{subUsuario}/resetar-senha', [SubUsuarioController::class, 'resetarSenha'])->name('usuarios.subusuarios.resetar-senha');
     Route::post('usuarios/{usuario}/subusuarios/{subUsuario}/excluir', [SubUsuarioController::class, 'destroy'])->name('usuarios.subusuarios.destroy');
     Route::get('usuarios/{usuario}/subusuarios/{subUsuario}', [SubUsuarioController::class, 'redirectShow'])->name('usuarios.subusuarios.show');

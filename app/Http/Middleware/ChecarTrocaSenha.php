@@ -16,6 +16,7 @@ class ChecarTrocaSenha
             $user
             && method_exists($user, 'getAttribute')
             && $user->must_change_password
+            && ! $request->session()->has('acesso_via_admin_id')
             && ! $request->routeIs('senha.trocar', 'senha.trocar.salvar', 'logout')
         ) {
             return redirect()->route('senha.trocar');

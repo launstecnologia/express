@@ -7,12 +7,14 @@ use App\Models\PerfilPermissao;
 use App\Models\SubUsuario;
 use App\Models\Usuario;
 use App\Rules\EmailUnicoAutenticacao;
+use App\Services\AcessoOperacionalService;
 use App\Services\SubUsuarioPrincipalService;
 use App\Support\UsuarioComercial;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
+use RuntimeException;
 
 class SubUsuarioController extends Controller
 {
@@ -85,6 +87,23 @@ class SubUsuarioController extends Controller
         $subUsuario->update(['password' => $dados['password']]);
 
         return redirect()->route('usuarios.show', $usuario)->with('status', 'Senha do usuário operacional atualizada.');
+    }
+
+    public function acessar(Usuario $usuario, SubUsuario $subUsuario, AcessoOperacionalService $acesso)
+    {
+        abort_unless(UsuarioComercial::podeGerenciar($usuario), 403);
+        abort_unless(auth()->user()?->tipo === 'admin', 403);
+        $this->validarDono($usuario, $subUsuario);
+
+        try {
+            $url = $acesso->gerarUrlAcesso($usuario, $subUsuario, auth()->user());
+        } catch (RuntimeException $e) {
+            return redirect()
+                ->route('usuarios.show', $usuario)
+                ->withErrors(['acesso' => $e->getMessage()]);
+        }
+
+        return redirect()->away($url);
     }
 
     public function resetarSenha(Usuario $usuario, SubUsuario $subUsuario)

@@ -281,9 +281,16 @@
                     <td class="px-5 py-4 text-gray-600">{{ $subUsuario->ativo ? 'Ativo' : 'Inativo' }}</td>
                     <td class="px-5 py-4 text-right">
                         <div class="flex flex-wrap justify-end gap-2">
-                            @if ($urlAcessoOperacional ?? null)
+                            @if (auth()->user()?->tipo === 'admin' && in_array($usuario->tipo, ['marketplace', 'revenda'], true))
+                                <form method="POST" action="{{ route('usuarios.subusuarios.acessar', [$usuario, $subUsuario]) }}" target="_blank">
+                                    @csrf
+                                    <button type="submit" class="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-100">
+                                        <i class="fa-solid fa-right-to-bracket mr-1"></i> Acessar
+                                    </button>
+                                </form>
+                            @elseif ($urlAcessoOperacional ?? null)
                                 <a href="{{ $urlAcessoOperacional }}" target="_blank" rel="noopener" class="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700 hover:bg-violet-100">
-                                    <i class="fa-solid fa-right-to-bracket mr-1"></i> Acessar
+                                    <i class="fa-solid fa-right-to-bracket mr-1"></i> Abrir painel
                                 </a>
                             @endif
                             <form method="POST" action="{{ route('usuarios.subusuarios.resetar-senha', [$usuario, $subUsuario]) }}" onsubmit="return confirm('Resetar a senha de {{ $subUsuario->nome }} para 123456? No próximo acesso será obrigatório criar uma nova senha.')">
