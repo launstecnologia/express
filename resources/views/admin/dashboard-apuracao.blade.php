@@ -118,7 +118,13 @@
                                             <p class="mt-0.5 text-sm font-bold tabular-nums leading-tight text-gray-900 sm:text-base dark:text-gray-100">R$ {{ number_format($planoResumo['faturamento'], 2, ',', '.') }}</p>
                                         </div>
                                         <div class="min-w-0 text-right">
-                                            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Comissão</p>
+                                            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                                                @if (\App\Support\UsuarioComercial::ehMarketplaceOuRevenda())
+                                                    Comissão líquida
+                                                @else
+                                                    Comissão
+                                                @endif
+                                            </p>
                                             <p class="mt-0.5 text-sm font-bold tabular-nums leading-tight text-blue-700 sm:text-base dark:text-blue-400">R$ {{ number_format($planoResumo['comissao'], 2, ',', '.') }}</p>
                                         </div>
                                     </div>

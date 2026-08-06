@@ -21,35 +21,39 @@ class DashboardService
     ) {}
 
     /**
-     * Cards superiores — resposta rápida (estabelecimentos + faturamento EDI do mês).
+     * Cards superiores — estabelecimentos + faturamento EDI do período.
      *
      * @return array{totalEstabelecimentos: int, faturamentoMes: float}
      */
-    public function resumoRapido(?Authenticatable $usuario): array
+    public function resumoRapido(?Authenticatable $usuario, int $periodo = 30): array
     {
+        $periodo = $this->apuracaoService->periodoValido($periodo);
+
         return Cache::remember(
-            $this->cacheKey('rapido', null, $usuario),
+            $this->cacheKey('rapido', $periodo, $usuario),
             self::CACHE_TTL_SECONDS,
-            fn () => $this->resumoService->calcularRapido($usuario),
+            fn () => $this->resumoService->calcularRapido($usuario, $periodo),
         );
     }
 
     /**
-     * Comissão do mês — consulta pesada, carregada após o shell da página.
+     * Comissão do período — com desconto de royalty para parceiros.
      *
      * @return array{royaltiesMes: float}
      */
-    public function comissaoMes(?Authenticatable $usuario): array
+    public function comissaoMes(?Authenticatable $usuario, int $periodo = 30): array
     {
+        $periodo = $this->apuracaoService->periodoValido($periodo);
+
         return Cache::remember(
-            $this->cacheKey('comissao', null, $usuario),
+            $this->cacheKey('comissao', $periodo, $usuario),
             self::CACHE_TTL_SECONDS,
-            fn () => ['royaltiesMes' => $this->resumoService->calcularComissaoMes($usuario)],
+            fn () => ['royaltiesMes' => $this->resumoService->calcularComissaoMes($usuario, $periodo)],
         );
     }
 
     /**
-     * Apuração por plano + gráficos — consulta pesada, carregada após o shell.
+     * Apuração por plano + gráficos — mesma janela dos cards superiores.
      *
      * @return array{
      *     periodo: int,
@@ -81,10 +85,9 @@ class DashboardService
     /** Aquece todos os fragmentos do dashboard para um usuário admin. */
     public function aquecerCacheAdmin(Usuario $admin): void
     {
-        $this->resumoRapido($admin);
-        $this->comissaoMes($admin);
-
         foreach ([7, 30, 90] as $dias) {
+            $this->resumoRapido($admin, $dias);
+            $this->comissaoMes($admin, $dias);
             $this->apuracao($dias, $admin);
         }
     }
@@ -97,9 +100,9 @@ class DashboardService
 
         $tipo = $usuario instanceof Usuario ? $usuario->tipo : 'guest';
         $id = $usuario?->id ?? 0;
-        $mes = now()->format('Y-m');
+        $dia = now()->toDateString();
         $periodoSuffix = $periodo !== null ? ".p{$periodo}" : '';
 
-        return "dashboard.{$fragmento}.v3.{$tipo}.{$id}.{$mes}{$periodoSuffix}";
+        return "dashboard.{$fragmento}.v4.{$tipo}.{$id}.{$dia}{$periodoSuffix}";
     }
 }

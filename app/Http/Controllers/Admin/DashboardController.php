@@ -14,8 +14,8 @@ class DashboardController extends Controller
         $periodo = in_array($periodo, [7, 30, 90], true) ? $periodo : 30;
         $usuario = $request->user();
 
-        $resumo = $dashboardService->resumoRapido($usuario);
-        $comissao = $dashboardService->comissaoMes($usuario);
+        $resumo = $dashboardService->resumoRapido($usuario, $periodo);
+        $comissao = $dashboardService->comissaoMes($usuario, $periodo);
         $apuracao = $dashboardService->apuracao($periodo, $usuario);
 
         return view('admin.dashboard', [
@@ -32,7 +32,9 @@ class DashboardController extends Controller
 
     public function comissao(Request $request, DashboardService $dashboardService)
     {
-        $dados = $dashboardService->comissaoMes($request->user());
+        $periodo = (int) $request->integer('periodo', 30);
+        $periodo = in_array($periodo, [7, 30, 90], true) ? $periodo : 30;
+        $dados = $dashboardService->comissaoMes($request->user(), $periodo);
 
         return response()->json([
             'royaltiesMes' => $dados['royaltiesMes'],

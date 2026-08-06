@@ -19,6 +19,10 @@ class DashboardApuracaoService
 {
     private const CACHE_TTL_SECONDS = 300;
 
+    public function __construct(
+        private readonly ComissaoPagService $comissaoPag,
+    ) {}
+
     public function periodoValido(int $dias): int
     {
         return in_array($dias, [7, 30, 90], true) ? $dias : 30;
@@ -96,11 +100,11 @@ class DashboardApuracaoService
             ]);
         }
 
-        $usuarioIdFiltro = $this->usuarioIdComissao($usuario);
+        $parceiro = $this->usuarioParceiro($usuario);
 
         $faturamentoPorPlano = $this->agregarFaturamento($desde);
-        $comissaoPorPlano = $usuarioIdFiltro
-            ? $this->agregarComissao($desde, $usuarioIdFiltro)
+        $comissaoPorPlano = $parceiro
+            ? $this->agregarComissao($desde, $parceiro->id)
             : $this->agregarComissaoAdmin($desde);
 
         $planoIds = $faturamentoPorPlano->keys()
@@ -117,19 +121,23 @@ class DashboardApuracaoService
                 ->orderBy('nome')
                 ->get();
 
-        $planosResumo = $planos->map(function (Plano $plano) use ($faturamentoPorPlano, $comissaoPorPlano) {
+        $planosResumo = $planos->map(function (Plano $plano) use ($faturamentoPorPlano, $comissaoPorPlano, $parceiro) {
             $categorias = $faturamentoPorPlano->get($plano->id, collect());
             $debito = (float) ($categorias->get('debito') ?? 0);
             $credito = (float) ($categorias->get('credito') ?? 0);
             $parcelado = (float) ($categorias->get('parcelado') ?? 0);
             $pix = (float) ($categorias->get('pix') ?? 0);
             $faturamento = $debito + $credito + $parcelado + $pix;
+            $comissaoBruta = (float) ($comissaoPorPlano->get($plano->id) ?? 0);
+            $comissao = $parceiro
+                ? $this->comissaoPag->comissaoLiquidaMarketplace($comissaoBruta, $parceiro)['liquida']
+                : $comissaoBruta;
 
             return [
                 'id' => $plano->id,
                 'nome' => $plano->nome,
                 'faturamento' => round($faturamento, 2),
-                'comissao' => round((float) ($comissaoPorPlano->get($plano->id) ?? 0), 2),
+                'comissao' => round($comissao, 2),
                 'debito' => round($debito, 2),
                 'credito' => round($credito, 2),
                 'parcelado' => round($parcelado, 2),
@@ -308,14 +316,14 @@ class DashboardApuracaoService
         return $query->get()->pluck('total', 'plano_id');
     }
 
-    private function usuarioIdComissao(?Authenticatable $usuario): ?int
+    private function usuarioParceiro(?Authenticatable $usuario): ?Usuario
     {
         if ($usuario instanceof SubUsuario) {
             $usuario = $usuario->dono;
         }
 
         if ($usuario instanceof Usuario && $usuario->tipo !== 'admin') {
-            return $usuario->id;
+            return $usuario;
         }
 
         return null;
@@ -341,7 +349,7 @@ class DashboardApuracaoService
         $tipo = $usuario instanceof Usuario ? $usuario->tipo : 'guest';
         $id = $usuario?->id ?? 0;
 
-        return "dashboard.apuracao.v2.{$tipo}.{$id}.{$dias}";
+        return "dashboard.apuracao.v4.{$tipo}.{$id}.{$dias}";
     }
 
     private function respostaVazia(int $dias): array

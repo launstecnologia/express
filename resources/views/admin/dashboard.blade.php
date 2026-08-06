@@ -18,9 +18,9 @@
     <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
         <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Faturamento do mês</p>
+                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Faturamento</p>
                 <p class="mt-2 text-lg font-bold tabular-nums leading-tight text-green-600 sm:text-xl lg:text-2xl dark:text-green-400">R$ {{ number_format($faturamentoMes, 2, ',', '.') }}</p>
-                <p class="mt-1 text-[11px] text-gray-400">{{ now()->translatedFormat('F/Y') }} · EDI</p>
+                <p class="mt-1 text-[11px] text-gray-400">últimos {{ $periodo }} dias · EDI</p>
             </div>
             <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-400">
                 <i class="fa-solid fa-chart-line text-lg"></i>
@@ -30,9 +30,15 @@
     <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
         <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
-                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Comissões do mês</p>
+                <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Comissões</p>
                 <p class="mt-2 text-lg font-bold tabular-nums leading-tight text-yellow-600 sm:text-xl lg:text-2xl dark:text-yellow-400">R$ {{ number_format($royaltiesMes, 2, ',', '.') }}</p>
-                <p class="mt-1 text-[11px] text-gray-400">{{ now()->translatedFormat('F/Y') }}</p>
+                <p class="mt-1 text-[11px] text-gray-400">
+                    @if (\App\Support\UsuarioComercial::ehMarketplaceOuRevenda())
+                        últimos {{ $periodo }} dias · líquida após royalties
+                    @else
+                        últimos {{ $periodo }} dias
+                    @endif
+                </p>
             </div>
             <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-yellow-50 text-yellow-600 dark:bg-yellow-950 dark:text-yellow-400">
                 <i class="fa-solid fa-hand-holding-dollar text-lg"></i>
