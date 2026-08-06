@@ -36,7 +36,7 @@
         'marketplace' => UsuarioComercial::ehMaster()
             ? 'Retenção do Master (% sobre a comissão do marketplace)'
             : 'Retenção do Admin (% sobre a comissão do marketplace)',
-        'revenda' => 'Retenção do Marketplace (% sobre a comissão da revenda)',
+        'revenda' => 'Participação da revenda (% sobre a comissão líquida do marketplace, após royalty do admin)',
         default => 'Retenção do pai (%)',
     };
 @endphp

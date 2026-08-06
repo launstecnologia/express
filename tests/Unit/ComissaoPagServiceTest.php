@@ -30,17 +30,22 @@ class ComissaoPagServiceTest extends TestCase
         $this->assertSame(20.0, $resultado['percentual']);
     }
 
-    public function test_desconta_royalty_mesmo_sem_pai_hierarquico(): void
+    public function test_comissao_revenda_e_percentual_sobre_liquida_do_marketplace(): void
     {
-        $marketplace = new Usuario(['tipo' => 'marketplace', 'percentual_retencao_pai' => 25]);
+        $marketplace = new Usuario(['tipo' => 'marketplace', 'percentual_retencao_pai' => 20]);
         $marketplace->id = 10;
-        $marketplace->setRelation('hierarquia', null);
 
-        $resultado = $this->service->comissaoLiquidaParceiro(8860.17, $marketplace);
+        $revenda = new Usuario(['tipo' => 'revenda', 'percentual_retencao_pai' => 25]);
+        $revenda->id = 20;
 
-        $this->assertSame(2215.04, $resultado['royalty']);
-        $this->assertSame(6645.13, $resultado['liquida']);
-        $this->assertSame(25.0, $resultado['percentual']);
+        // Bruta 1000 → admin 20% = 200 → marketplace 800 → revenda 25% = 200
+        $resultado = $this->service->comissaoRevendaDaCarteira(1000.0, $marketplace, $revenda);
+
+        $this->assertSame(1000.0, $resultado['marketplace_bruta']);
+        $this->assertSame(200.0, $resultado['admin_royalty']);
+        $this->assertSame(800.0, $resultado['marketplace_liquida']);
+        $this->assertSame(25.0, $resultado['percentual_revenda']);
+        $this->assertSame(200.0, $resultado['revenda']);
     }
 
     public function test_mantem_comissao_inteira_sem_retencao_configurada(): void

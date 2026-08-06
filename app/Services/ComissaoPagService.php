@@ -20,48 +20,18 @@ class ComissaoPagService
     /**
      * @return Collection<int, object{valor: string, rotulo: string}>
      */
-    /**
-     * @return Collection<int, object{valor: string, rotulo: string}>
-     */
     public function mesesDisponiveis(?Usuario $usuario = null): Collection
     {
-        $meses = Conciliacao::query()
+        return Conciliacao::query()
             ->whereNotNull('referencia_mes')
             ->orderByDesc('referencia_mes')
             ->get(['referencia_mes'])
-            ->mapWithKeys(fn (Conciliacao $c) => [
-                $c->referencia_mes->format('Y-m') => (object) [
-                    'valor' => $c->referencia_mes->format('Y-m'),
-                    'rotulo' => $this->formatarPeriodo((int) $c->referencia_mes->month, (int) $c->referencia_mes->year),
-                ],
-            ]);
-
-        // Revenda usa comissão do EDI — inclui meses com movimento na carteira.
-        if ($usuario?->tipo === 'revenda') {
-            $estabIds = Estabelecimento::query()
-                ->where('revenda_id', $usuario->id)
-                ->pluck('id');
-
-            if ($estabIds->isNotEmpty()) {
-                $mesesEdi = DB::table('edi_movimentos')
-                    ->whereIn('estabelecimento_id', $estabIds)
-                    ->selectRaw('YEAR(data_inicial_transacao) as ano, MONTH(data_inicial_transacao) as mes')
-                    ->groupBy('ano', 'mes')
-                    ->orderByDesc('ano')
-                    ->orderByDesc('mes')
-                    ->get();
-
-                foreach ($mesesEdi as $row) {
-                    $chave = sprintf('%04d-%02d', $row->ano, $row->mes);
-                    $meses[$chave] = (object) [
-                        'valor' => $chave,
-                        'rotulo' => $this->formatarPeriodo((int) $row->mes, (int) $row->ano),
-                    ];
-                }
-            }
-        }
-
-        return $meses->sortKeysDesc()->values();
+            ->unique(fn (Conciliacao $c) => $c->referencia_mes?->format('Y-m'))
+            ->map(fn (Conciliacao $c) => (object) [
+                'valor' => $c->referencia_mes->format('Y-m'),
+                'rotulo' => $this->formatarPeriodo((int) $c->referencia_mes->month, (int) $c->referencia_mes->year),
+            ])
+            ->values();
     }
 
     public function conciliacaoDoMes(?Carbon $referenciaMes): ?Conciliacao
@@ -87,8 +57,6 @@ class ComissaoPagService
     }
 
     /**
-     * Extrato PagSeguro para admin/master (todos marketplaces) ou um marketplace.
-     *
      * @return Collection<int, object{
      *     parceiro_id: int,
      *     parceiro_nome: string,
@@ -108,21 +76,13 @@ class ComissaoPagService
      */
     public function extratoMarketplace(?Carbon $referenciaMes, ?Usuario $usuario = null): Collection
     {
-        if ($usuario && $usuario->tipo === 'revenda') {
-            return $this->extratoParceiro($referenciaMes, $usuario);
-        }
-
-        if ($usuario && $usuario->tipo === 'marketplace') {
+        if ($usuario && in_array($usuario->tipo, ['marketplace', 'revenda'], true)) {
             return $this->extratoParceiro($referenciaMes, $usuario);
         }
 
         return $this->extratoAgrupadoPorMarketplace($referenciaMes);
     }
 
-    /**
-     * Extrato do próprio parceiro na carteira dele.
-     * Marketplace: planilha PagSeguro. Revenda: faturamento/comissao do EDI.
-     */
     public function extratoParceiro(?Carbon $referenciaMes, Usuario $parceiro): Collection
     {
         if (! $referenciaMes || ! in_array($parceiro->tipo, ['marketplace', 'revenda'], true)) {
@@ -130,35 +90,15 @@ class ComissaoPagService
         }
 
         return $parceiro->tipo === 'revenda'
-            ? $this->extratoRevendaEdi($referenciaMes, $parceiro)
+            ? $this->extratoRevendaConciliacao($referenciaMes, $parceiro)
             : $this->extratoMarketplacePagSeguro($referenciaMes, $parceiro);
     }
 
     private function extratoMarketplacePagSeguro(Carbon $referenciaMes, Usuario $marketplace): Collection
     {
-        $estabelecimentoIds = Estabelecimento::query()->pluck('id');
+        $row = $this->totaisConciliacaoPorCarteira($referenciaMes, 'marketplace_id', $marketplace->id);
 
-        if ($estabelecimentoIds->isEmpty()) {
-            return collect();
-        }
-
-        $row = DB::table('conciliacao_linhas as cl')
-            ->join('conciliacoes as c', 'c.id', '=', 'cl.conciliacao_id')
-            ->join('estabelecimentos as e', 'e.id', '=', 'cl.estabelecimento_id')
-            ->where('cl.sem_estabelecimento', false)
-            ->where('e.marketplace_id', $marketplace->id)
-            ->whereIn('e.id', $estabelecimentoIds)
-            ->whereDate('c.referencia_mes', $referenciaMes->copy()->startOfMonth()->toDateString())
-            ->selectRaw('
-                YEAR(c.referencia_mes) as ano,
-                MONTH(c.referencia_mes) as mes,
-                SUM(cl.tpv) as total_faturamento,
-                SUM(cl.ms_comissao) as total_comissao
-            ')
-            ->groupBy('ano', 'mes')
-            ->first();
-
-        if (! $row || ((float) $row->total_faturamento <= 0 && (float) $row->total_comissao <= 0)) {
+        if (! $row) {
             return collect();
         }
 
@@ -172,94 +112,121 @@ class ComissaoPagService
         )]);
     }
 
-    private function extratoRevendaEdi(Carbon $referenciaMes, Usuario $revenda): Collection
+    /**
+     * Comissão da revenda na conciliação PagSeguro:
+     * 1) soma ms_comissao dos clientes (ECs) da revenda
+     * 2) desconta royalty do admin/master sobre a comissão do marketplace
+     * 3) aplica o % da revenda sobre essa comissão líquida do marketplace
+     *
+     * Ex.: bruta 1000, admin 20% → marketplace 800; revenda 25% → 200.
+     */
+    private function extratoRevendaConciliacao(Carbon $referenciaMes, Usuario $revenda): Collection
     {
-        $estabelecimentoIds = Estabelecimento::query()
-            ->where('revenda_id', $revenda->id)
-            ->pluck('id');
+        $row = $this->totaisConciliacaoPorCarteira($referenciaMes, 'revenda_id', $revenda->id);
 
-        if ($estabelecimentoIds->isEmpty()) {
+        if (! $row) {
             return collect();
         }
 
-        $inicio = $referenciaMes->copy()->startOfMonth()->toDateString();
-        $fim = $referenciaMes->copy()->endOfMonth()->toDateString();
+        $marketplace = $this->marketplaceDaRevenda($revenda);
+        $calc = $this->comissaoRevendaDaCarteira(
+            (float) $row->total_comissao,
+            $marketplace,
+            $revenda,
+        );
 
-        $faturamento = (float) DB::table('edi_movimentos')
-            ->whereIn('estabelecimento_id', $estabelecimentoIds)
-            ->whereBetween('data_inicial_transacao', [$inicio, $fim])
-            ->sum('valor_total_transacao');
-
-        $comissaoRoyalties = (float) DB::table('transacao_royalties as tr')
-            ->join('edi_movimentos as em', 'em.id', '=', 'tr.edi_movimento_id')
-            ->where('tr.usuario_id', $revenda->id)
-            ->whereIn('em.estabelecimento_id', $estabelecimentoIds)
-            ->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
-            ->sum('tr.valor_royalty');
-
-        // Fallback: cadeia fixada × TPV quando ainda não há lançamentos de royalty.
-        if ($comissaoRoyalties > 0) {
-            $comissaoBruta = $comissaoRoyalties;
-            $royalty = 0.0;
-            $comissaoLiquida = round($comissaoRoyalties, 2);
-            $percentual = 0.0;
-        } else {
-            $comissaoBruta = $faturamento > 0
-                ? $this->comissaoCadeiaPeriodo($estabelecimentoIds->all(), $revenda->id, $inicio, $fim)
-                : 0.0;
-            $liquida = $this->comissaoLiquidaParceiro($comissaoBruta, $revenda);
-            $royalty = $liquida['royalty'];
-            $comissaoLiquida = $liquida['liquida'];
-            $percentual = $liquida['percentual'];
-        }
-
-        if ($faturamento <= 0 && $comissaoLiquida <= 0) {
-            return collect();
-        }
+        $conciliado = $this->conciliacaoDoMes($referenciaMes) !== null;
 
         return collect([(object) [
             'parceiro_id' => (int) $revenda->id,
             'parceiro_nome' => $revenda->nomeExibicao(),
             'parceiro_tipo' => 'revenda',
-            'marketplace_id' => (int) $revenda->id,
+            'marketplace_id' => (int) ($marketplace?->id ?? $revenda->id),
             'marketplace_nome' => $revenda->nomeExibicao(),
-            'ano' => (int) $referenciaMes->year,
-            'mes' => (int) $referenciaMes->month,
-            'periodo' => $this->formatarPeriodo((int) $referenciaMes->month, (int) $referenciaMes->year),
-            'total_faturamento' => round($faturamento, 2),
-            'total_comissao_bruta' => round($comissaoBruta, 4),
-            'total_royalty' => $royalty,
-            'total_comissao' => $comissaoLiquida,
-            'percentual_retencao' => $percentual,
-            'conciliado' => true,
+            'ano' => (int) $row->ano,
+            'mes' => (int) $row->mes,
+            'periodo' => $this->formatarPeriodo((int) $row->mes, (int) $row->ano),
+            'total_faturamento' => round((float) $row->total_faturamento, 2),
+            'total_comissao_bruta' => $calc['marketplace_bruta'],
+            'total_royalty' => $calc['admin_royalty'],
+            'total_comissao' => $calc['revenda'],
+            'percentual_retencao' => $calc['percentual_revenda'],
+            'marketplace_liquida' => $calc['marketplace_liquida'],
+            'conciliado' => $conciliado,
         ]]);
     }
 
     /**
-     * @param  list<int>  $estabelecimentoIds
+     * @return object{ano: int, mes: int, total_faturamento: float, total_comissao: float}|null
      */
-    public function comissaoCadeiaPeriodo(array $estabelecimentoIds, int $usuarioId, string $inicio, string $fim): float
+    private function totaisConciliacaoPorCarteira(Carbon $referenciaMes, string $coluna, int $parceiroId): ?object
     {
-        if ($estabelecimentoIds === []) {
-            return 0.0;
+        $estabelecimentoIds = Estabelecimento::query()->pluck('id');
+
+        if ($estabelecimentoIds->isEmpty()) {
+            return null;
         }
 
-        return (float) DB::table('edi_movimentos as em')
-            ->join('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
-            ->join('plano_taxas as pt', function ($join) {
-                $join->on('pt.plano_id', '=', 'e.plano_id')
-                    ->on('pt.arranjo_ur', '=', 'em.arranjo_ur')
-                    ->on('pt.parcelas', '=', DB::raw('COALESCE(NULLIF(em.quantidade_parcela, 0), 1)'))
-                    ->where('pt.ativo', true);
-            })
-            ->join('estabelecimento_royalties as er', function ($join) use ($usuarioId) {
-                $join->on('er.estabelecimento_id', '=', 'e.id')
-                    ->on('er.plano_taxa_id', '=', 'pt.id')
-                    ->where('er.usuario_id', '=', $usuarioId);
-            })
-            ->whereIn('em.estabelecimento_id', $estabelecimentoIds)
-            ->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
-            ->sum(DB::raw('em.valor_total_transacao * er.percentual_royalty / 100'));
+        $row = DB::table('conciliacao_linhas as cl')
+            ->join('conciliacoes as c', 'c.id', '=', 'cl.conciliacao_id')
+            ->join('estabelecimentos as e', 'e.id', '=', 'cl.estabelecimento_id')
+            ->where('cl.sem_estabelecimento', false)
+            ->where('e.'.$coluna, $parceiroId)
+            ->whereIn('e.id', $estabelecimentoIds)
+            ->whereDate('c.referencia_mes', $referenciaMes->copy()->startOfMonth()->toDateString())
+            ->selectRaw('
+                YEAR(c.referencia_mes) as ano,
+                MONTH(c.referencia_mes) as mes,
+                SUM(cl.tpv) as total_faturamento,
+                SUM(cl.ms_comissao) as total_comissao
+            ')
+            ->groupBy('ano', 'mes')
+            ->first();
+
+        if (! $row || ((float) $row->total_faturamento <= 0 && (float) $row->total_comissao <= 0)) {
+            return null;
+        }
+
+        return $row;
+    }
+
+    /**
+     * @return array{
+     *     marketplace_bruta: float,
+     *     admin_royalty: float,
+     *     marketplace_liquida: float,
+     *     percentual_revenda: float,
+     *     revenda: float
+     * }
+     */
+    public function comissaoRevendaDaCarteira(float $comissaoMarketplaceBruta, ?Usuario $marketplace, Usuario $revenda): array
+    {
+        $bruta = round($comissaoMarketplaceBruta, 4);
+        $pctAdmin = (float) ($marketplace?->percentual_retencao_pai ?? 0);
+        $adminRoyalty = $pctAdmin > 0 ? round($bruta * $pctAdmin / 100, 2) : 0.0;
+        $marketplaceLiquida = round($bruta - $adminRoyalty, 2);
+
+        $pctRevenda = (float) ($revenda->percentual_retencao_pai ?? 0);
+        $revendaValor = $pctRevenda > 0
+            ? round($marketplaceLiquida * $pctRevenda / 100, 2)
+            : 0.0;
+
+        return [
+            'marketplace_bruta' => $bruta,
+            'admin_royalty' => $adminRoyalty,
+            'marketplace_liquida' => $marketplaceLiquida,
+            'percentual_revenda' => $pctRevenda,
+            'revenda' => $revendaValor,
+        ];
+    }
+
+    private function marketplaceDaRevenda(Usuario $revenda): ?Usuario
+    {
+        $revenda->loadMissing('hierarquia.pai.usuario');
+
+        $pai = $revenda->hierarquia?->pai?->usuario;
+
+        return $pai && $pai->tipo === 'marketplace' ? $pai : null;
     }
 
     private function montarLinhaParceiro(

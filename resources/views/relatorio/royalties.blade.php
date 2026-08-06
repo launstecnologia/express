@@ -57,7 +57,11 @@
         <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <p class="mb-1 text-xs font-medium text-gray-500">Comissões{{ $periodoRotulo ? " · {$periodoRotulo}" : '' }}</p>
             <span class="text-2xl font-bold text-sky-600">R$ {{ number_format($totalComissao, 2, ',', '.') }}</span>
-            <p class="mt-1 text-[11px] text-gray-400">Líquida após desconto de royalties</p>
+            <p class="mt-1 text-[11px] text-gray-400">
+                {{ ($ehRevenda ?? false)
+                    ? '% da revenda sobre a comissão líquida do marketplace (clientes da carteira)'
+                    : 'Líquida após desconto de royalties' }}
+            </p>
         </div>
     @endif
 </div>
@@ -71,7 +75,7 @@
                 @if ($periodoRotulo)
                     · {{ $periodoRotulo }}
                 @endif
-                · {{ ($ehRevenda ?? false) ? 'dados do EDI' : 'dados da planilha PagSeguro' }}
+                · {{ ($ehRevenda ?? false) ? 'clientes da revenda na planilha PagSeguro' : 'dados da planilha PagSeguro' }}
             </p>
         </div>
         <button type="button" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">Exportar</button>
