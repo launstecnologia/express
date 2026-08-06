@@ -22,7 +22,7 @@ class ComissaoPagServiceTest extends TestCase
         $marketplace = new Usuario(['tipo' => 'marketplace', 'percentual_retencao_pai' => 20]);
         $marketplace->id = 10;
 
-        $resultado = $this->service->comissaoLiquidaMarketplace(500.0, $marketplace);
+        $resultado = $this->service->comissaoLiquidaParceiro(500.0, $marketplace);
 
         $this->assertSame(500.0, $resultado['bruta']);
         $this->assertSame(100.0, $resultado['royalty']);
@@ -36,7 +36,7 @@ class ComissaoPagServiceTest extends TestCase
         $marketplace->id = 10;
         $marketplace->setRelation('hierarquia', null);
 
-        $resultado = $this->service->comissaoLiquidaMarketplace(8860.17, $marketplace);
+        $resultado = $this->service->comissaoLiquidaParceiro(8860.17, $marketplace);
 
         $this->assertSame(2215.04, $resultado['royalty']);
         $this->assertSame(6645.13, $resultado['liquida']);
@@ -48,7 +48,7 @@ class ComissaoPagServiceTest extends TestCase
         $marketplace = new Usuario(['tipo' => 'marketplace', 'percentual_retencao_pai' => 0]);
         $marketplace->id = 10;
 
-        $resultado = $this->service->comissaoLiquidaMarketplace(40102.51, $marketplace);
+        $resultado = $this->service->comissaoLiquidaParceiro(40102.51, $marketplace);
 
         $this->assertSame(0.0, $resultado['royalty']);
         $this->assertSame(40102.51, $resultado['liquida']);

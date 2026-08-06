@@ -18,23 +18,20 @@ class RoyaltyController extends Controller
 
     public function index(Request $request)
     {
-        $mesesDisponiveis = $this->comissaoPag->mesesDisponiveis();
-        $referenciaMes = $this->comissaoPag->parseMesReferencia($request->input('mes'))
-            ?? $this->comissaoPag->mesPadrao();
-
         $usuario = Auth::user();
         if ($usuario instanceof SubUsuario) {
             $usuario = $usuario->dono;
         }
 
-        // Extrato PagSeguro é comissão de marketplace — revenda não deve ver.
-        if ($usuario instanceof Usuario && $usuario->tipo === 'revenda') {
-            return redirect()
-                ->route('relatorios.faturamento')
-                ->with('status', 'A comissão da planilha PagSeguro é do marketplace. Sua comissão aparece em Faturamento.');
-        }
+        $mesesDisponiveis = $this->comissaoPag->mesesDisponiveis(
+            $usuario instanceof Usuario ? $usuario : null
+        );
+        $referenciaMes = $this->comissaoPag->parseMesReferencia($request->input('mes'))
+            ?? ($mesesDisponiveis->first()?->valor
+                ? $this->comissaoPag->parseMesReferencia($mesesDisponiveis->first()->valor)
+                : $this->comissaoPag->mesPadrao());
 
-        $usuarioFiltro = $usuario instanceof Usuario && $usuario->tipo === 'marketplace'
+        $usuarioFiltro = $usuario instanceof Usuario && in_array($usuario->tipo, ['marketplace', 'revenda'], true)
             ? $usuario
             : null;
 
@@ -67,6 +64,7 @@ class RoyaltyController extends Controller
                 : null,
             'conciliacao' => $conciliacao,
             'ehAdmin' => $ehAdmin,
+            'ehRevenda' => $usuario instanceof Usuario && $usuario->tipo === 'revenda',
         ]);
     }
 }

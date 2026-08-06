@@ -227,7 +227,7 @@ class RelatorioController extends Controller
             return $this->comissaoAdminLinha($linha);
         }
 
-        return (float) DB::table('transacao_royalties')
+        $royalty = (float) DB::table('transacao_royalties')
             ->join('edi_movimentos', 'edi_movimentos.id', '=', 'transacao_royalties.edi_movimento_id')
             ->whereDate('edi_movimentos.data_inicial_transacao', $linha->data)
             ->where('edi_movimentos.estabelecimento_id', $linha->estabelecimento_id)
@@ -236,6 +236,12 @@ class RelatorioController extends Controller
             ->where('edi_movimentos.status_pagamento', $linha->status_pagamento)
             ->where('transacao_royalties.usuario_id', $usuario->id)
             ->sum('transacao_royalties.valor_royalty');
+
+        if ($royalty > 0) {
+            return $royalty;
+        }
+
+        return $this->comissaoCadeiaLinha($linha, $usuario);
     }
 
     /**
@@ -320,10 +326,76 @@ class RelatorioController extends Controller
 
     private function totalComissaoParceiro(Request $request, int $usuarioId): float
     {
-        return (float) $this->baseMovimentosFiltrados($request)
+        $royalty = (float) $this->baseMovimentosFiltrados($request)
             ->join('transacao_royalties as tr', 'tr.edi_movimento_id', '=', 'em.id')
             ->where('tr.usuario_id', $usuarioId)
             ->sum('tr.valor_royalty');
+
+        if ($royalty > 0) {
+            return $royalty;
+        }
+
+        return $this->totalComissaoCadeia($request, $usuarioId);
+    }
+
+    private function totalComissaoCadeia(Request $request, int $usuarioId): float
+    {
+        $query = $this->baseMovimentosFiltrados($request)
+            ->join('plano_taxas as pt', function ($join) {
+                ComissaoAdminSql::joinPlanoTaxa($join);
+            })
+            ->join('estabelecimento_royalties as er', function ($join) use ($usuarioId) {
+                $join->on('er.estabelecimento_id', '=', 'e.id')
+                    ->on('er.plano_taxa_id', '=', 'pt.id')
+                    ->where('er.usuario_id', '=', $usuarioId);
+            });
+
+        $bruta = (float) $query->sum(DB::raw('em.valor_total_transacao * er.percentual_royalty / 100'));
+
+        if ($bruta <= 0) {
+            return 0.0;
+        }
+
+        $parceiro = Usuario::query()->find($usuarioId);
+        $percentual = (float) ($parceiro?->percentual_retencao_pai ?? 0);
+
+        if ($percentual <= 0) {
+            return round($bruta, 2);
+        }
+
+        return round($bruta - round($bruta * $percentual / 100, 2), 2);
+    }
+
+    private function comissaoCadeiaLinha(AggregatedRevenue $linha, Usuario $usuario): float
+    {
+        $bruta = (float) DB::table('edi_movimentos as em')
+            ->join('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
+            ->join('plano_taxas as pt', function ($join) {
+                ComissaoAdminSql::joinPlanoTaxa($join);
+            })
+            ->join('estabelecimento_royalties as er', function ($join) use ($usuario) {
+                $join->on('er.estabelecimento_id', '=', 'e.id')
+                    ->on('er.plano_taxa_id', '=', 'pt.id')
+                    ->where('er.usuario_id', '=', $usuario->id);
+            })
+            ->whereDate('em.data_inicial_transacao', $linha->data)
+            ->where('em.estabelecimento_id', $linha->estabelecimento_id)
+            ->where('em.instituicao_financeira', $linha->instituicao)
+            ->where('em.tipo_transacao', $linha->tipo_transacao)
+            ->where('em.status_pagamento', $linha->status_pagamento)
+            ->sum(DB::raw('em.valor_total_transacao * er.percentual_royalty / 100'));
+
+        if ($bruta <= 0) {
+            return 0.0;
+        }
+
+        $percentual = (float) ($usuario->percentual_retencao_pai ?? 0);
+
+        if ($percentual <= 0) {
+            return round($bruta, 2);
+        }
+
+        return round($bruta - round($bruta * $percentual / 100, 2), 2);
     }
 
     private function comissaoAdminLinha(AggregatedRevenue $linha): float
@@ -431,12 +503,22 @@ class RelatorioController extends Controller
         }
 
         $ehAdmin = ! ($usuario instanceof Usuario) || $usuario->tipo === 'admin';
-        $mapa = $ehAdmin
-            ? $this->comissoesAdminPorLinhas($linhas)
-            : $this->comissoesParceiroPorLinhas($linhas, $usuario->id);
+        if ($ehAdmin) {
+            $mapa = $this->comissoesAdminPorLinhas($linhas);
+        } else {
+            $mapa = $this->comissoesParceiroPorLinhas($linhas, $usuario->id);
+
+            // Preenche linhas sem royalty lançado com o cálculo da cadeia.
+            foreach ($linhas as $linha) {
+                $chave = $this->chaveLinhaFaturamento($linha);
+                if ((float) $mapa->get($chave, 0) <= 0) {
+                    $mapa->put($chave, $this->comissaoCadeiaLinha($linha, $usuario));
+                }
+            }
+        }
 
         $linhas->transform(function (AggregatedRevenue $linha) use ($mapa) {
-            $linha->setAttribute('comissao_exibida', $mapa->get($this->chaveLinhaFaturamento($linha), 0.0));
+            $linha->setAttribute('comissao_exibida', (float) $mapa->get($this->chaveLinhaFaturamento($linha), 0.0));
 
             return $linha;
         });

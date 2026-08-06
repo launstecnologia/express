@@ -67,11 +67,11 @@
         <div>
             <h3 class="text-sm font-semibold text-gray-700">Extrato de comissões</h3>
             <p class="text-xs text-gray-400">
-                {{ $linhas->total() }} marketplace(s)
+                {{ $linhas->total() }} {{ ($ehRevenda ?? false) ? 'revenda(s)' : 'marketplace(s)' }}
                 @if ($periodoRotulo)
                     · {{ $periodoRotulo }}
                 @endif
-                · dados da planilha PagSeguro
+                · {{ ($ehRevenda ?? false) ? 'dados do EDI' : 'dados da planilha PagSeguro' }}
             </p>
         </div>
         <button type="button" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">Exportar</button>
@@ -80,7 +80,7 @@
         <table class="w-full text-sm" style="min-width: {{ ($ehAdmin ?? false) ? '1100px' : '860px' }}">
             <thead>
                 <tr class="border-b border-gray-100 bg-gray-50">
-                    <th class="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Marketplace</th>
+                    <th class="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">{{ ($ehRevenda ?? false) ? 'Revenda' : 'Marketplace' }}</th>
                     <th class="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Período</th>
                     <th class="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
                     <th class="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Faturamento</th>
@@ -95,14 +95,14 @@
                 @forelse ($linhas as $linha)
                     <tr class="border-b border-gray-50 transition-colors hover:bg-gray-50">
                         <td class="max-w-[280px] px-5 py-4">
-                            <p class="truncate font-semibold text-gray-800" title="{{ $linha->marketplace_nome }}">{{ $linha->marketplace_nome }}</p>
+                            <p class="truncate font-semibold text-gray-800" title="{{ $linha->parceiro_nome ?? $linha->marketplace_nome }}">{{ $linha->parceiro_nome ?? $linha->marketplace_nome }}</p>
                         </td>
                         <td class="whitespace-nowrap px-5 py-4">
                             <span class="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-700">{{ $linha->periodo }}</span>
                         </td>
                         <td class="whitespace-nowrap px-5 py-4">
                             @if ($linha->conciliado)
-                                <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">Conciliado</span>
+                                <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">{{ ($ehRevenda ?? false) ? 'Apurado' : 'Conciliado' }}</span>
                             @else
                                 <span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-600">Sem planilha</span>
                             @endif
