@@ -17,6 +17,10 @@ class ComissaoPagService
         9 => 'Setembro', 10 => 'Outubro', 11 => 'Novembro', 12 => 'Dezembro',
     ];
 
+    public function __construct(
+        private readonly RoyaltyCalculadorService $royaltyCalculador,
+    ) {}
+
     /**
      * @return Collection<int, object{valor: string, rotulo: string}>
      */
@@ -64,7 +68,10 @@ class ComissaoPagService
      *     mes: int,
      *     periodo: string,
      *     total_faturamento: float,
+     *     total_comissao_bruta: float,
+     *     total_royalty: float,
      *     total_comissao: float,
+     *     percentual_retencao: float,
      *     conciliado: bool
      * }>
      */
@@ -108,12 +115,15 @@ class ComissaoPagService
         $conciliado = $conciliacao !== null;
 
         $marketplaces = Usuario::query()
+            ->with('hierarquia.pai.usuario')
             ->whereIn('id', $rows->pluck('marketplace_id'))
             ->get()
             ->keyBy('id');
 
         return $rows->map(function ($row) use ($marketplaces, $conciliado) {
             $marketplace = $marketplaces->get($row->marketplace_id);
+            $comissaoBruta = round((float) $row->total_comissao, 4);
+            $liquida = $this->comissaoLiquidaMarketplace($comissaoBruta, $marketplace);
 
             return (object) [
                 'marketplace_id' => (int) $row->marketplace_id,
@@ -122,10 +132,42 @@ class ComissaoPagService
                 'mes' => (int) $row->mes,
                 'periodo' => $this->formatarPeriodo((int) $row->mes, (int) $row->ano),
                 'total_faturamento' => round((float) $row->total_faturamento, 2),
-                'total_comissao' => round((float) $row->total_comissao, 4),
+                'total_comissao_bruta' => $comissaoBruta,
+                'total_royalty' => $liquida['royalty'],
+                'total_comissao' => $liquida['liquida'],
+                'percentual_retencao' => $liquida['percentual'],
                 'conciliado' => $conciliado,
             ];
         });
+    }
+
+    /**
+     * Aplica a retenção (royalty) do pai sobre a comissão bruta do marketplace.
+     *
+     * @return array{bruta: float, royalty: float, liquida: float, percentual: float}
+     */
+    public function comissaoLiquidaMarketplace(float $comissaoBruta, ?Usuario $marketplace): array
+    {
+        $bruta = round($comissaoBruta, 4);
+
+        if (! $marketplace || $bruta <= 0) {
+            return [
+                'bruta' => $bruta,
+                'royalty' => 0.0,
+                'liquida' => round($bruta, 2),
+                'percentual' => 0.0,
+            ];
+        }
+
+        $retencao = $this->royaltyCalculador->calcularRetencaoPai($marketplace, $bruta);
+        $royalty = (float) $retencao['valor'];
+
+        return [
+            'bruta' => $bruta,
+            'royalty' => $royalty,
+            'liquida' => round($bruta - $royalty, 2),
+            'percentual' => (float) ($marketplace->percentual_retencao_pai ?? 0),
+        ];
     }
 
     public function formatarPeriodo(int $mes, int $ano): string

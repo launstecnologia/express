@@ -37,6 +37,7 @@
     <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <p class="mb-1 text-xs font-medium text-gray-500">Comissões{{ $periodoRotulo ? " · {$periodoRotulo}" : '' }}</p>
         <span class="text-2xl font-bold text-sky-600">R$ {{ number_format($totalComissao, 2, ',', '.') }}</span>
+        <p class="mt-1 text-[11px] text-gray-400">Líquida após desconto de royalties</p>
     </div>
 </div>
 
@@ -61,7 +62,7 @@
                 <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Período</th>
                 <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
                 <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Faturamento</th>
-                <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Comissão</th>
+                <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Comissão líquida</th>
             </tr>
         </thead>
         <tbody>
@@ -81,7 +82,16 @@
                         @endif
                     </td>
                     <td class="px-5 py-4 font-semibold text-green-600">R$ {{ number_format($linha->total_faturamento, 2, ',', '.') }}</td>
-                    <td class="px-5 py-4 font-semibold text-sky-600">R$ {{ number_format($linha->total_comissao, 2, ',', '.') }}</td>
+                    <td class="px-5 py-4">
+                        <p class="font-semibold text-sky-600">R$ {{ number_format($linha->total_comissao, 2, ',', '.') }}</p>
+                        @if (($linha->total_royalty ?? 0) > 0)
+                            <p class="mt-0.5 text-[11px] text-gray-400">
+                                Bruta R$ {{ number_format($linha->total_comissao_bruta, 2, ',', '.') }}
+                                · Royalty {{ number_format($linha->percentual_retencao, 0, ',', '.') }}%
+                                (−R$ {{ number_format($linha->total_royalty, 2, ',', '.') }})
+                            </p>
+                        @endif
+                    </td>
                 </tr>
             @empty
                 <tr>
