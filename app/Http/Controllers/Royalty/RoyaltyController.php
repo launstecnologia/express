@@ -27,6 +27,13 @@ class RoyaltyController extends Controller
             $usuario = $usuario->dono;
         }
 
+        // Extrato PagSeguro é comissão de marketplace — revenda não deve ver.
+        if ($usuario instanceof Usuario && $usuario->tipo === 'revenda') {
+            return redirect()
+                ->route('relatorios.faturamento')
+                ->with('status', 'A comissão da planilha PagSeguro é do marketplace. Sua comissão aparece em Faturamento.');
+        }
+
         $usuarioFiltro = $usuario instanceof Usuario && $usuario->tipo === 'marketplace'
             ? $usuario
             : null;

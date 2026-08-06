@@ -25,10 +25,12 @@
             <i class="fa-solid fa-chart-line w-5 text-center text-[15px]"></i>
             <span>Faturamento</span>
         </a>
-        <a href="{{ route('comissoes.index') }}" class="{{ $navClass('comissoes.index') }}">
-            <i class="fa-solid fa-hand-holding-dollar w-5 text-center text-[15px]"></i>
-            <span>Comissão</span>
-        </a>
+        @unless ($ehRevenda)
+            <a href="{{ route('comissoes.index') }}" class="{{ $navClass('comissoes.index') }}">
+                <i class="fa-solid fa-hand-holding-dollar w-5 text-center text-[15px]"></i>
+                <span>Comissão</span>
+            </a>
+        @endunless
         @if (\App\Support\UsuarioComercial::ehAdmin() || $ehMaster)
             <a href="{{ route('comissoes.configuracoes.index') }}" class="{{ $navClass('comissoes.configuracoes.*') }}">
                 <i class="fa-solid fa-sliders w-5 text-center text-[15px]"></i>
