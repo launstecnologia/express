@@ -169,6 +169,9 @@
     @if ($errors->has('ssl'))
         <div class="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 whitespace-pre-wrap">{{ $errors->first('ssl') }}</div>
     @endif
+    @if ($errors->has('acesso'))
+        <div class="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ $errors->first('acesso') }}</div>
+    @endif
 </section>
 
 @if (in_array($usuario->tipo, ['master', 'marketplace']))
