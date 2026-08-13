@@ -22,6 +22,7 @@ automacao/__pycache__/
 automacao/*.pyc
 automacao/venv/
 automacao/screenshots/
+automacao/.chrome-profile/
 automacao/*.db
 automacao/*.png
 

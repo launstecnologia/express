@@ -29,9 +29,10 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 FV_URL = 'https://gestaocomercial.pagbank.com.br/login'
+FV_HOME = 'https://gestaocomercial.pagbank.com.br/'
 
 # Incremente a cada deploy — confira em GET /health (campo codigo_versao)
-AUTOMACAO_CODIGO_VERSAO = '2026.08.02-proprietario-v6'
+AUTOMACAO_CODIGO_VERSAO = '2026.08.13-sessao-fv'
 
 
 class ClienteInternoPagBankError(Exception):
@@ -56,6 +57,7 @@ class CadastradorFV:
         self.screenshots: list[str] = []
         self.etapa_codigo: str | None = None
         self.etapa_label: str | None = None
+        self._profile_lock_fd = None
 
         os.makedirs(screenshot_dir, exist_ok=True)
 
@@ -149,9 +151,7 @@ class CadastradorFV:
                 'screenshots': self.screenshots,
             }
         finally:
-            if self.driver:
-                self.driver.quit()
-                log.info('Browser fechado')
+            self._fechar_browser()
 
     def executar_consulta_documento(self) -> dict:
         """Consulta CPF/CNPJ no portal FV sem concluir o cadastro."""
@@ -208,9 +208,7 @@ class CadastradorFV:
                 'screenshots': self.screenshots,
             }
         finally:
-            if self.driver:
-                self.driver.quit()
-                log.info('Browser fechado')
+            self._fechar_browser()
 
     def executar_busca_safepay_id(self, email_suffix: str = '@express.app.br') -> dict:
         """Pesquisa cliente no FV e retorna Safepay ID do e-mail @express.app.br."""
@@ -257,9 +255,7 @@ class CadastradorFV:
                 'screenshots': self.screenshots,
             }
         finally:
-            if self.driver:
-                self.driver.quit()
-                log.info('Browser fechado')
+            self._fechar_browser()
 
     # ----------------------------------------------------------------
     # Browser
@@ -285,6 +281,60 @@ class CadastradorFV:
             return 'ja_cadastrado'
         return 'erro_pagbank'
 
+    def _dir_perfil_chrome(self) -> str:
+        base = os.getenv('AUTOMACAO_CHROME_PROFILE_DIR', '/tmp/automacao_chrome')
+        slug = re.sub(r'[^a-zA-Z0-9._-]+', '_', (self.fv_usuario or 'default').strip()) or 'default'
+        path = os.path.join(base, slug)
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def _bloquear_perfil(self, perfil: str) -> None:
+        import fcntl
+
+        lock_path = os.path.join(perfil, '.profile.lock')
+        fd = open(lock_path, 'a+')
+        log.info(f'Aguardando perfil Chrome exclusivo: {perfil}')
+        fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
+        self._profile_lock_fd = fd
+        log.info('Perfil Chrome adquirido')
+
+    def _liberar_perfil(self) -> None:
+        import fcntl
+
+        fd = self._profile_lock_fd
+        if not fd:
+            return
+        try:
+            fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+        except Exception:
+            pass
+        try:
+            fd.close()
+        except Exception:
+            pass
+        self._profile_lock_fd = None
+
+    def _limpar_locks_stale_chrome(self, perfil: str) -> None:
+        for nome in ('SingletonLock', 'SingletonCookie', 'SingletonSocket', 'DevToolsActivePort'):
+            caminho = os.path.join(perfil, nome)
+            try:
+                os.remove(caminho)
+                log.info(f'Removeu lock antigo do Chrome: {nome}')
+            except FileNotFoundError:
+                continue
+            except Exception as exc:
+                log.warning(f'Não removeu {nome}: {exc}')
+
+    def _fechar_browser(self) -> None:
+        if self.driver:
+            try:
+                self.driver.quit()
+            except Exception:
+                pass
+            self.driver = None
+            log.info('Browser fechado')
+        self._liberar_perfil()
+
     def _iniciar_browser(self):
         opcoes = Options()
         # Flags obrigatórias para Docker (sempre ativas)
@@ -294,6 +344,9 @@ class CadastradorFV:
         opcoes.add_argument('--no-zygote')
         opcoes.add_argument('--disable-software-rasterizer')
         opcoes.add_argument('--disable-extensions')
+        opcoes.add_argument('--no-first-run')
+        opcoes.add_argument('--no-default-browser-check')
+        opcoes.add_argument('--password-store=basic')
 
         if self.headless:
             opcoes.add_argument('--headless=new')
@@ -303,13 +356,22 @@ class CadastradorFV:
         opcoes.add_experimental_option('excludeSwitches', ['enable-automation'])
         opcoes.add_experimental_option('useAutomationExtension', False)
 
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=opcoes)
-        driver.execute_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-        )
-        log.info('Browser iniciado')
-        return driver
+        perfil = self._dir_perfil_chrome()
+        self._bloquear_perfil(perfil)
+        self._limpar_locks_stale_chrome(perfil)
+        opcoes.add_argument(f'--user-data-dir={perfil}')
+
+        try:
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=opcoes)
+            driver.execute_script(
+                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+            )
+            log.info(f'Browser iniciado (perfil: {perfil})')
+            return driver
+        except Exception:
+            self._liberar_perfil()
+            raise
 
     def _salvar_screenshot(self, nome: str) -> str:
         caminho = os.path.join(self.screenshot_dir, f'{nome}_{int(time.time())}.png')
@@ -1058,12 +1120,300 @@ class CadastradorFV:
         return erro[:400]
 
     # ----------------------------------------------------------------
+    # Login — reCAPTCHA e confirmação de dashboard
+    # ----------------------------------------------------------------
+    def _elemento_visivel(self, el) -> bool:
+        try:
+            return bool(el.is_displayed())
+        except Exception:
+            return False
+
+    def _tem_recaptcha(self) -> bool:
+        seletores = (
+            'iframe[src*="recaptcha"]',
+            'iframe[title*="reCAPTCHA"]',
+            '.g-recaptcha',
+            '[data-sitekey]',
+        )
+        for sel in seletores:
+            for el in self.driver.find_elements(By.CSS_SELECTOR, sel):
+                if self._elemento_visivel(el):
+                    return True
+        return False
+
+    def _sitekey_recaptcha(self) -> str | None:
+        for el in self.driver.find_elements(By.CSS_SELECTOR, '[data-sitekey]'):
+            chave = (el.get_attribute('data-sitekey') or '').strip()
+            if chave:
+                return chave
+
+        from urllib.parse import parse_qs, urlparse
+
+        for iframe in self.driver.find_elements(By.CSS_SELECTOR, 'iframe[src*="recaptcha"]'):
+            src = iframe.get_attribute('src') or ''
+            chave = (parse_qs(urlparse(src).query).get('k') or [''])[0].strip()
+            if chave:
+                return chave
+        return None
+
+    def _token_recaptcha(self) -> str:
+        try:
+            token = self.driver.execute_script(
+                "return (document.querySelector('#g-recaptcha-response,"
+                " textarea[name=\"g-recaptcha-response\"]') || {}).value || '';"
+            )
+        except Exception:
+            token = ''
+        return (token or '').strip()
+
+    def _recaptcha_marcado(self) -> bool:
+        if len(self._token_recaptcha()) > 20:
+            return True
+        try:
+            iframe = self.driver.find_element(
+                By.CSS_SELECTOR, 'iframe[src*="recaptcha"][src*="anchor"]'
+            )
+            self.driver.switch_to.frame(iframe)
+            anchor = self.driver.find_element(By.ID, 'recaptcha-anchor')
+            marcado = (anchor.get_attribute('aria-checked') or '').lower() == 'true'
+            return marcado
+        except Exception:
+            return False
+        finally:
+            self.driver.switch_to.default_content()
+
+    def _tentar_clicar_checkbox_recaptcha(self) -> bool:
+        try:
+            iframe = self.driver.find_element(
+                By.CSS_SELECTOR, 'iframe[src*="recaptcha"][src*="anchor"]'
+            )
+            self.driver.switch_to.frame(iframe)
+            anchor = self.wait.until(EC.element_to_be_clickable((By.ID, 'recaptcha-anchor')))
+            anchor.click()
+        except Exception:
+            return False
+        finally:
+            self.driver.switch_to.default_content()
+
+        time.sleep(2)
+        return self._recaptcha_marcado()
+
+    def _injetar_token_recaptcha(self, token: str) -> None:
+        self.driver.execute_script(
+            """
+            const token = arguments[0];
+            document.querySelectorAll(
+                '#g-recaptcha-response, textarea[name="g-recaptcha-response"]'
+            ).forEach((el) => {
+                el.style.display = 'block';
+                el.value = token;
+                el.innerHTML = token;
+            });
+            if (typeof ___grecaptcha_cfg === 'undefined') return;
+            const seen = new Set();
+            const walk = (obj, depth) => {
+                if (!obj || depth > 6 || seen.has(obj)) return;
+                if (typeof obj === 'object') seen.add(obj);
+                if (typeof obj.callback === 'function') {
+                    try { obj.callback(token); } catch (e) {}
+                }
+                if (typeof obj === 'object') {
+                    for (const key of Object.keys(obj)) {
+                        try { walk(obj[key], depth + 1); } catch (e) {}
+                    }
+                }
+            };
+            Object.values(___grecaptcha_cfg.clients || {}).forEach((c) => walk(c, 0));
+            """,
+            token,
+        )
+        time.sleep(0.5)
+
+    def _chave_servico_captcha(self) -> tuple[str, str] | tuple[None, None]:
+        capsolver = (os.getenv('CAPSOLVER_API_KEY') or '').strip()
+        if capsolver:
+            return 'capsolver', capsolver
+        twocaptcha = (
+            os.getenv('TWOCAPTCHA_API_KEY')
+            or os.getenv('CAPTCHA_API_KEY')
+            or ''
+        ).strip()
+        if twocaptcha:
+            return '2captcha', twocaptcha
+        return None, None
+
+    def _resolver_recaptcha_servico(self, sitekey: str) -> str:
+        import requests
+
+        provedor, api_key = self._chave_servico_captcha()
+        if not provedor or not api_key:
+            raise Exception('Serviço de captcha não configurado')
+
+        page_url = self.driver.current_url
+        log.info(f'Resolvendo reCAPTCHA via {provedor}...')
+
+        if provedor == 'capsolver':
+            criar = requests.post(
+                'https://api.capsolver.com/createTask',
+                json={
+                    'clientKey': api_key,
+                    'task': {
+                        'type': 'ReCaptchaV2TaskProxyLess',
+                        'websiteURL': page_url,
+                        'websiteKey': sitekey,
+                    },
+                },
+                timeout=30,
+            ).json()
+            if criar.get('errorId'):
+                raise Exception(f'Capsolver: {criar.get("errorDescription") or criar}')
+            task_id = criar.get('taskId')
+            deadline = time.time() + 120
+            while time.time() < deadline:
+                time.sleep(3)
+                res = requests.post(
+                    'https://api.capsolver.com/getTaskResult',
+                    json={'clientKey': api_key, 'taskId': task_id},
+                    timeout=30,
+                ).json()
+                if res.get('status') == 'ready':
+                    token = (res.get('solution') or {}).get('gRecaptchaResponse')
+                    if token:
+                        return token
+                if res.get('errorId'):
+                    raise Exception(f'Capsolver: {res.get("errorDescription") or res}')
+            raise Exception('Capsolver: timeout ao resolver reCAPTCHA')
+
+        criar = requests.post(
+            'https://2captcha.com/in.php',
+            data={
+                'key': api_key,
+                'method': 'userrecaptcha',
+                'googlekey': sitekey,
+                'pageurl': page_url,
+                'json': 1,
+            },
+            timeout=30,
+        ).json()
+        if criar.get('status') != 1:
+            raise Exception(f'2Captcha: {criar.get("request") or criar}')
+        captcha_id = criar['request']
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            time.sleep(5)
+            res = requests.get(
+                'https://2captcha.com/res.php',
+                params={'key': api_key, 'action': 'get', 'id': captcha_id, 'json': 1},
+                timeout=30,
+            ).json()
+            if res.get('status') == 1:
+                return res['request']
+            if res.get('request') not in ('CAPCHA_NOT_READY', 'CAPTCHA_NOT_READY'):
+                raise Exception(f'2Captcha: {res.get("request") or res}')
+        raise Exception('2Captcha: timeout ao resolver reCAPTCHA')
+
+    def _resolver_recaptcha_login(self) -> None:
+        time.sleep(1)
+        if not self._tem_recaptcha():
+            return
+
+        log.warning('reCAPTCHA detectado no login do Força de Vendas')
+        self._salvar_screenshot('login_recaptcha')
+
+        if self._recaptcha_marcado():
+            log.info('reCAPTCHA já estava resolvido')
+            return
+
+        if self._tentar_clicar_checkbox_recaptcha():
+            log.info('reCAPTCHA marcado pelo clique no checkbox')
+            return
+
+        sitekey = self._sitekey_recaptcha()
+        provedor, _ = self._chave_servico_captcha()
+        if sitekey and provedor:
+            token = self._resolver_recaptcha_servico(sitekey)
+            self._injetar_token_recaptcha(token)
+            if self._recaptcha_marcado() or len(self._token_recaptcha()) > 20:
+                log.info('reCAPTCHA resolvido pelo serviço')
+                return
+
+        if not self.headless:
+            log.info('Aguardando resolução manual do reCAPTCHA (até 120s)...')
+            try:
+                WebDriverWait(self.driver, 120).until(
+                    lambda _d: self._recaptcha_marcado() or self._login_no_dashboard()
+                )
+            except TimeoutException:
+                self._salvar_screenshot('login_recaptcha_timeout')
+                raise Exception(
+                    'PagBank exigiu reCAPTCHA no login e a verificação não foi concluída a tempo.'
+                )
+            log.info('reCAPTCHA resolvido manualmente')
+            return
+
+        self._salvar_screenshot('login_recaptcha_sem_servico')
+        raise Exception(
+            'PagBank exigiu verificação reCAPTCHA no login do Força de Vendas. '
+            'Configure CAPSOLVER_API_KEY ou TWOCAPTCHA_API_KEY no automacao/.env, '
+            'ou rode a automação com o navegador visível para concluir o captcha.'
+        )
+
+    def _login_no_dashboard(self) -> bool:
+        url = (self.driver.current_url or '').lower()
+        if '/login' in url:
+            return False
+        textos = ('MINHA CARTEIRA', 'PÁGINA INICIAL', 'Cadastrar cliente', 'Pesquisar clientes')
+        for texto in textos:
+            for el in self.driver.find_elements(By.XPATH, f"//*[contains(text(), '{texto}')]"):
+                if self._elemento_visivel(el):
+                    return True
+        return False
+
+    def _texto_erro_login(self) -> str:
+        xpaths = (
+            '//*[contains(normalize-space(.), "Erro de acesso")]',
+            '//*[contains(normalize-space(.), "verificação de segurança")]',
+            '//*[contains(normalize-space(.), "verificacao de seguranca")]',
+        )
+        vistos: set[str] = set()
+        partes: list[str] = []
+        for xpath in xpaths:
+            for el in self.driver.find_elements(By.XPATH, xpath):
+                if not self._elemento_visivel(el):
+                    continue
+                txt = (el.text or '').strip()
+                if not txt or txt in vistos:
+                    continue
+                vistos.add(txt)
+                partes.append(txt)
+        return ' — '.join(partes[:2])
+
+    def _clicar_entrar(self) -> None:
+        self._clicar(
+            By.XPATH,
+            "//button[contains(text(), 'Entrar')] | //input[@value='Entrar']",
+            'botao_entrar',
+        )
+
+    # ----------------------------------------------------------------
     # Etapas
     # ----------------------------------------------------------------
     def _fazer_login(self):
         log.info('--- ETAPA 1: LOGIN ---')
-        self.driver.get(FV_URL)
+        self.driver.get(FV_HOME)
         time.sleep(2)
+        if self._login_no_dashboard():
+            log.info('Sessão FV reutilizada — login não necessário')
+            self._salvar_screenshot('login_sessao_reutilizada')
+            return
+
+        if '/login' not in (self.driver.current_url or '').lower():
+            self.driver.get(FV_URL)
+            time.sleep(2)
+            if self._login_no_dashboard():
+                log.info('Sessão FV reutilizada — login não necessário')
+                self._salvar_screenshot('login_sessao_reutilizada')
+                return
 
         try:
             radio = self.wait.until(EC.presence_of_element_located(
@@ -1089,24 +1439,41 @@ class CadastradorFV:
             self.fv_senha, 'senha',
         )
         time.sleep(0.5)
-        self._clicar(
-            By.XPATH,
-            "//button[contains(text(), 'Entrar')] | //input[@value='Entrar']",
-            'botao_entrar',
-        )
 
-        try:
-            self.wait.until(EC.any_of(
-                EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'MINHA CARTEIRA')]")),
-                EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'PÁGINA INICIAL')]")),
-                EC.url_contains('gestaocomercial.pagbank.com.br'),
-            ))
-            log.info('Login realizado com sucesso')
-        except TimeoutException:
-            self._salvar_screenshot('erro_pos_login')
-            raise Exception('Dashboard nao carregou apos o login')
+        self._resolver_recaptcha_login()
+        self._clicar_entrar()
 
-        time.sleep(1)
+        for tentativa in range(2):
+            try:
+                WebDriverWait(self.driver, 25).until(
+                    lambda _d: self._login_no_dashboard() or bool(self._texto_erro_login())
+                )
+            except TimeoutException:
+                break
+
+            if self._login_no_dashboard():
+                log.info('Login realizado com sucesso')
+                time.sleep(1)
+                return
+
+            erro = self._texto_erro_login()
+            log.warning(f'Login recusado ({tentativa + 1}/2): {erro or "sem mensagem"}')
+            self._salvar_screenshot(f'erro_login_tentativa_{tentativa + 1}')
+
+            if tentativa == 0 and (self._tem_recaptcha() or 'verifica' in (erro or '').lower()):
+                self._resolver_recaptcha_login()
+                self._clicar_entrar()
+                continue
+            break
+
+        self._salvar_screenshot('erro_pos_login')
+        detalhe = self._texto_erro_login() or 'Dashboard não carregou após o login'
+        if self._tem_recaptcha():
+            detalhe = (
+                'PagBank bloqueou o login com verificação reCAPTCHA obrigatória. '
+                + detalhe
+            )
+        raise Exception(detalhe)
 
     def _navegar_cadastrar_cliente(self):
         log.info('--- ETAPA 2: NAVEGAR PARA CADASTRAR CLIENTE ---')

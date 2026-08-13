@@ -21,12 +21,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY automacao/ .
 
-RUN mkdir -p /tmp/automacao_screenshots /tmp/automacao_db
+RUN mkdir -p /tmp/automacao_screenshots /tmp/automacao_db /tmp/automacao_chrome
 
 # Chrome roda sempre headless dentro do container
 ENV AUTOMACAO_HEADLESS=true \
     AUTOMACAO_DB_PATH=/tmp/automacao_db/jobs.db \
-    AUTOMACAO_SCREENSHOT_DIR=/tmp/automacao_screenshots
+    AUTOMACAO_SCREENSHOT_DIR=/tmp/automacao_screenshots \
+    AUTOMACAO_CHROME_PROFILE_DIR=/tmp/automacao_chrome
 
 EXPOSE 8001
 

@@ -115,7 +115,7 @@ def main() -> int:
     finally:
         if bot.driver:
             time.sleep(2)
-            bot.driver.quit()
+        bot._fechar_browser()
 
 
 if __name__ == '__main__':

@@ -132,6 +132,7 @@ services:
       - ./automacao:/app
       - automacao-screenshots:/tmp/automacao_screenshots
       - automacao-db:/tmp/automacao_db
+      - automacao-chrome:/tmp/automacao_chrome
     ports:
       - "8001:8001"
     networks:
@@ -189,6 +190,7 @@ volumes:
   certbot-www:
   automacao-screenshots:
   automacao-db:
+  automacao-chrome:
 
 # ── Rede interna ─────────────────────────────────────────────────
 networks:
