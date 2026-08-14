@@ -129,10 +129,12 @@
                     <i class="fa-solid fa-scale-balanced w-5 text-center text-[15px]"></i>
                     <span>Conciliação</span>
                 </a>
-                <a href="{{ route('admin.relatorios.estabelecimentos-transacoes') }}" class="{{ $navClass('admin.relatorios.*') }}">
-                    <i class="fa-solid fa-file-excel w-5 text-center text-[15px]"></i>
-                    <span>Transações MKT</span>
-                </a>
+                @if (Route::has('admin.relatorios.estabelecimentos-transacoes'))
+                    <a href="{{ route('admin.relatorios.estabelecimentos-transacoes') }}" class="{{ $navClass('admin.relatorios.*') }}">
+                        <i class="fa-solid fa-file-excel w-5 text-center text-[15px]"></i>
+                        <span>Transações MKT</span>
+                    </a>
+                @endif
                 <a href="{{ route('admin.edi-pipefy.index') }}" class="{{ $navClass('admin.edi-pipefy.*') }}">
                     <i class="fa-solid fa-right-left w-5 text-center text-[15px]"></i>
                     <span>EDI Pipefy</span>
