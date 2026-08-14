@@ -141,6 +141,7 @@ class EstabelecimentoRelatorioTransacoesCommand extends Command
                 'e.pagbank_edi_ativo',
                 'e.plano_id',
                 'e.revenda_id',
+                'e.created_at',
             )
             ->orderByDesc(DB::raw('COALESCE(SUM(em.valor_total_transacao), 0)'))
             ->orderBy('e.id')
@@ -157,6 +158,7 @@ class EstabelecimentoRelatorioTransacoesCommand extends Command
                 'e.pagbank_edi_ativo',
                 'e.plano_id',
                 'e.revenda_id',
+                'e.created_at',
                 DB::raw('COUNT(em.id) as qtd_transacoes'),
                 DB::raw('COALESCE(SUM(em.valor_total_transacao), 0) as tpv'),
                 DB::raw('MIN(em.data_inicial_transacao) as primeira_venda'),
@@ -202,7 +204,7 @@ class EstabelecimentoRelatorioTransacoesCommand extends Command
      */
     private function cabecalhoTabela(): array
     {
-        return ['ID', 'Nome', 'Documento', 'Status', 'Token', 'EDI', 'Tx', 'Terminal', 'TPV', 'Última venda'];
+        return ['ID', 'Nome', 'Documento', 'Cadastro', 'Status', 'Token', 'EDI', 'Tx', 'Terminal', 'TPV', 'Última venda'];
     }
 
     private function linhaTabela(object $r): array
@@ -214,6 +216,7 @@ class EstabelecimentoRelatorioTransacoesCommand extends Command
             $r->id,
             mb_strimwidth((string) $nome, 0, 36, '…'),
             $doc,
+            $r->created_at ? now()->parse($r->created_at)->format('d/m/Y') : '—',
             EstabelecimentoEtapaListagem::normalizarStatus($r->status),
             $r->token_pagseguro ?: '—',
             ((int) $r->pagbank_edi_ativo === 1) ? 'sim' : 'não',
@@ -237,6 +240,7 @@ class EstabelecimentoRelatorioTransacoesCommand extends Command
             'estabelecimento_id',
             'nome',
             'documento',
+            'cadastrado_em',
             'status',
             'ativo',
             'token_pagseguro',
@@ -259,6 +263,7 @@ class EstabelecimentoRelatorioTransacoesCommand extends Command
                 $r->id,
                 $r->nome_fantasia ?: $r->razao_social ?: $r->nome_completo ?: '',
                 $r->cnpj ?: $r->cpf ?: '',
+                $r->created_at ? now()->parse($r->created_at)->format('Y-m-d H:i:s') : '',
                 EstabelecimentoEtapaListagem::normalizarStatus($r->status),
                 $r->ativo ? '1' : '0',
                 $r->token_pagseguro,
