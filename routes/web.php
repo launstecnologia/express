@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\ChamadoController as AdminChamadoController;
 use App\Http\Controllers\Admin\AdminKycController;
 use App\Http\Controllers\Admin\ConciliacaoController;
 use App\Http\Controllers\Admin\ConfiguracaoPlataformaController;
+use App\Http\Controllers\Admin\EstabelecimentoTransacaoRelatorioController;
 use App\Http\Controllers\Admin\EdiPipefyController;
 use App\Http\Controllers\Admin\EstabelecimentoAutomacaoController;
 use App\Http\Controllers\Admin\EstabelecimentoPagBankController;
@@ -204,6 +205,10 @@ Route::middleware(['auth', 'trocar.senha', 'tenant.access'])->group(function () 
                 ->where('filename', '[a-zA-Z0-9_\-\.]+\.png')
                 ->name('screenshot');
             Route::get('/{solicitacao}', [EdiPipefyController::class, 'show'])->name('show');
+        });
+        Route::prefix('admin/relatorios')->name('admin.relatorios.')->group(function () {
+            Route::get('/estabelecimentos-transacoes', [EstabelecimentoTransacaoRelatorioController::class, 'index'])->name('estabelecimentos-transacoes');
+            Route::get('/estabelecimentos-transacoes/excel', [EstabelecimentoTransacaoRelatorioController::class, 'excel'])->name('estabelecimentos-transacoes.excel');
         });
         Route::prefix('admin/conciliacoes')->name('admin.conciliacoes.')->group(function () {
             Route::get('/', [ConciliacaoController::class, 'index'])->name('index');

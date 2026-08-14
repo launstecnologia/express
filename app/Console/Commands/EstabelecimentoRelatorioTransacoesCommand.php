@@ -3,9 +3,9 @@
 namespace App\Console\Commands;
 
 use App\Models\Usuario;
+use App\Services\EstabelecimentoTransacaoRelatorioService;
 use App\Support\EstabelecimentoEtapaListagem;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class EstabelecimentoRelatorioTransacoesCommand extends Command
@@ -21,7 +21,7 @@ class EstabelecimentoRelatorioTransacoesCommand extends Command
 
     protected $description = 'Relatório de estabelecimentos do marketplace com/sem transação EDI (inclui maquininha)';
 
-    public function handle(): int
+    public function handle(EstabelecimentoTransacaoRelatorioService $relatorio): int
     {
         $marketplace = $this->resolverMarketplace((string) $this->argument('marketplace'));
         if (! $marketplace) {
@@ -34,15 +34,10 @@ class EstabelecimentoRelatorioTransacoesCommand extends Command
         $this->line("Período EDI: {$de} → {$ate}");
         $this->newLine();
 
-        $rows = $this->consultar($marketplace->id, $de, $ate);
+        $filtro = $this->option('somente-com') ? 'com' : ($this->option('somente-sem') ? 'sem' : null);
+        $rows = $relatorio->filtrar($relatorio->consultar($marketplace->id, $de, $ate), $filtro);
 
-        if ($this->option('somente-com')) {
-            $rows = $rows->filter(fn ($r) => (int) $r->qtd_transacoes > 0)->values();
-        } elseif ($this->option('somente-sem')) {
-            $rows = $rows->filter(fn ($r) => (int) $r->qtd_transacoes === 0)->values();
-        }
-
-        $this->imprimirResumo($rows);
+        $this->imprimirResumo($relatorio->resumo($rows));
         $this->newLine();
 
         if ($rows->isEmpty()) {
@@ -56,13 +51,13 @@ class EstabelecimentoRelatorioTransacoesCommand extends Command
 
         if ($comTransacao->isNotEmpty() && ! $this->option('somente-sem')) {
             $this->comment('── Estabelecimentos COM transação no período ──');
-            $this->table($this->cabecalhoTabela(), $comTransacao->map(fn ($r) => $this->linhaTabela($r))->all());
+            $this->table($this->cabecalhoTabela(), $comTransacao->map(fn ($r) => $this->linhaTabela($relatorio, $r))->all());
             $this->newLine();
         }
 
         if ($semTransacao->isNotEmpty() && ! $this->option('somente-com')) {
             $this->comment('── Estabelecimentos SEM transação no período ──');
-            $this->table($this->cabecalhoTabela(), $semTransacao->map(fn ($r) => $this->linhaTabela($r))->all());
+            $this->table($this->cabecalhoTabela(), $semTransacao->map(fn ($r) => $this->linhaTabela($relatorio, $r))->all());
             $this->newLine();
         }
 
@@ -120,81 +115,21 @@ class EstabelecimentoRelatorioTransacoesCommand extends Command
         return [$de, $ate];
     }
 
-    private function consultar(int $marketplaceId, string $de, string $ate)
+    private function imprimirResumo(array $resumo): void
     {
-        return DB::table('estabelecimentos as e')
-            ->leftJoin('edi_movimentos as em', function ($join) use ($de, $ate) {
-                $join->on('em.estabelecimento_id', '=', 'e.id')
-                    ->whereBetween('em.data_inicial_transacao', [$de, $ate]);
-            })
-            ->where('e.marketplace_id', $marketplaceId)
-            ->groupBy(
-                'e.id',
-                'e.nome_fantasia',
-                'e.razao_social',
-                'e.nome_completo',
-                'e.cnpj',
-                'e.cpf',
-                'e.status',
-                'e.ativo',
-                'e.token_pagseguro',
-                'e.pagbank_edi_ativo',
-                'e.plano_id',
-                'e.revenda_id',
-                'e.created_at',
-            )
-            ->orderByDesc(DB::raw('COALESCE(SUM(em.valor_total_transacao), 0)'))
-            ->orderBy('e.id')
-            ->get([
-                'e.id',
-                'e.nome_fantasia',
-                'e.razao_social',
-                'e.nome_completo',
-                'e.cnpj',
-                'e.cpf',
-                'e.status',
-                'e.ativo',
-                'e.token_pagseguro',
-                'e.pagbank_edi_ativo',
-                'e.plano_id',
-                'e.revenda_id',
-                'e.created_at',
-                DB::raw('COUNT(em.id) as qtd_transacoes'),
-                DB::raw('COALESCE(SUM(em.valor_total_transacao), 0) as tpv'),
-                DB::raw('MIN(em.data_inicial_transacao) as primeira_venda'),
-                DB::raw('MAX(em.data_inicial_transacao) as ultima_venda'),
-                DB::raw("SUM(CASE WHEN COALESCE(em.num_logico, '') <> '' OR COALESCE(em.numero_serie_leitor, '') <> '' THEN 1 ELSE 0 END) as qtd_terminal"),
-            ]);
-    }
-
-    private function imprimirResumo($rows): void
-    {
-        $total = $rows->count();
-        $comToken = $rows->filter(fn ($r) => filled($r->token_pagseguro))->count();
-        $semToken = $total - $comToken;
-        $ediAtivo = $rows->filter(fn ($r) => (int) $r->pagbank_edi_ativo === 1)->count();
-        $comTx = $rows->filter(fn ($r) => (int) $r->qtd_transacoes > 0)->count();
-        $semTx = $total - $comTx;
-        $semTxComToken = $rows->filter(
-            fn ($r) => (int) $r->qtd_transacoes === 0 && filled($r->token_pagseguro)
-        )->count();
-        $tpv = (float) $rows->sum('tpv');
-        $qtdTx = (int) $rows->sum('qtd_transacoes');
-        $qtdTerminal = (int) $rows->sum('qtd_terminal');
-
         $this->table(
             ['Indicador', 'Valor'],
             [
-                ['Estabelecimentos do marketplace', number_format($total, 0, ',', '.')],
-                ['Com Safepay ID (token_pagseguro)', number_format($comToken, 0, ',', '.')],
-                ['Sem Safepay ID — venda não entra no EDI', number_format($semToken, 0, ',', '.')],
-                ['EDI ativo (pagbank_edi_ativo)', number_format($ediAtivo, 0, ',', '.')],
-                ['COM transação no período', number_format($comTx, 0, ',', '.')],
-                ['SEM transação no período', number_format($semTx, 0, ',', '.')],
-                ['Sem transação, mas COM token', number_format($semTxComToken, 0, ',', '.')],
-                ['Qtd transações EDI', number_format($qtdTx, 0, ',', '.')],
-                ['Destas em terminal (série/lógico)', number_format($qtdTerminal, 0, ',', '.')],
-                ['TPV no período', 'R$ '.number_format($tpv, 2, ',', '.')],
+                ['Estabelecimentos do marketplace', number_format($resumo['total'], 0, ',', '.')],
+                ['Com Safepay ID (token_pagseguro)', number_format($resumo['com_token'], 0, ',', '.')],
+                ['Sem Safepay ID — venda não entra no EDI', number_format($resumo['sem_token'], 0, ',', '.')],
+                ['EDI ativo (pagbank_edi_ativo)', number_format($resumo['edi_ativo'], 0, ',', '.')],
+                ['COM transação no período', number_format($resumo['com_transacao'], 0, ',', '.')],
+                ['SEM transação no período', number_format($resumo['sem_transacao'], 0, ',', '.')],
+                ['Sem transação, mas COM token', number_format($resumo['sem_transacao_com_token'], 0, ',', '.')],
+                ['Qtd transações EDI', number_format($resumo['qtd_transacoes'], 0, ',', '.')],
+                ['Destas em terminal (série/lógico)', number_format($resumo['qtd_terminal'], 0, ',', '.')],
+                ['TPV no período', 'R$ '.number_format($resumo['tpv'], 2, ',', '.')],
             ],
         );
     }
@@ -207,23 +142,20 @@ class EstabelecimentoRelatorioTransacoesCommand extends Command
         return ['ID', 'Nome', 'Documento', 'Cadastro', 'Status', 'Token', 'EDI', 'Tx', 'Terminal', 'TPV', 'Última venda'];
     }
 
-    private function linhaTabela(object $r): array
+    private function linhaTabela(EstabelecimentoTransacaoRelatorioService $relatorio, object $r): array
     {
-        $nome = $r->nome_fantasia ?: $r->razao_social ?: $r->nome_completo ?: '—';
-        $doc = $r->cnpj ?: $r->cpf ?: '—';
-
         return [
             $r->id,
-            mb_strimwidth((string) $nome, 0, 36, '…'),
-            $doc,
-            $r->created_at ? now()->parse($r->created_at)->format('d/m/Y') : '—',
+            mb_strimwidth($relatorio->nome($r), 0, 36, '…'),
+            $r->cnpj ?: $r->cpf ?: '—',
+            $relatorio->data($r->created_at) ?: '—',
             EstabelecimentoEtapaListagem::normalizarStatus($r->status),
             $r->token_pagseguro ?: '—',
             ((int) $r->pagbank_edi_ativo === 1) ? 'sim' : 'não',
             number_format((int) $r->qtd_transacoes, 0, ',', '.'),
             number_format((int) $r->qtd_terminal, 0, ',', '.'),
             'R$ '.number_format((float) $r->tpv, 2, ',', '.'),
-            $r->ultima_venda ? now()->parse($r->ultima_venda)->format('d/m/Y') : '—',
+            $relatorio->data($r->ultima_venda) ?: '—',
         ];
     }
 
