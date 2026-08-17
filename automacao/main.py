@@ -1362,12 +1362,15 @@ class CadastradorFV:
         url = (self.driver.current_url or '').lower()
         if '/login' in url:
             return False
-        textos = ('MINHA CARTEIRA', 'PÁGINA INICIAL', 'Cadastrar cliente', 'Pesquisar clientes')
-        for texto in textos:
-            for el in self.driver.find_elements(By.XPATH, f"//*[contains(text(), '{texto}')]"):
-                if self._elemento_visivel(el):
-                    return True
-        return False
+        return self._texto_visivel_contem(
+            'minha carteira',
+            'página inicial',
+            'pagina inicial',
+            'cadastrar cliente',
+            'pesquisar cliente',
+            'agenda hoje',
+            'mais eventos',
+        )
 
     def _texto_erro_login(self) -> str:
         xpaths = (
@@ -1387,6 +1390,14 @@ class CadastradorFV:
                 vistos.add(txt)
                 partes.append(txt)
         return ' — '.join(partes[:2])
+
+    def _texto_visivel_contem(self, *trechos: str) -> bool:
+        try:
+            texto = (self.driver.find_element(By.TAG_NAME, 'body').text or '').lower()
+        except Exception:
+            return False
+
+        return any(trecho.lower() in texto for trecho in trechos)
 
     def _clicar_entrar(self) -> None:
         self._clicar(
@@ -1414,6 +1425,22 @@ class CadastradorFV:
                 log.info('Sessão FV reutilizada — login não necessário')
                 self._salvar_screenshot('login_sessao_reutilizada')
                 return
+
+        try:
+            WebDriverWait(self.driver, 8).until(
+                lambda _d: self._login_no_dashboard()
+                or bool(self.driver.find_elements(
+                    By.XPATH,
+                    "//input[@placeholder='Usuário' or @name='username' or @id='username']",
+                ))
+            )
+        except TimeoutException:
+            pass
+
+        if self._login_no_dashboard():
+            log.info('Sessão FV reutilizada — login não necessário')
+            self._salvar_screenshot('login_sessao_reutilizada')
+            return
 
         try:
             radio = self.wait.until(EC.presence_of_element_located(
