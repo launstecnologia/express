@@ -1513,6 +1513,44 @@ class CadastradorFV:
         ))
         log.info('Pagina Cadastrar Cliente carregada')
         time.sleep(1)
+        self._descartar_cadastro_em_andamento()
+
+    def _descartar_cadastro_em_andamento(self) -> None:
+        """Se o FV exibir o modal 'Cadastro em andamento' (cadastro de um
+        cliente anterior, iniciado e não concluído — de outro CNPJ/e-mail),
+        sempre inicia um cadastro novo.
+
+        Sem esse tratamento o modal fica sobre o formulário e:
+        1) intercepta o clique no botão "Continuar" (element click intercepted);
+        2) se "Continuar cadastro" fosse clicado, o formulário reaproveitaria
+           CPF/CNPJ e e-mail do cliente anterior, misturando os cadastros.
+        """
+        try:
+            self.wait_curto = getattr(self, 'wait_curto', None) or WebDriverWait(self.driver, 4)
+            self.wait_curto.until(EC.visibility_of_element_located(
+                (By.XPATH, "//*[contains(text(), 'Cadastro em andamento')]")
+            ))
+        except TimeoutException:
+            return
+
+        log.warning('Modal "Cadastro em andamento" detectado — descartando cadastro anterior')
+        self._salvar_screenshot('cadastro_em_andamento_detectado')
+
+        try:
+            botao = self.wait.until(EC.element_to_be_clickable(
+                (By.XPATH, "//button[contains(normalize-space(.), 'Começar um novo')]")
+            ))
+            self.driver.execute_script('arguments[0].scrollIntoView(true);', botao)
+            time.sleep(0.3)
+            botao.click()
+            log.info('Clicou em "Começar um novo" para descartar cadastro pendente')
+            time.sleep(1)
+        except TimeoutException:
+            self._salvar_screenshot('erro_cadastro_em_andamento')
+            raise Exception(
+                'Modal "Cadastro em andamento" apareceu, mas o botão '
+                '"Começar um novo" não foi encontrado para descartá-lo.'
+            )
 
     def _navegar_pesquisar_cliente(self):
         log.info('--- NAVEGAR PARA PESQUISAR CLIENTE ---')
