@@ -76,11 +76,17 @@ class ComissaoPagService
      */
     public function extratoMarketplace(?Carbon $referenciaMes, ?Usuario $usuario = null, string $visao = 'marketplace'): Collection
     {
-        if ($usuario && in_array($usuario->tipo, ['marketplace', 'revenda'], true)) {
+        $visao = in_array($visao, ['marketplace', 'revenda'], true) ? $visao : 'marketplace';
+
+        if ($usuario && $usuario->tipo === 'revenda') {
             return $this->extratoParceiro($referenciaMes, $usuario);
         }
 
-        $visao = in_array($visao, ['marketplace', 'revenda'], true) ? $visao : 'marketplace';
+        if ($usuario && $usuario->tipo === 'marketplace') {
+            return $visao === 'revenda'
+                ? $this->extratoAgrupadoPorRevenda($referenciaMes, $usuario)
+                : $this->extratoParceiro($referenciaMes, $usuario);
+        }
 
         return $visao === 'revenda'
             ? $this->extratoAgrupadoPorRevenda($referenciaMes)
@@ -152,7 +158,7 @@ class ComissaoPagService
         )]);
     }
 
-    private function extratoAgrupadoPorRevenda(?Carbon $referenciaMes): Collection
+    private function extratoAgrupadoPorRevenda(?Carbon $referenciaMes, ?Usuario $marketplace = null): Collection
     {
         if (! $referenciaMes) {
             return collect();
@@ -164,13 +170,19 @@ class ComissaoPagService
             return collect();
         }
 
-        $rows = DB::table('conciliacao_linhas as cl')
+        $query = DB::table('conciliacao_linhas as cl')
             ->join('conciliacoes as c', 'c.id', '=', 'cl.conciliacao_id')
             ->join('estabelecimentos as e', 'e.id', '=', 'cl.estabelecimento_id')
             ->where('cl.sem_estabelecimento', false)
             ->whereNotNull('e.revenda_id')
             ->whereIn('e.id', $estabelecimentoIds)
-            ->whereDate('c.referencia_mes', $referenciaMes->copy()->startOfMonth()->toDateString())
+            ->whereDate('c.referencia_mes', $referenciaMes->copy()->startOfMonth()->toDateString());
+
+        if ($marketplace) {
+            $query->where('e.marketplace_id', $marketplace->id);
+        }
+
+        $rows = $query
             ->selectRaw('
                 e.revenda_id,
                 YEAR(c.referencia_mes) as ano,
@@ -293,6 +305,23 @@ class ComissaoPagService
     }
 
     /**
+     * Valor que o parceiro recebe. Revenda sempre parte da ms_comissao da conciliação
+     * (ou da bruta equivalente): % sobre a líquida do marketplace.
+     */
+    public function valorComissaoParceiro(float $comissaoBruta, Usuario $parceiro): float
+    {
+        if ($parceiro->tipo === 'revenda') {
+            return $this->comissaoRevendaDaCarteira(
+                $comissaoBruta,
+                $this->marketplaceDaRevenda($parceiro),
+                $parceiro,
+            )['revenda'];
+        }
+
+        return $this->comissaoLiquidaParceiro($comissaoBruta, $parceiro)['liquida'];
+    }
+
+    /**
      * @return array{
      *     marketplace_bruta: float,
      *     admin_royalty: float,
@@ -320,6 +349,44 @@ class ComissaoPagService
             'percentual_revenda' => $pctRevenda,
             'revenda' => $revendaValor,
         ];
+    }
+
+    /**
+     * Comissão da revenda por plano, sempre a partir da ms_comissao da conciliação.
+     *
+     * @return Collection<int, float>
+     */
+    public function comissaoRevendaPorPlano(Carbon $referenciaMes, Usuario $revenda): Collection
+    {
+        $estabelecimentoIds = Estabelecimento::query()->pluck('id');
+
+        if ($estabelecimentoIds->isEmpty()) {
+            return collect();
+        }
+
+        $marketplace = $this->marketplaceDaRevenda($revenda);
+
+        $rows = DB::table('conciliacao_linhas as cl')
+            ->join('conciliacoes as c', 'c.id', '=', 'cl.conciliacao_id')
+            ->join('estabelecimentos as e', 'e.id', '=', 'cl.estabelecimento_id')
+            ->where('cl.sem_estabelecimento', false)
+            ->where('e.revenda_id', $revenda->id)
+            ->whereIn('e.id', $estabelecimentoIds)
+            ->whereNotNull('e.plano_id')
+            ->whereDate('c.referencia_mes', $referenciaMes->copy()->startOfMonth()->toDateString())
+            ->selectRaw('e.plano_id, SUM(cl.ms_comissao) as total_comissao')
+            ->groupBy('e.plano_id')
+            ->get();
+
+        return $rows->mapWithKeys(function ($row) use ($marketplace, $revenda) {
+            $calc = $this->comissaoRevendaDaCarteira(
+                (float) $row->total_comissao,
+                $marketplace,
+                $revenda,
+            );
+
+            return [(int) $row->plano_id => $calc['revenda']];
+        });
     }
 
     private function marketplaceDaRevenda(Usuario $revenda): ?Usuario

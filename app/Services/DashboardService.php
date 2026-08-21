@@ -103,6 +103,6 @@ class DashboardService
         $dia = now()->toDateString();
         $periodoSuffix = $periodo !== null ? ".p{$periodo}" : '';
 
-        return "dashboard.{$fragmento}.v5.{$tipo}.{$id}.{$dia}{$periodoSuffix}";
+        return "dashboard.{$fragmento}.v6.{$tipo}.{$id}.{$dia}{$periodoSuffix}";
     }
 }

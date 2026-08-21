@@ -6,11 +6,15 @@
 @php
     $visao = $visao ?? 'marketplace';
     $visaoRevenda = $visao === 'revenda' || ($ehRevenda ?? false);
+    $ehAdmin = $ehAdmin ?? false;
+    $mostrarReferencia = ! $ehAdmin;
     $totalFaturamento = $linhas->sum('total_faturamento');
     $totalComissao = $linhas->sum('total_comissao');
     $totalComissaoBruta = $linhas->sum('total_comissao_bruta');
     $totalRoyalty = $linhas->sum('total_royalty');
-    $colspanVazio = ($ehAdmin ?? false) ? ($visaoRevenda ? 8 : 7) : 5;
+    $colspanVazio = $ehAdmin
+        ? ($visaoRevenda ? 8 : 7)
+        : ($mostrarReferencia ? 6 : 5);
 @endphp
 
 <form method="GET" action="{{ route('comissoes.index') }}" class="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -28,8 +32,8 @@
         <div class="min-w-[200px]">
             <label for="visao" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Visão</label>
             <select id="visao" name="visao" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm" onchange="this.form.submit()">
-                <option value="marketplace" @selected($visao === 'marketplace')>Marketplace</option>
-                <option value="revenda" @selected($visao === 'revenda')>Revenda</option>
+                <option value="marketplace" @selected($visao === 'marketplace')>{{ ($ehMarketplace ?? false) ? 'Meu marketplace' : 'Marketplace' }}</option>
+                <option value="revenda" @selected($visao === 'revenda')>{{ ($ehMarketplace ?? false) ? 'Revendas abaixo' : 'Revenda' }}</option>
             </select>
         </div>
     @endif
@@ -43,12 +47,12 @@
     @endif
 </form>
 
-<div class="mb-6 grid grid-cols-1 gap-3 {{ ($ehAdmin ?? false) ? 'md:grid-cols-3' : 'md:grid-cols-2' }}">
+<div class="mb-6 grid grid-cols-1 gap-3 {{ ($ehAdmin || $mostrarReferencia) ? 'md:grid-cols-3' : 'md:grid-cols-2' }}">
     <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <p class="mb-1 text-xs font-medium text-gray-500">Faturamento{{ $periodoRotulo ? " · {$periodoRotulo}" : '' }}</p>
         <span class="text-2xl font-bold text-green-600">R$ {{ number_format($totalFaturamento, 2, ',', '.') }}</span>
     </div>
-    @if ($ehAdmin ?? false)
+    @if ($ehAdmin)
         <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <p class="mb-1 text-xs font-medium text-gray-500">
                 {{ $visaoRevenda ? 'Comissão marketplace (carteira)' : 'Comissão bruta' }}{{ $periodoRotulo ? " · {$periodoRotulo}" : '' }}
@@ -76,11 +80,18 @@
         </div>
     @else
         <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <p class="mb-1 text-xs font-medium text-gray-500">Comissões{{ $periodoRotulo ? " · {$periodoRotulo}" : '' }}</p>
+            <p class="mb-1 text-xs font-medium text-gray-500">Comissão conciliação{{ $periodoRotulo ? " · {$periodoRotulo}" : '' }}</p>
+            <span class="text-2xl font-bold text-slate-700">R$ {{ number_format($totalComissaoBruta, 2, ',', '.') }}</span>
+            <p class="mt-1 text-[11px] text-gray-400">Referência · planilha PagSeguro</p>
+        </div>
+        <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <p class="mb-1 text-xs font-medium text-gray-500">
+                {{ $visaoRevenda ? 'Comissão das revendas' : 'Comissões' }}{{ $periodoRotulo ? " · {$periodoRotulo}" : '' }}
+            </p>
             <span class="text-2xl font-bold text-sky-600">R$ {{ number_format($totalComissao, 2, ',', '.') }}</span>
             <p class="mt-1 text-[11px] text-gray-400">
                 {{ $visaoRevenda
-                    ? '% da revenda sobre a comissão líquida do marketplace (clientes da carteira)'
+                    ? '% da revenda sobre a comissão da conciliação'
                     : 'Líquida após desconto de royalties' }}
             </p>
         </div>
@@ -96,13 +107,13 @@
                 @if ($periodoRotulo)
                     · {{ $periodoRotulo }}
                 @endif
-                · {{ $visaoRevenda ? 'clientes da revenda na planilha PagSeguro' : 'dados da planilha PagSeguro' }}
+                · {{ $visaoRevenda ? 'comissão da conciliação dos clientes da revenda' : 'dados da planilha PagSeguro' }}
             </p>
         </div>
         <button type="button" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">Exportar</button>
     </div>
     <div class="overflow-x-auto">
-        <table class="w-full text-sm" style="min-width: {{ ($ehAdmin ?? false) ? ($visaoRevenda ? '1200px' : '1100px') : '860px' }}">
+        <table class="w-full text-sm" style="min-width: {{ $ehAdmin ? ($visaoRevenda ? '1200px' : '1100px') : ($mostrarReferencia ? '980px' : '860px') }}">
             <thead>
                 <tr class="border-b border-gray-100 bg-gray-50">
                     <th class="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">{{ $visaoRevenda ? 'Revenda' : 'Marketplace' }}</th>
@@ -112,12 +123,16 @@
                     <th class="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Período</th>
                     <th class="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
                     <th class="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Faturamento</th>
-                    @if ($ehAdmin ?? false)
+                    @if ($ehAdmin)
                         <th class="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
                             {{ $visaoRevenda ? 'Com. marketplace' : 'Comissão bruta' }}
                         </th>
                         <th class="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
                             {{ $visaoRevenda ? 'Royalty admin' : 'Royalty' }}
+                        </th>
+                    @elseif ($mostrarReferencia)
+                        <th class="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Comissão conciliação
                         </th>
                     @endif
                     <th class="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -150,7 +165,7 @@
                             @endif
                         </td>
                         <td class="whitespace-nowrap px-5 py-4 text-right font-semibold tabular-nums text-green-600">R$&nbsp;{{ number_format($linha->total_faturamento, 2, ',', '.') }}</td>
-                        @if ($ehAdmin ?? false)
+                        @if ($ehAdmin)
                             <td class="whitespace-nowrap px-5 py-4 text-right font-semibold tabular-nums text-slate-700">R$&nbsp;{{ number_format($linha->total_comissao_bruta, 2, ',', '.') }}</td>
                             <td class="whitespace-nowrap px-5 py-4 text-right tabular-nums">
                                 @php
@@ -168,6 +183,8 @@
                                     <span class="text-sm text-gray-400">—</span>
                                 @endif
                             </td>
+                        @elseif ($mostrarReferencia)
+                            <td class="whitespace-nowrap px-5 py-4 text-right font-semibold tabular-nums text-slate-700">R$&nbsp;{{ number_format($linha->total_comissao_bruta, 2, ',', '.') }}</td>
                         @endif
                         <td class="whitespace-nowrap px-5 py-4 text-right font-semibold tabular-nums text-sky-600">R$&nbsp;{{ number_format($linha->total_comissao, 2, ',', '.') }}</td>
                     </tr>

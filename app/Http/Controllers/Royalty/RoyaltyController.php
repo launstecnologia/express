@@ -25,8 +25,9 @@ class RoyaltyController extends Controller
 
         $ehAdmin = $usuario instanceof Usuario && $usuario->tipo === 'admin';
         $ehMaster = $usuario instanceof Usuario && $usuario->tipo === 'master';
+        $ehMarketplace = $usuario instanceof Usuario && $usuario->tipo === 'marketplace';
         $ehRevenda = $usuario instanceof Usuario && $usuario->tipo === 'revenda';
-        $podeSelecionarVisao = $ehAdmin || $ehMaster;
+        $podeSelecionarVisao = $ehAdmin || $ehMaster || $ehMarketplace;
 
         $visao = $podeSelecionarVisao && $request->input('visao') === 'revenda'
             ? 'revenda'
@@ -71,6 +72,7 @@ class RoyaltyController extends Controller
                 : null,
             'conciliacao' => $conciliacao,
             'ehAdmin' => $ehAdmin,
+            'ehMarketplace' => $ehMarketplace,
             'ehRevenda' => $ehRevenda || $visao === 'revenda',
             'visao' => $visao,
             'podeSelecionarVisao' => $podeSelecionarVisao,

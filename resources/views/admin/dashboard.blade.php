@@ -38,7 +38,9 @@
                 <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Comissões</p>
                 <p class="mt-2 text-lg font-bold tabular-nums leading-tight text-yellow-600 sm:text-xl lg:text-2xl dark:text-yellow-400">R$ {{ number_format($royaltiesMes, 2, ',', '.') }}</p>
                 <p class="mt-1 text-[11px] text-gray-400">
-                    @if (\App\Support\UsuarioComercial::ehMarketplaceOuRevenda())
+                    @if (\App\Support\UsuarioComercial::ehRevenda())
+                        {{ $periodoRotulo }} · conciliação PagSeguro
+                    @elseif (\App\Support\UsuarioComercial::ehMarketplace())
                         {{ $periodoRotulo }} · líquida após royalties
                     @else
                         {{ $periodoRotulo }}

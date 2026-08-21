@@ -124,8 +124,18 @@ class DashboardApuracaoService
         $parceiro = $this->usuarioParceiro($usuario);
 
         $faturamentoPorPlano = $this->agregarFaturamento($inicio, $fim);
-        // Mesma base do admin (taxa do plano), escopada à carteira; parceiro recebe líquida.
-        $comissaoPorPlano = $this->agregarComissaoAdmin($inicio, $fim);
+        $comissaoJaLiquida = false;
+        $comissaoPorPlano = collect();
+
+        if ($parceiro?->tipo === 'revenda' && $periodo === 0) {
+            $comissaoPorPlano = $this->comissaoPag->comissaoRevendaPorPlano(now()->startOfMonth(), $parceiro);
+            $comissaoJaLiquida = $comissaoPorPlano->isNotEmpty();
+        }
+
+        if (! $comissaoJaLiquida) {
+            // Mesma base do admin (taxa do plano), escopada à carteira; parceiro recebe líquida.
+            $comissaoPorPlano = $this->agregarComissaoAdmin($inicio, $fim);
+        }
 
         $planoIds = $faturamentoPorPlano->keys()
             ->merge($comissaoPorPlano->keys())
@@ -141,7 +151,7 @@ class DashboardApuracaoService
                 ->orderBy('nome')
                 ->get();
 
-        $planosResumo = $planos->map(function (Plano $plano) use ($faturamentoPorPlano, $comissaoPorPlano, $parceiro) {
+        $planosResumo = $planos->map(function (Plano $plano) use ($faturamentoPorPlano, $comissaoPorPlano, $parceiro, $comissaoJaLiquida) {
             $categorias = $faturamentoPorPlano->get($plano->id, collect());
             $debito = (float) ($categorias->get('debito') ?? 0);
             $credito = (float) ($categorias->get('credito') ?? 0);
@@ -149,9 +159,11 @@ class DashboardApuracaoService
             $pix = (float) ($categorias->get('pix') ?? 0);
             $faturamento = $debito + $credito + $parcelado + $pix;
             $comissaoBruta = (float) ($comissaoPorPlano->get($plano->id) ?? 0);
-            $comissao = $parceiro
-                ? $this->comissaoPag->comissaoLiquidaMarketplace($comissaoBruta, $parceiro)['liquida']
-                : $comissaoBruta;
+            $comissao = $comissaoJaLiquida
+                ? $comissaoBruta
+                : ($parceiro
+                    ? $this->comissaoPag->valorComissaoParceiro($comissaoBruta, $parceiro)
+                    : $comissaoBruta);
 
             return [
                 'id' => $plano->id,
@@ -351,7 +363,7 @@ class DashboardApuracaoService
         $tipo = $usuario instanceof Usuario ? $usuario->tipo : 'guest';
         $id = $usuario?->id ?? 0;
 
-        return "dashboard.apuracao.v5.{$tipo}.{$id}.{$periodo}";
+        return "dashboard.apuracao.v6.{$tipo}.{$id}.{$periodo}";
     }
 
     private function respostaVazia(int $periodo): array

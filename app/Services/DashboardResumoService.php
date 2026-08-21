@@ -67,7 +67,8 @@ class DashboardResumoService
 
     /**
      * Mesma fórmula do admin (ComissaoAdminSql), escopada à carteira.
-     * Marketplace/revenda: desconta percentual_retencao_pai sobre essa base.
+     * Marketplace: desconta percentual_retencao_pai. Revenda: conciliação no mês atual;
+     * nos demais períodos, % sobre a líquida do marketplace.
      */
     private function comissaoPeriodo(mixed $usuario, int $periodo): float
     {
@@ -79,8 +80,16 @@ class DashboardResumoService
                 ->whereNotNull('e.plano_id');
         })->sum(DB::raw(ComissaoAdminSql::valor()));
 
+        if ($usuario instanceof Usuario && $usuario->tipo === 'revenda' && $periodo === 0) {
+            $extrato = $this->comissaoPag->extratoParceiro(now()->startOfMonth(), $usuario);
+
+            if ($extrato->isNotEmpty()) {
+                return (float) $extrato->sum('total_comissao');
+            }
+        }
+
         if ($usuario instanceof Usuario && $usuario->tipo !== 'admin') {
-            return $this->comissaoPag->comissaoLiquidaMarketplace($bruta, $usuario)['liquida'];
+            return $this->comissaoPag->valorComissaoParceiro($bruta, $usuario);
         }
 
         return round($bruta, 2);
