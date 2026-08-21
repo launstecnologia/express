@@ -256,4 +256,55 @@
             @endif
         </div>
     </div>
+
+    {{-- Força de Vendas --}}
+    <div class="border-t border-gray-100 pt-5 dark:border-gray-700">
+        <h3 class="mb-1 text-sm font-semibold text-gray-800 dark:text-gray-100">Força de Vendas (automação)</h3>
+        <p class="mb-4 text-xs text-gray-500 dark:text-gray-400">
+            Login do portal PagBank usado pela automação para cadastrar estabelecimentos.
+            Se preencher aqui, vale o painel. Se deixar a senha em branco, mantém a atual (ou o <code class="text-xs">.env</code>).
+        </p>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+            <label class="block space-y-1">
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Usuário FV</span>
+                <input
+                    type="text"
+                    name="automacao_fv_usuario"
+                    value="{{ old('automacao_fv_usuario', $config->automacao_fv_usuario ?: \App\Support\PlatformSettings::automacaoFvUsuario()) }}"
+                    autocomplete="off"
+                    placeholder="ex.: expresspayments_08"
+                    class="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                >
+            </label>
+
+            <label class="block space-y-1">
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Senha FV</span>
+                <input
+                    type="password"
+                    name="automacao_fv_senha"
+                    value=""
+                    autocomplete="new-password"
+                    placeholder="{{ filled($config->automacao_fv_senha) || filled(\App\Support\PlatformSettings::automacaoFvSenha()) ? '•••••••• (deixe em branco para manter)' : 'Senha do portal Força de Vendas' }}"
+                    class="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                >
+            </label>
+        </div>
+
+        <div class="mt-3 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-3 text-xs text-gray-500 dark:border-gray-600 dark:bg-gray-800">
+            <strong>Login FV ativo agora:</strong>
+            @if (\App\Support\PlatformSettings::automacaoFvConfigurado())
+                <span class="font-semibold text-green-600">Configurado</span>
+                (usuário: <code>{{ \App\Support\PlatformSettings::automacaoFvUsuario() }}</code>
+                @if (filled($config->automacao_fv_usuario) || filled($config->automacao_fv_senha))
+                    · origem: painel
+                @else
+                    · origem: .env
+                @endif
+                )
+            @else
+                <span class="font-semibold text-amber-600">Incompleto</span> — informe usuário e senha para a automação entrar no portal.
+            @endif
+        </div>
+    </div>
 </div>

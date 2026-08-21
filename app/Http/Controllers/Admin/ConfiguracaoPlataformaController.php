@@ -85,6 +85,8 @@ class ConfiguracaoPlataformaController extends Controller
             'pagbank_edi_token_producao' => ['nullable', 'string', 'max:500'],
             'pagbank_edi_user_sandbox' => ['nullable', 'string', 'max:100'],
             'pagbank_edi_user_producao' => ['nullable', 'string', 'max:100'],
+            'automacao_fv_usuario' => ['nullable', 'string', 'max:120'],
+            'automacao_fv_senha' => ['nullable', 'string', 'max:500'],
         ]);
 
         $config = PlatformSetting::query()->firstOrCreate(
@@ -168,6 +170,10 @@ class ConfiguracaoPlataformaController extends Controller
 
         if (! $request->filled('pagbank_edi_user_producao')) {
             unset($dados['pagbank_edi_user_producao']);
+        }
+
+        if (! $request->filled('automacao_fv_senha')) {
+            unset($dados['automacao_fv_senha']);
         }
 
         if (! $request->filled('mail_password')) {

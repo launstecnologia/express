@@ -61,6 +61,8 @@ class PlatformSetting extends Model
         'pagbank_edi_token_producao',
         'pagbank_edi_user_sandbox',
         'pagbank_edi_user_producao',
+        'automacao_fv_usuario',
+        'automacao_fv_senha',
     ];
 
     protected function casts(): array
@@ -75,6 +77,7 @@ class PlatformSetting extends Model
             'pagbank_client_secret' => 'encrypted',
             'pagbank_edi_token_sandbox' => 'encrypted',
             'pagbank_edi_token_producao' => 'encrypted',
+            'automacao_fv_senha' => 'encrypted',
         ];
     }
 }

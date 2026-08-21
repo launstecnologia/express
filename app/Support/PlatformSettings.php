@@ -325,6 +325,11 @@ class PlatformSettings
 
     public static function automacaoFvUsuario(): ?string
     {
+        $db = self::get()->automacao_fv_usuario ?? null;
+        if (filled($db)) {
+            return (string) $db;
+        }
+
         $env = config('automacao.fv_usuario');
 
         return filled($env) ? (string) $env : null;
@@ -332,9 +337,19 @@ class PlatformSettings
 
     public static function automacaoFvSenha(): ?string
     {
+        $db = self::get()->automacao_fv_senha ?? null;
+        if (filled($db)) {
+            return (string) $db;
+        }
+
         $env = config('automacao.fv_senha');
 
         return filled($env) ? (string) $env : null;
+    }
+
+    public static function automacaoFvConfigurado(): bool
+    {
+        return filled(self::automacaoFvUsuario()) && filled(self::automacaoFvSenha());
     }
 
     public static function automacaoWebmailUrl(): ?string
