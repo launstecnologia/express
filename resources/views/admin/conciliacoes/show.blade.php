@@ -125,10 +125,11 @@
     </div>
 </div>
 
-<div class="mb-5 grid gap-3 md:grid-cols-2">
+<div class="mb-5 grid gap-3 md:grid-cols-3">
     @php
         $com = $resumoEstabelecimentos['com_estabelecimento'];
         $sem = $resumoEstabelecimentos['sem_estabelecimento'];
+        $soEdiCard = $resumoSoEdi;
     @endphp
     <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
         <p class="text-xs font-bold uppercase text-emerald-700">Com estabelecimento</p>
@@ -180,6 +181,33 @@
             </div>
         </div>
     </div>
+    <div class="rounded-xl border border-sky-200 bg-sky-50 p-4">
+        <div class="flex flex-wrap items-start justify-between gap-2">
+            <p class="text-xs font-bold uppercase text-sky-700">No EDI, não na planilha</p>
+            <a href="{{ route('admin.conciliacoes.diferenca', $conciliacao) }}#so-edi"
+               class="inline-flex items-center gap-1 rounded-lg border border-sky-300 bg-white px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-100">
+                <i class="fa-solid fa-table"></i> Ver relatório
+            </a>
+        </div>
+        <div class="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+                <p class="text-xs text-sky-600">Linhas</p>
+                <p class="text-xl font-bold text-sky-900">{{ number_format($soEdiCard['linhas'], 0, ',', '.') }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-sky-600">Estabelecimentos</p>
+                <p class="text-xl font-bold text-sky-900">{{ number_format($soEdiCard['clientes'], 0, ',', '.') }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-sky-600">TPV</p>
+                <p class="text-lg font-bold text-sky-900">R$ {{ number_format($soEdiCard['tpv'], 2, ',', '.') }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-sky-600">Comissão (grade)</p>
+                <p class="text-lg font-bold text-sky-900">R$ {{ number_format($soEdiCard['comissao'], 2, ',', '.') }}</p>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="mb-5 grid gap-3 md:grid-cols-4">
@@ -209,13 +237,6 @@
             Ver relatório
         </a>
     </div>
-</div>
-
-<div class="mb-5">
-    <a href="{{ route('admin.conciliacoes.diferenca', $conciliacao) }}#so-edi" class="block rounded-xl border border-sky-200 bg-sky-50 p-4 hover:bg-sky-100">
-        <p class="text-xs font-bold uppercase text-sky-700">No EDI, não na planilha</p>
-        <p class="mt-1 text-sm font-semibold text-sky-900">Ver estabelecimentos e TPV que estão no EDI e não no relatório PagSeguro</p>
-    </a>
 </div>
 
 <form class="mb-4 grid gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:grid-cols-5">

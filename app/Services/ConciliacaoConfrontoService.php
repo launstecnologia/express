@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Conciliacao;
 use App\Models\ConciliacaoLinha;
 use App\Models\Estabelecimento;
+use App\Support\ComissaoAdminSql;
 use App\Support\ConciliacaoDimensao;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -288,12 +289,19 @@ class ConciliacaoConfrontoService
     }
 
     /**
-     * @return Collection<string, array{tpv: float, qtd: int, id_cliente: string, estabelecimento_id: mixed}>
+     * @return Collection<string, array{tpv: float, qtd: int, comissao: float, id_cliente: string, estabelecimento_id: mixed}>
      */
     private function agregarEdi(string $inicio, string $fim): Collection
     {
+        $comissaoDoPlano = ComissaoAdminSql::lookupPercentualPorChave();
+
         $query = DB::table('edi_movimentos as em')
             ->leftJoin('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
+            ->leftJoinSub($comissaoDoPlano, 'pc', function ($join) {
+                $join->on('pc.plano_id', '=', 'e.plano_id')
+                    ->on('pc.arranjo_ur', '=', 'em.arranjo_ur')
+                    ->on('pc.parcelas', '=', DB::raw('COALESCE(NULLIF(em.quantidade_parcela, 0), 1)'));
+            })
             ->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
             ->whereNotNull('em.estabelecimento_id')
             ->select([
@@ -310,6 +318,7 @@ class ConciliacaoConfrontoService
                 'em.pagamento_prazo',
                 'em.plano',
                 'em.valor_total_transacao',
+                'pc.comissao_percentual',
                 DB::raw('COALESCE(e.token_pagseguro, em.estabelecimento, em.id_cliente) as id_cliente'),
             ]);
 
@@ -340,18 +349,22 @@ class ConciliacaoConfrontoService
                 $grupos[$chave] = [
                     'tpv' => 0.0,
                     'qtd' => 0,
+                    'comissao' => 0.0,
                     'id_cliente' => $idCliente,
                     'estabelecimento_id' => $mov->estabelecimento_id,
                 ];
             }
 
-            $grupos[$chave]['tpv'] += (float) $mov->valor_total_transacao;
+            $valor = (float) $mov->valor_total_transacao;
+            $grupos[$chave]['tpv'] += $valor;
+            $grupos[$chave]['comissao'] += $valor * (float) ($mov->comissao_percentual ?? 0) / 100;
             $grupos[$chave]['qtd']++;
         }
 
         return collect($grupos)->map(fn (array $item) => [
             'tpv' => round($item['tpv'], 2),
             'qtd' => $item['qtd'],
+            'comissao' => round($item['comissao'], 4),
             'id_cliente' => $item['id_cliente'],
             'estabelecimento_id' => $item['estabelecimento_id'],
         ]);
@@ -365,7 +378,35 @@ class ConciliacaoConfrontoService
      */
     public function recorteInversoEdi(Conciliacao $conciliacao): array
     {
-        $vazio = ['so_edi' => collect(), 'extra_edi' => collect()];
+        $grupos = $this->agruparRecorteInverso($conciliacao);
+
+        return [
+            'so_edi' => $this->hidratarRecorteEdi($grupos['so_edi']),
+            'extra_edi' => $this->hidratarRecorteEdi($grupos['extra_edi']),
+        ];
+    }
+
+    /**
+     * @return array{linhas: int, clientes: int, tpv: float, comissao: float}
+     */
+    public function resumoSoEdi(Conciliacao $conciliacao): array
+    {
+        $soEdi = $this->agruparRecorteInverso($conciliacao)['so_edi'];
+
+        return [
+            'linhas' => (int) array_sum(array_column($soEdi, 'linhas')),
+            'clientes' => count($soEdi),
+            'tpv' => round((float) array_sum(array_column($soEdi, 'tpv')), 2),
+            'comissao' => round((float) array_sum(array_column($soEdi, 'comissao')), 4),
+        ];
+    }
+
+    /**
+     * @return array{so_edi: array<string, array>, extra_edi: array<string, array>}
+     */
+    private function agruparRecorteInverso(Conciliacao $conciliacao): array
+    {
+        $vazio = ['so_edi' => [], 'extra_edi' => []];
 
         if (! $conciliacao->referencia_mes) {
             return $vazio;
@@ -407,14 +448,14 @@ class ConciliacaoConfrontoService
         }
 
         return [
-            'so_edi' => $this->hidratarRecorteEdi($soEdi),
-            'extra_edi' => $this->hidratarRecorteEdi($extraEdi),
+            'so_edi' => $soEdi,
+            'extra_edi' => $extraEdi,
         ];
     }
 
     /**
-     * @param  array<string, array{id_cliente: string, estabelecimento_id: mixed, vendas: int, tpv: float}>  $grupos
-     * @param  array{tpv: float, qtd: int, id_cliente: string, estabelecimento_id: mixed}  $edi
+     * @param  array<string, array{id_cliente: string, estabelecimento_id: mixed, linhas: int, vendas: int, tpv: float, comissao: float}>  $grupos
+     * @param  array{tpv: float, qtd: int, comissao: float, id_cliente: string, estabelecimento_id: mixed}  $edi
      */
     private function acumularRecorteEdi(array &$grupos, string $grupoChave, array $edi, float $tpv): void
     {
@@ -422,17 +463,24 @@ class ConciliacaoConfrontoService
             $grupos[$grupoChave] = [
                 'id_cliente' => $edi['id_cliente'],
                 'estabelecimento_id' => $edi['estabelecimento_id'],
+                'linhas' => 0,
                 'vendas' => 0,
                 'tpv' => 0.0,
+                'comissao' => 0.0,
             ];
         }
 
+        $tpvGrupo = (float) $edi['tpv'];
+        $ratio = $tpvGrupo > 0 ? $tpv / $tpvGrupo : 0.0;
+
+        $grupos[$grupoChave]['linhas']++;
         $grupos[$grupoChave]['vendas'] += (int) $edi['qtd'];
         $grupos[$grupoChave]['tpv'] += $tpv;
+        $grupos[$grupoChave]['comissao'] += (float) $edi['comissao'] * $ratio;
     }
 
     /**
-     * @param  array<string, array{id_cliente: string, estabelecimento_id: mixed, vendas: int, tpv: float}>  $grupos
+     * @param  array<string, array{id_cliente: string, estabelecimento_id: mixed, linhas: int, vendas: int, tpv: float, comissao: float}>  $grupos
      */
     private function hidratarRecorteEdi(array $grupos): Collection
     {
@@ -440,8 +488,10 @@ class ConciliacaoConfrontoService
             ->map(fn (array $item) => (object) [
                 'id_cliente' => $item['id_cliente'],
                 'estabelecimento_id' => $item['estabelecimento_id'],
+                'linhas' => $item['linhas'],
                 'vendas' => $item['vendas'],
                 'tpv' => round($item['tpv'], 2),
+                'comissao' => round($item['comissao'], 4),
             ])
             ->sortByDesc('tpv')
             ->values();

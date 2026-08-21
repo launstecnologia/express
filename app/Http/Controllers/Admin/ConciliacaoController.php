@@ -102,12 +102,14 @@ class ConciliacaoController extends Controller
 
         $resumo = $confronto->resumoMensal($conciliacao);
         $resumoEstabelecimentos = $confronto->resumoEstabelecimentos($conciliacao);
+        $resumoSoEdi = $confronto->resumoSoEdi($conciliacao);
 
         return view('admin.conciliacoes.show', compact(
             'conciliacao',
             'linhas',
             'resumo',
             'resumoEstabelecimentos',
+            'resumoSoEdi',
             'filtros',
         ));
     }
@@ -199,7 +201,7 @@ class ConciliacaoController extends Controller
         return response()->streamDownload(function () use ($clientes) {
             $handle = fopen('php://output', 'w');
             fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
-            fputcsv($handle, ['id_cliente', 'estabelecimento', 'vendas', 'tpv'], ';');
+                    fputcsv($handle, ['id_cliente', 'estabelecimento', 'linhas', 'vendas', 'tpv', 'comissao'], ';');
 
             foreach ($clientes as $cliente) {
                 $estab = $cliente->estabelecimento;
@@ -211,8 +213,10 @@ class ConciliacaoController extends Controller
                 fputcsv($handle, [
                     $cliente->id_cliente,
                     $nome,
+                    $cliente->linhas,
                     $cliente->vendas,
                     number_format((float) $cliente->tpv, 2, '.', ''),
+                    number_format((float) $cliente->comissao, 4, '.', ''),
                 ], ';');
             }
 

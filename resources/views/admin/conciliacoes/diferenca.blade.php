@@ -162,8 +162,10 @@
                 <tr>
                     <th class="px-4 py-3">Estabelecimento</th>
                     <th class="px-4 py-3">ID cliente</th>
+                    <th class="px-4 py-3 text-right">Linhas</th>
                     <th class="px-4 py-3 text-right">Vendas</th>
                     <th class="px-4 py-3 text-right">TPV</th>
+                    <th class="px-4 py-3 text-right">Comissão</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
@@ -183,12 +185,14 @@
                             @endif
                         </td>
                         <td class="px-4 py-3 font-mono text-xs">{{ $cliente->id_cliente }}</td>
+                        <td class="px-4 py-3 text-right">{{ number_format($cliente->linhas, 0, ',', '.') }}</td>
                         <td class="px-4 py-3 text-right">{{ number_format($cliente->vendas, 0, ',', '.') }}</td>
                         <td class="px-4 py-3 text-right">R$ {{ number_format($cliente->tpv, 2, ',', '.') }}</td>
+                        <td class="px-4 py-3 text-right">R$ {{ number_format($cliente->comissao, 2, ',', '.') }}</td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="4" class="px-4 py-8 text-center text-gray-500">Nenhum volume só no EDI.</td>
+                        <td colspan="6" class="px-4 py-8 text-center text-gray-500">Nenhum volume só no EDI.</td>
                     </tr>
                 @endforelse
             </tbody>
@@ -196,8 +200,10 @@
                 <tfoot class="bg-gray-50 font-semibold">
                     <tr>
                         <td class="px-4 py-3" colspan="2">Total</td>
+                        <td class="px-4 py-3 text-right">{{ number_format($soEdi->sum('linhas'), 0, ',', '.') }}</td>
                         <td class="px-4 py-3 text-right">{{ number_format($soEdi->sum('vendas'), 0, ',', '.') }}</td>
                         <td class="px-4 py-3 text-right">R$ {{ number_format($soEdi->sum('tpv'), 2, ',', '.') }}</td>
+                        <td class="px-4 py-3 text-right">R$ {{ number_format($soEdi->sum('comissao'), 2, ',', '.') }}</td>
                     </tr>
                 </tfoot>
             @endif
