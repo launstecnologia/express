@@ -36,9 +36,13 @@ log = logging.getLogger(__name__)
 
 FV_URL = 'https://gestaocomercial.pagbank.com.br/login'
 FV_HOME = 'https://gestaocomercial.pagbank.com.br/'
+CAPSOLVER_EXT_URL = (
+    'https://github.com/capsolver/capsolver-browser-extension/releases/'
+    'download/v.1.17.0/CapSolver.Browser.Extension-chrome-v1.17.0.zip'
+)
 
 # Incremente a cada deploy — confira em GET /health (campo codigo_versao)
-AUTOMACAO_CODIGO_VERSAO = '2026.08.21-recaptcha-overlay'
+AUTOMACAO_CODIGO_VERSAO = '2026.08.21-capsolver-extensao'
 
 
 class ClienteInternoPagBankError(Exception):
@@ -349,13 +353,28 @@ class CadastradorFV:
         opcoes.add_argument('--disable-gpu')
         opcoes.add_argument('--no-zygote')
         opcoes.add_argument('--disable-software-rasterizer')
-        opcoes.add_argument('--disable-extensions')
         opcoes.add_argument('--no-first-run')
         opcoes.add_argument('--no-default-browser-check')
         opcoes.add_argument('--password-store=basic')
 
-        if self.headless:
+        ext_path = self._preparar_extensao_capsolver()
+        tem_display = bool(os.environ.get('DISPLAY'))
+        self._usou_extensao_capsolver = bool(ext_path)
+        self._extensao_capsolver_confiavel = bool(ext_path) and (
+            not self.headless or tem_display
+        )
+        if ext_path:
+            opcoes.add_argument(f'--disable-extensions-except={ext_path}')
+            opcoes.add_argument(f'--load-extension={ext_path}')
+            log.info(f'Extensão Capsolver carregada: {ext_path}')
+        else:
+            opcoes.add_argument('--disable-extensions')
+
+        # Extensão precisa de janela real. No Docker o xvfb define DISPLAY.
+        if self.headless and not (ext_path and os.environ.get('DISPLAY')):
             opcoes.add_argument('--headless=new')
+        elif self.headless and ext_path:
+            log.info('Chrome com display virtual para a extensão Capsolver')
 
         opcoes.add_argument('--window-size=1366,768')
         opcoes.add_argument('--disable-blink-features=AutomationControlled')
@@ -373,11 +392,57 @@ class CadastradorFV:
             driver.execute_script(
                 "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
             )
+            if ext_path:
+                time.sleep(2)
             log.info(f'Browser iniciado (perfil: {perfil})')
             return driver
         except Exception:
             self._liberar_perfil()
             raise
+
+    def _preparar_extensao_capsolver(self) -> str | None:
+        """Baixa a extensão oficial e grava a API key em assets/config.js."""
+        api_key = (os.getenv('CAPSOLVER_API_KEY') or '').strip()
+        if not api_key:
+            return None
+
+        dest = Path(
+            os.getenv('AUTOMACAO_CAPSOLVER_EXT_DIR')
+            or (Path(__file__).resolve().parent / '.capsolver_ext')
+        )
+        unpacked = dest / 'unpacked'
+        zip_path = dest / 'ext.zip'
+        dest.mkdir(parents=True, exist_ok=True)
+
+        try:
+            if not (unpacked / 'manifest.json').exists():
+                import urllib.request
+                import zipfile
+
+                log.info('Baixando extensão Capsolver...')
+                urllib.request.urlretrieve(CAPSOLVER_EXT_URL, zip_path)
+                if unpacked.exists():
+                    import shutil
+                    shutil.rmtree(unpacked)
+                unpacked.mkdir(parents=True)
+                with zipfile.ZipFile(zip_path) as zf:
+                    zf.extractall(unpacked)
+
+            config_path = unpacked / 'assets' / 'config.js'
+            if not config_path.exists():
+                log.warning('config.js da extensão Capsolver não encontrado')
+                return None
+
+            texto = config_path.read_text(encoding='utf-8')
+            novo = re.sub(r"apiKey:\s*'[^']*'", f"apiKey: '{api_key}'", texto, count=1)
+            novo = re.sub(r"reCaptchaMode:\s*'[^']*'", "reCaptchaMode: 'click'", novo, count=1)
+            if novo != texto:
+                config_path.write_text(novo, encoding='utf-8')
+            log.info('Extensão Capsolver pronta')
+            return str(unpacked)
+        except Exception as exc:
+            log.warning(f'Não foi possível preparar a extensão Capsolver: {exc}')
+            return None
 
     def _salvar_screenshot(self, nome: str) -> str:
         caminho = os.path.join(self.screenshot_dir, f'{nome}_{int(time.time())}.png')
@@ -512,13 +577,26 @@ class CadastradorFV:
             try:
                 el.click()
             except ElementClickInterceptedException:
-                log.warning(
-                    f'Clique interceptado em {descricao or seletor} — '
-                    'fechando overlay do reCAPTCHA e clicando via JavaScript'
-                )
-                self._esconder_desafio_recaptcha()
-                time.sleep(0.2)
-                self.driver.execute_script('arguments[0].click();', el)
+                if descricao == 'botao_entrar' and (
+                    self._desafio_recaptcha_visivel() or self._tem_recaptcha()
+                ):
+                    log.warning('Entrar bloqueado pelo reCAPTCHA — resolvendo antes de clicar')
+                    self._resolver_recaptcha_login()
+                    if not self._recaptcha_aceitou_solucao():
+                        self._salvar_screenshot('login_recaptcha_bloqueou_entrar')
+                        raise Exception(
+                            'PagBank exigiu reCAPTCHA e a verificação não foi concluída. '
+                            'Não é possível clicar em Entrar.'
+                        )
+                    try:
+                        el.click()
+                    except ElementClickInterceptedException:
+                        self.driver.execute_script('arguments[0].click();', el)
+                else:
+                    log.warning(
+                        f'Clique interceptado em {descricao or seletor} — usando JavaScript'
+                    )
+                    self.driver.execute_script('arguments[0].click();', el)
             log.info(f'Clicou: {descricao or seletor}')
             return el
         except TimeoutException:
@@ -1265,9 +1343,30 @@ class CadastradorFV:
             token = ''
         return (token or '').strip()
 
-    def _recaptcha_marcado(self) -> bool:
-        if len(self._token_recaptcha()) > 20:
-            return True
+    def _grecaptcha_response_oficial(self) -> str:
+        """Token que o widget do Google realmente aceitou (não o textarea injetado)."""
+        try:
+            token = self.driver.execute_script(
+                """
+                try {
+                    if (window.grecaptcha && grecaptcha.enterprise
+                        && typeof grecaptcha.enterprise.getResponse === 'function') {
+                        const t = grecaptcha.enterprise.getResponse();
+                        if (t) return t;
+                    }
+                    if (window.grecaptcha && typeof grecaptcha.getResponse === 'function') {
+                        const t = grecaptcha.getResponse();
+                        if (t) return t;
+                    }
+                } catch (e) {}
+                return '';
+                """
+            )
+        except Exception:
+            token = ''
+        return (token or '').strip()
+
+    def _checkbox_recaptcha_verde(self) -> bool:
         try:
             iframe = self.driver.find_element(
                 By.CSS_SELECTOR, 'iframe[src*="recaptcha"][src*="anchor"]'
@@ -1280,6 +1379,22 @@ class CadastradorFV:
             return False
         finally:
             self.driver.switch_to.default_content()
+
+    def _recaptcha_aceitou_solucao(self) -> bool:
+        if self._checkbox_recaptcha_verde():
+            return True
+        return len(self._grecaptcha_response_oficial()) > 20
+
+    def _recaptcha_marcado(self) -> bool:
+        return self._recaptcha_aceitou_solucao()
+
+    def _aguardar_recaptcha_resolvido(self, timeout: int = 90) -> bool:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self._recaptcha_aceitou_solucao() or self._login_no_dashboard():
+                return True
+            time.sleep(1)
+        return self._recaptcha_aceitou_solucao()
 
     def _tentar_clicar_checkbox_recaptcha(self) -> bool:
         try:
@@ -1301,18 +1416,39 @@ class CadastradorFV:
         self.driver.execute_script(
             """
             const token = arguments[0];
-            const setEl = (el) => {
-                if (!el) return;
-                el.style.display = 'block';
-                el.value = token;
-                el.innerHTML = token;
-                el.dispatchEvent(new Event('input', { bubbles: true }));
-                el.dispatchEvent(new Event('change', { bubbles: true }));
-            };
             document.querySelectorAll(
                 '#g-recaptcha-response, textarea[name="g-recaptcha-response"],'
                 + ' textarea[id^="g-recaptcha-response"]'
-            ).forEach(setEl);
+            ).forEach((el) => {
+                el.style.display = 'block';
+                el.value = token;
+                el.innerHTML = token;
+            });
+
+            const clients = [];
+            if (typeof ___grecaptcha_cfg !== 'undefined') {
+                Object.entries(___grecaptcha_cfg.clients || {}).forEach(([cid, client]) => {
+                    const data = {
+                        version: Number(cid) >= 10000 ? 'V3' : 'V2',
+                        fn: null,
+                    };
+                    Object.values(client || {}).forEach((toplevel) => {
+                        if (!toplevel || typeof toplevel !== 'object') return;
+                        Object.values(toplevel).forEach((sub) => {
+                            if (!sub || typeof sub !== 'object') return;
+                            if (!('sitekey' in sub) || !('size' in sub)) return;
+                            const key = data.version === 'V2' ? 'callback' : 'promise-callback';
+                            if (typeof sub[key] === 'function') data.fn = sub[key];
+                        });
+                    });
+                    clients.push(data);
+                });
+            }
+            clients.forEach((c) => {
+                if (typeof c.fn === 'function') {
+                    try { c.fn(token); } catch (e) {}
+                }
+            });
 
             document.querySelectorAll('[data-callback]').forEach((el) => {
                 const nome = el.getAttribute('data-callback');
@@ -1320,29 +1456,10 @@ class CadastradorFV:
                     try { window[nome](token); } catch (e) {}
                 }
             });
-
-            const walk = (obj, depth, seen) => {
-                if (!obj || depth > 8 || seen.has(obj)) return;
-                if (typeof obj === 'object') seen.add(obj);
-                if (typeof obj.callback === 'function') {
-                    try { obj.callback(token); } catch (e) {}
-                }
-                if (typeof obj === 'object') {
-                    for (const key of Object.keys(obj)) {
-                        try { walk(obj[key], depth + 1, seen); } catch (e) {}
-                    }
-                }
-            };
-            if (typeof ___grecaptcha_cfg !== 'undefined') {
-                Object.values(___grecaptcha_cfg.clients || {}).forEach(
-                    (c) => walk(c, 0, new Set())
-                );
-            }
             """,
             token,
         )
-        time.sleep(0.8)
-        self._esconder_desafio_recaptcha()
+        time.sleep(1)
 
     def _chave_servico_captcha(self) -> tuple[str, str] | tuple[None, None]:
         capsolver = (os.getenv('CAPSOLVER_API_KEY') or '').strip()
@@ -1502,28 +1619,35 @@ class CadastradorFV:
         provedor, _ = self._chave_servico_captcha()
         log.warning(
             'reCAPTCHA detectado no login do Força de Vendas '
-            f'(serviço={provedor or "nenhum"})'
+            f'(serviço={provedor or "nenhum"}, '
+            f'extensao={getattr(self, "_usou_extensao_capsolver", False)})'
         )
         self._salvar_screenshot('login_recaptcha')
 
-        if self._recaptcha_marcado():
+        if self._recaptcha_aceitou_solucao():
             log.info('reCAPTCHA já estava resolvido')
             return
 
-        sitekey = self._sitekey_recaptcha()
+        if getattr(self, '_usou_extensao_capsolver', False):
+            timeout_ext = 90 if getattr(self, '_extensao_capsolver_confiavel', False) else 25
+            log.info(f'Aguardando a extensão Capsolver marcar o reCAPTCHA (até {timeout_ext}s)...')
+            if self._aguardar_recaptcha_resolvido(timeout_ext):
+                log.info('reCAPTCHA resolvido pela extensão Capsolver')
+                self._salvar_screenshot('login_recaptcha_ok')
+                return
+            log.warning('Extensão Capsolver não marcou o checkbox a tempo')
 
-        # Com Capsolver/2Captcha, NÃO clique no checkbox: o Google abre o
-        # desafio de imagens e o login falha com "Erro de acesso".
+        sitekey = self._sitekey_recaptcha()
         if sitekey and provedor:
             try:
                 token = self._resolver_recaptcha_servico(sitekey)
                 self._injetar_token_recaptcha(token)
-                if len(self._token_recaptcha()) > 20 or self._recaptcha_marcado():
-                    log.info('reCAPTCHA resolvido pelo serviço')
+                if self._aguardar_recaptcha_resolvido(15):
+                    log.info('reCAPTCHA resolvido pelo token do serviço')
                     self._salvar_screenshot('login_recaptcha_ok')
                     return
-                log.warning('Token do serviço injetado, mas o widget não confirmou — seguindo mesmo assim')
-                return
+                log.error('Token do Capsolver injetado, mas o widget não confirmou')
+                self._salvar_screenshot('login_recaptcha_token_sem_check')
             except Exception as exc:
                 log.error(f'Falha ao resolver reCAPTCHA via {provedor}: {exc}')
                 self._salvar_screenshot('login_recaptcha_servico_falhou')
@@ -1537,7 +1661,7 @@ class CadastradorFV:
             log.info('Aguardando resolução manual do reCAPTCHA (até 120s)...')
             try:
                 WebDriverWait(self.driver, 120).until(
-                    lambda _d: self._recaptcha_marcado() or self._login_no_dashboard()
+                    lambda _d: self._recaptcha_aceitou_solucao() or self._login_no_dashboard()
                 )
             except TimeoutException:
                 self._salvar_screenshot('login_recaptcha_timeout')
@@ -1550,8 +1674,7 @@ class CadastradorFV:
         self._salvar_screenshot('login_recaptcha_sem_servico')
         raise Exception(
             'PagBank exigiu verificação reCAPTCHA no login do Força de Vendas. '
-            'Configure CAPSOLVER_API_KEY ou TWOCAPTCHA_API_KEY no automacao/.env, '
-            'ou rode a automação com o navegador visível para concluir o captcha.'
+            'Configure CAPSOLVER_API_KEY no automacao/.env e reinicie a automação.'
         )
 
     def _login_no_dashboard(self) -> bool:
@@ -1596,8 +1719,15 @@ class CadastradorFV:
         return any(trecho.lower() in texto for trecho in trechos)
 
     def _clicar_entrar(self) -> None:
-        self._esconder_desafio_recaptcha()
-        time.sleep(0.2)
+        if self._tem_recaptcha() and not self._recaptcha_aceitou_solucao():
+            self._resolver_recaptcha_login()
+        if self._tem_recaptcha() and not self._recaptcha_aceitou_solucao():
+            self._salvar_screenshot('login_recaptcha_nao_resolvido')
+            raise Exception(
+                'PagBank exigiu reCAPTCHA e o widget não confirmou a verificação. '
+                'Não vou clicar em Entrar sem o checkbox marcado. '
+                'Confira CAPSOLVER_API_KEY e o saldo da conta Capsolver.'
+            )
         try:
             self._clicar(By.CSS_SELECTOR, 'button[data-testid="entrar"]', 'botao_entrar')
             return

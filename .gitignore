@@ -25,6 +25,7 @@ automacao/screenshots/
 automacao/.chrome-profile/
 automacao/*.db
 automacao/*.png
+automacao/.capsolver_ext/
 
 # ── Docker / Deploy ───────────────────────────────────────────────
 docker/nginx/certs/
