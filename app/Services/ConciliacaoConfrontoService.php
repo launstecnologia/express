@@ -5,7 +5,6 @@ namespace App\Services;
 use App\Models\Conciliacao;
 use App\Models\ConciliacaoLinha;
 use App\Models\Estabelecimento;
-use App\Support\ComissaoAdminSql;
 use App\Support\ConciliacaoDimensao;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -48,11 +47,10 @@ class ConciliacaoConfrontoService
             $chave = $this->chaveDaLinha($linha);
 
             if (! isset($totaisPorChave[$chave])) {
-                $totaisPorChave[$chave] = ['tpv' => 0.0, 'comissao' => 0.0];
+                $totaisPorChave[$chave] = 0.0;
             }
 
-            $totaisPorChave[$chave]['tpv'] += (float) $linha->tpv;
-            $totaisPorChave[$chave]['comissao'] += (float) $linha->ms_comissao;
+            $totaisPorChave[$chave] += (float) $linha->tpv;
         }
 
         foreach ($linhas->chunk(500) as $loteLinhas) {
@@ -76,9 +74,9 @@ class ConciliacaoConfrontoService
 
                 $chave = $this->chaveDaLinha($linha);
                 $edi = $agregados->get($chave);
-                $grupo = $totaisPorChave[$chave] ?? ['tpv' => 0.0, 'comissao' => 0.0];
-                $grupoTpv = (float) $grupo['tpv'];
-                $grupoComissao = (float) $grupo['comissao'];
+                $grupoTpv = (float) ($totaisPorChave[$chave] ?? 0.0);
+                $tpvLinha = (float) $linha->tpv;
+                $comissaoPlanilha = (float) $linha->ms_comissao;
 
                 if ($edi === null) {
                     $semEdi++;
@@ -88,15 +86,14 @@ class ConciliacaoConfrontoService
                         'edi_tpv' => 0,
                         'edi_comissao' => 0,
                         'edi_qtd' => 0,
-                        'diff_tpv' => round((float) $linha->tpv, 2),
-                        'diff_comissao' => round((float) $linha->ms_comissao, 4),
+                        'diff_tpv' => round($tpvLinha, 2),
+                        'diff_comissao' => round($comissaoPlanilha, 4),
                     ];
 
                     continue;
                 }
 
-                $bate = self::tpvCompativel($grupoTpv, (float) $edi['tpv'])
-                    && self::valoresCompativeis($grupoComissao, (float) $edi['comissao']);
+                $bate = self::tpvCompativel($grupoTpv, (float) $edi['tpv']);
 
                 if ($bate) {
                     $ok++;
@@ -104,9 +101,9 @@ class ConciliacaoConfrontoService
                     $divergentes++;
                 }
 
-                $ratioTpv = $grupoTpv > 0 ? (float) $linha->tpv / $grupoTpv : 0.0;
+                $ratioTpv = $grupoTpv > 0 ? $tpvLinha / $grupoTpv : 0.0;
                 $ediTpvLinha = round((float) $edi['tpv'] * $ratioTpv, 2);
-                $ediComissaoLinha = self::ratear((float) $edi['comissao'], (float) $linha->tpv, $grupoTpv);
+                $ediComissaoLinha = self::comissaoPlanilhaNoTpvEdi($comissaoPlanilha, $tpvLinha, $ediTpvLinha);
 
                 $lote[] = [
                     'id' => (int) $linha->id,
@@ -114,8 +111,8 @@ class ConciliacaoConfrontoService
                     'edi_tpv' => $ediTpvLinha,
                     'edi_comissao' => $ediComissaoLinha,
                     'edi_qtd' => (int) round($edi['qtd'] * $ratioTpv),
-                    'diff_tpv' => round((float) $linha->tpv - $ediTpvLinha, 2),
-                    'diff_comissao' => round((float) $linha->ms_comissao - $ediComissaoLinha, 4),
+                    'diff_tpv' => round($tpvLinha - $ediTpvLinha, 2),
+                    'diff_comissao' => round($comissaoPlanilha - $ediComissaoLinha, 4),
                 ];
             }
 
@@ -194,7 +191,20 @@ class ConciliacaoConfrontoService
     }
 
     /**
-     * Rateia o total do grupo (TPV ou comissão registrada do EDI) pela participação da linha.
+     * Comissão da planilha proporcional ao TPV encontrado no EDI.
+     * Nunca usa a grade do plano — a fonte é o que o PagSeguro pagou (MS Comissão).
+     */
+    public static function comissaoPlanilhaNoTpvEdi(float $msComissao, float $tpvPlanilha, float $tpvEdi): float
+    {
+        if ($tpvPlanilha <= 0) {
+            return 0.0;
+        }
+
+        return round($msComissao * $tpvEdi / $tpvPlanilha, 4);
+    }
+
+    /**
+     * Rateia o total do grupo pela participação da linha.
      */
     public static function ratear(float $totalGrupo, float $pesoLinha, float $pesoGrupo, int $casas = 4): float
     {
@@ -278,19 +288,12 @@ class ConciliacaoConfrontoService
     }
 
     /**
-     * @return Collection<string, array{tpv: float, comissao: float, qtd: int}>
+     * @return Collection<string, array{tpv: float, qtd: int}>
      */
     private function agregarEdi(string $inicio, string $fim): Collection
     {
-        $comissaoDoPlano = ComissaoAdminSql::lookupPercentualPorChave();
-
         $query = DB::table('edi_movimentos as em')
             ->leftJoin('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
-            ->leftJoinSub($comissaoDoPlano, 'pc', function ($join) {
-                $join->on('pc.plano_id', '=', 'e.plano_id')
-                    ->on('pc.arranjo_ur', '=', 'em.arranjo_ur')
-                    ->on('pc.parcelas', '=', DB::raw('COALESCE(NULLIF(em.quantidade_parcela, 0), 1)'));
-            })
             ->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
             ->whereNotNull('em.estabelecimento_id')
             ->select([
@@ -306,7 +309,6 @@ class ConciliacaoConfrontoService
                 'em.pagamento_prazo',
                 'em.plano',
                 'em.valor_total_transacao',
-                'pc.comissao_percentual',
                 DB::raw('COALESCE(e.token_pagseguro, em.estabelecimento, em.id_cliente) as id_cliente'),
             ]);
 
@@ -334,20 +336,15 @@ class ConciliacaoConfrontoService
             );
 
             if (! isset($grupos[$chave])) {
-                $grupos[$chave] = ['tpv' => 0.0, 'comissao' => 0.0, 'qtd' => 0];
+                $grupos[$chave] = ['tpv' => 0.0, 'qtd' => 0];
             }
 
-            $valor = (float) $mov->valor_total_transacao;
-            $comissao = $valor * (float) ($mov->comissao_percentual ?? 0) / 100;
-
-            $grupos[$chave]['tpv'] += $valor;
-            $grupos[$chave]['comissao'] += $comissao;
+            $grupos[$chave]['tpv'] += (float) $mov->valor_total_transacao;
             $grupos[$chave]['qtd']++;
         }
 
         return collect($grupos)->map(fn (array $item) => [
             'tpv' => round($item['tpv'], 2),
-            'comissao' => round($item['comissao'], 4),
             'qtd' => $item['qtd'],
         ]);
     }

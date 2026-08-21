@@ -7,6 +7,12 @@ use PHPUnit\Framework\TestCase;
 
 class ConciliacaoConfrontoServiceTest extends TestCase
 {
+    public function test_comissao_do_edi_usa_a_aliquota_da_planilha(): void
+    {
+        $this->assertSame(20.0, ConciliacaoConfrontoService::comissaoPlanilhaNoTpvEdi(40.0, 100.0, 50.0));
+        $this->assertSame(0.0, ConciliacaoConfrontoService::comissaoPlanilhaNoTpvEdi(40.807, 0.0, 11.708));
+    }
+
     public function test_rateia_comissao_registrada_pelo_tpv_da_linha(): void
     {
         $this->assertSame(25.0, ConciliacaoConfrontoService::ratear(50.0, 100.0, 200.0));

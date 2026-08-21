@@ -111,15 +111,15 @@
         <p class="mt-1 text-xs text-gray-500">MS Comissão da planilha</p>
     </div>
     <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <p class="text-xs font-bold uppercase tracking-wide text-gray-400">Comissão EDI (grade do plano)</p>
+        <p class="text-xs font-bold uppercase tracking-wide text-gray-400">Comissão no TPV EDI</p>
         <p class="mt-2 text-2xl font-bold text-sky-700">R$ {{ number_format($resumo['edi_comissao'], 2, ',', '.') }}</p>
-        <p class="mt-1 text-xs text-gray-500">TPV EDI × % da coluna Comissão (ex.: 0,20% no 1x)</p>
+        <p class="mt-1 text-xs text-gray-500">MS Comissão da planilha no volume que casou (não a grade)</p>
     </div>
     <div class="rounded-xl border border-orange-200 bg-orange-50 p-4">
         <p class="text-xs font-bold uppercase tracking-wide text-orange-700">Diferença de comissão</p>
         <p class="mt-2 text-2xl font-bold text-orange-800">R$ {{ number_format($resumo['comissao_so_relatorio'], 2, ',', '.') }}</p>
         <p class="mt-1 text-xs text-orange-700">
-            Planilha − EDI
+            Planilha − volume EDI
             · R$ {{ number_format($semEdiResumo['comissao'], 2, ',', '.') }} nas linhas sem EDI
         </p>
     </div>
