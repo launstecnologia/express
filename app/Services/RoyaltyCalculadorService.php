@@ -145,11 +145,14 @@ class RoyaltyCalculadorService
                 }
             }
 
-            $movimento->update([
-                'comissao_percentual' => $comissao['percentual'],
-                'comissao_valor' => $comissao['valor'],
-                'processado' => true,
-            ]);
+            $updates = ['processado' => true];
+
+            if (EdiMovimento::temColunaComissao()) {
+                $updates['comissao_percentual'] = $comissao['percentual'];
+                $updates['comissao_valor'] = $comissao['valor'];
+            }
+
+            $movimento->update($updates);
         }
 
         return $movimentos->count();

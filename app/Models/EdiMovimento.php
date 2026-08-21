@@ -3,12 +3,20 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class EdiMovimento extends Model
 {
     protected $table = 'edi_movimentos';
 
     protected $guarded = ['id'];
+
+    private static ?bool $temColunaComissao = null;
+
+    public static function temColunaComissao(): bool
+    {
+        return self::$temColunaComissao ??= Schema::hasColumn('edi_movimentos', 'comissao_valor');
+    }
 
     protected function casts(): array
     {
