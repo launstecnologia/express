@@ -127,8 +127,10 @@ class EstabelecimentoRelatorioTransacoesCommand extends Command
                 ['COM transação no período', number_format($resumo['com_transacao'], 0, ',', '.')],
                 ['SEM transação no período', number_format($resumo['sem_transacao'], 0, ',', '.')],
                 ['Sem transação, mas COM token', number_format($resumo['sem_transacao_com_token'], 0, ',', '.')],
-                ['Qtd transações EDI', number_format($resumo['qtd_transacoes'], 0, ',', '.')],
+                ['Qtd transações EDI no período', number_format($resumo['qtd_transacoes'], 0, ',', '.')],
                 ['Destas em terminal (série/lógico)', number_format($resumo['qtd_terminal'], 0, ',', '.')],
+                ['Com histórico no banco (pelo ID)', number_format($resumo['com_historico'] ?? 0, 0, ',', '.')],
+                ['Com transação no banco pelo Safepay ID', number_format($resumo['com_token_edi'] ?? 0, 0, ',', '.')],
                 ['TPV no período', 'R$ '.number_format($resumo['tpv'], 2, ',', '.')],
             ],
         );
@@ -139,7 +141,7 @@ class EstabelecimentoRelatorioTransacoesCommand extends Command
      */
     private function cabecalhoTabela(): array
     {
-        return ['ID', 'Nome', 'Documento', 'Cadastro', 'Status', 'Token', 'EDI', 'Tx', 'Terminal', 'TPV', 'Última venda'];
+        return ['ID', 'Nome', 'Documento', 'Cadastro', 'Status', 'Token', 'EDI', 'Tx período', 'TPV período', 'Tx hist.', 'Tx Safepay', 'Última no banco'];
     }
 
     private function linhaTabela(EstabelecimentoTransacaoRelatorioService $relatorio, object $r): array
@@ -153,9 +155,10 @@ class EstabelecimentoRelatorioTransacoesCommand extends Command
             $r->token_pagseguro ?: '—',
             ((int) $r->pagbank_edi_ativo === 1) ? 'sim' : 'não',
             number_format((int) $r->qtd_transacoes, 0, ',', '.'),
-            number_format((int) $r->qtd_terminal, 0, ',', '.'),
             'R$ '.number_format((float) $r->tpv, 2, ',', '.'),
-            $relatorio->data($r->ultima_venda) ?: '—',
+            number_format((int) ($r->qtd_historico ?? 0), 0, ',', '.'),
+            number_format((int) ($r->qtd_token ?? 0), 0, ',', '.'),
+            $relatorio->data($r->ultima_historico ?? $r->ultima_token ?? $r->ultima_venda ?? null) ?: '—',
         ];
     }
 
@@ -179,11 +182,17 @@ class EstabelecimentoRelatorioTransacoesCommand extends Command
             'pagbank_edi_ativo',
             'plano_id',
             'revenda_id',
-            'qtd_transacoes',
-            'qtd_terminal',
-            'tpv',
-            'primeira_venda',
-            'ultima_venda',
+            'qtd_transacoes_periodo',
+            'qtd_terminal_periodo',
+            'tpv_periodo',
+            'primeira_venda_periodo',
+            'ultima_venda_periodo',
+            'qtd_historico',
+            'tpv_historico',
+            'ultima_historico',
+            'qtd_token',
+            'tpv_token',
+            'ultima_token',
         ], ';');
 
         foreach ($rows as $r) {
@@ -207,6 +216,12 @@ class EstabelecimentoRelatorioTransacoesCommand extends Command
                 number_format((float) $r->tpv, 2, '.', ''),
                 $r->primeira_venda,
                 $r->ultima_venda,
+                $r->qtd_historico ?? 0,
+                number_format((float) ($r->tpv_historico ?? 0), 2, '.', ''),
+                $r->ultima_historico ?? '',
+                $r->qtd_token ?? 0,
+                number_format((float) ($r->tpv_token ?? 0), 2, '.', ''),
+                $r->ultima_token ?? '',
             ], ';');
         }
 
