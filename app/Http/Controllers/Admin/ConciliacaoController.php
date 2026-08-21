@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\ConfrontarConciliacaoJob;
 use App\Models\Conciliacao;
 use App\Models\ConciliacaoLinha;
-use App\Models\Estabelecimento;
+use App\Models\Usuario;
 use App\Services\ConciliacaoConfrontoService;
 use App\Services\ConciliacaoImportService;
 use Illuminate\Http\Request;
@@ -81,29 +81,22 @@ class ConciliacaoController extends Controller
 
     public function show(Request $request, Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto)
     {
-        $filtros = $request->only(['status', 'id_cliente', 'busca']);
+        $filtros = $request->only(['status', 'nome', 'estabelecimento_id', 'marketplace_id', 'revenda_id', 'id_cliente']);
 
-        if (blank($filtros['id_cliente'] ?? null) && filled($filtros['busca'] ?? null)) {
-            $busca = trim((string) $filtros['busca']);
-            $porNome = Estabelecimento::withoutGlobalScopes()
-                ->where(function ($q) use ($busca) {
-                    $q->where('nome_fantasia', 'like', '%'.$busca.'%')
-                        ->orWhere('razao_social', 'like', '%'.$busca.'%')
-                        ->orWhere('nome_completo', 'like', '%'.$busca.'%')
-                        ->orWhere('token_pagseguro', $busca);
-                })
-                ->limit(2)
-                ->get(['id', 'token_pagseguro']);
+        if (blank($filtros['estabelecimento_id'] ?? null) && filled($filtros['id_cliente'] ?? null)) {
+            $filtros['estabelecimento_id'] = $filtros['id_cliente'];
+        }
+        unset($filtros['id_cliente']);
 
-            if ($porNome->count() === 1) {
-                $filtros['id_cliente'] = $porNome->first()->token_pagseguro ?: (string) $porNome->first()->id;
-            }
+        if (blank($filtros['estabelecimento_id'] ?? null) && blank($filtros['nome'] ?? null) && filled($request->input('busca'))) {
+            $filtros['nome'] = trim((string) $request->input('busca'));
         }
 
+        $identificadorEc = $confronto->identificadorEcUnico($filtros);
         $detalheCliente = null;
 
-        if (filled($filtros['id_cliente'] ?? null)) {
-            $detalheCliente = $confronto->detalheCliente($conciliacao, (string) $filtros['id_cliente']);
+        if ($identificadorEc) {
+            $detalheCliente = $confronto->detalheCliente($conciliacao, $identificadorEc);
 
             if (filled($filtros['status'] ?? null)) {
                 $detalheCliente['linhas'] = $detalheCliente['linhas']
@@ -112,36 +105,36 @@ class ConciliacaoController extends Controller
             }
         }
 
-        $linhas = ConciliacaoLinha::query()
+        $linhas = $confronto->queryLinhas($conciliacao, $filtros)
             ->with('estabelecimento:id,nome_fantasia,razao_social,nome_completo,token_pagseguro')
-            ->where('conciliacao_id', $conciliacao->id)
-            ->when(filled($filtros['status'] ?? null), fn ($q) => $q->where('status', $filtros['status']))
-            ->when(filled($filtros['id_cliente'] ?? null), fn ($q) => $q->where('id_cliente', $filtros['id_cliente']))
-            ->when(filled($filtros['busca'] ?? null), function ($q) use ($filtros) {
-                $busca = '%'.$filtros['busca'].'%';
-                $q->where(function ($sub) use ($busca) {
-                    $sub->where('id_cliente', 'like', $busca)
-                        ->orWhere('chave', 'like', $busca)
-                        ->orWhere('bandeira', 'like', $busca);
-                });
-            })
-            ->orderBy('status')
-            ->orderByDesc('tpv')
+            ->orderBy('conciliacao_linhas.status')
+            ->orderByDesc('conciliacao_linhas.tpv')
             ->paginate(50)
             ->withQueryString();
 
-        $resumo = $confronto->resumoMensal($conciliacao);
-        $resumoEstabelecimentos = $confronto->resumoEstabelecimentos($conciliacao);
-        $resumoSoEdi = $confronto->resumoSoEdi($conciliacao);
+        $resumo = $confronto->resumoMensal($conciliacao, $filtros);
+        $resumoEstabelecimentos = $confronto->resumoEstabelecimentos($conciliacao, $filtros);
+        $resumoSoEdi = $confronto->resumoSoEdi($conciliacao, $filtros);
+        $linhasSoEdi = (($filtros['status'] ?? '') === 'so_edi' && ! $detalheCliente)
+            ? $confronto->recorteInversoEdi($conciliacao, $filtros)['so_edi']
+            : null;
+
+        $marketplaces = $this->usuariosPorTipo('marketplace');
+        $revendas = $this->usuariosPorTipo('revenda');
+        $filtrosResumo = $this->resumoFiltrosConciliacao($conciliacao, $filtros, $marketplaces, $revendas);
 
         return view('admin.conciliacoes.show', compact(
             'conciliacao',
             'linhas',
+            'linhasSoEdi',
             'resumo',
             'resumoEstabelecimentos',
             'resumoSoEdi',
             'detalheCliente',
             'filtros',
+            'filtrosResumo',
+            'marketplaces',
+            'revendas',
         ));
     }
 
@@ -305,5 +298,65 @@ class ConciliacaoController extends Controller
         ]);
 
         ConfrontarConciliacaoJob::dispatch($conciliacao->id)->onQueue('conciliacao');
+    }
+
+    private function usuariosPorTipo(string $tipo)
+    {
+        return Usuario::query()
+            ->where('tipo', $tipo)
+            ->orderByRaw('COALESCE(nome_fantasia, razao_social, nome_completo, email)')
+            ->get()
+            ->map(fn (Usuario $usuario) => [
+                'id' => $usuario->id,
+                'nome' => $usuario->nomeExibicao().($usuario->ativo ? '' : ' (inativo)'),
+            ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<array{chave: string, label: string, url: string}>
+     */
+    private function resumoFiltrosConciliacao(Conciliacao $conciliacao, array $filtros, $marketplaces, $revendas): array
+    {
+        $statusLabels = [
+            'ok' => 'OK',
+            'divergente' => 'Divergente',
+            'sem_estabelecimento' => 'Sem estabelecimento',
+            'sem_edi' => 'Só na planilha',
+            'so_edi' => 'Só no EDI',
+            'pendente' => 'Pendente',
+        ];
+
+        $resumo = [];
+
+        foreach (['nome', 'estabelecimento_id', 'marketplace_id', 'revenda_id', 'status'] as $chave) {
+            $valor = $filtros[$chave] ?? null;
+            if ($valor === null || $valor === '') {
+                continue;
+            }
+
+            $label = match ($chave) {
+                'nome' => 'Nome: '.$valor,
+                'estabelecimento_id' => 'ID: '.$valor,
+                'marketplace_id' => 'Marketplace: '.($marketplaces->firstWhere('id', (int) $valor)['nome'] ?? $valor),
+                'revenda_id' => 'Revenda: '.($revendas->firstWhere('id', (int) $valor)['nome'] ?? $valor),
+                'status' => $statusLabels[$valor] ?? $valor,
+                default => $chave.': '.$valor,
+            };
+
+            $semEste = $filtros;
+            unset($semEste[$chave], $semEste['id_cliente']);
+            if ($chave === 'estabelecimento_id') {
+                unset($semEste['id_cliente']);
+            }
+
+            $resumo[] = [
+                'chave' => $chave,
+                'label' => $label,
+                'url' => route('admin.conciliacoes.show', array_merge(['conciliacao' => $conciliacao], array_filter($semEste, fn ($v) => $v !== null && $v !== ''))),
+            ];
+        }
+
+        return $resumo;
     }
 }

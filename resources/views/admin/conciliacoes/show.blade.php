@@ -22,7 +22,17 @@
         'so_edi' => 'Só no EDI',
         'pendente' => 'Pendente',
     ];
+    $filtrosAtivos = collect($filtros ?? [])
+        ->only(['nome', 'estabelecimento_id', 'marketplace_id', 'revenda_id', 'status', 'id_cliente'])
+        ->filter(fn ($v) => $v !== null && $v !== '')
+        ->count();
+    $okResumo = $resumo['por_status']['ok'] ?? ['linhas' => 0];
+    $divResumo = $resumo['por_status']['divergente'] ?? ['linhas' => 0];
+    $semEstabStatus = $resumo['por_status']['sem_estabelecimento'] ?? ['linhas' => 0];
+    $semEdiStatus = $resumo['por_status']['sem_edi'] ?? ['linhas' => 0];
 @endphp
+
+<div x-data="{ filtrosAberto: false }">
 
 <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
     <div>
@@ -88,6 +98,41 @@
         {{ $conciliacao->confronto_erro ?: 'Consulte os logs do worker para mais detalhes.' }}
     </div>
 @endif
+
+<div class="mb-5 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+    <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-5">
+        <div class="min-w-0">
+            <p class="text-sm font-semibold text-gray-700">Filtros da conciliação</p>
+            <p class="text-xs text-gray-400">Os cards e a tabela acompanham o que você aplicar</p>
+            @if (! empty($filtrosResumo))
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                    @foreach ($filtrosResumo as $filtroResumo)
+                        <a
+                            href="{{ $filtroResumo['url'] }}"
+                            class="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-800 hover:bg-blue-100"
+                            title="Remover filtro"
+                        >
+                            {{ $filtroResumo['label'] }}
+                            <i class="fa-solid fa-xmark text-[10px] opacity-70"></i>
+                        </a>
+                    @endforeach
+                    <a href="{{ route('admin.conciliacoes.show', $conciliacao) }}" class="text-[11px] font-semibold text-gray-500 underline hover:text-gray-700">Limpar todos</a>
+                </div>
+            @endif
+        </div>
+        <button
+            type="button"
+            @click="filtrosAberto = true"
+            class="relative inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+        >
+            <i class="fa-solid fa-filter"></i>
+            Filtros
+            @if ($filtrosAtivos > 0)
+                <span class="flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[10px] font-bold text-white">{{ $filtrosAtivos }}</span>
+            @endif
+        </button>
+    </div>
+</div>
 
 <div class="mb-5 grid gap-3 md:grid-cols-3">
     <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -222,15 +267,15 @@
 <div class="mb-5 grid gap-3 md:grid-cols-4">
     <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
         <p class="text-xs font-bold uppercase text-emerald-700">OK</p>
-        <p class="mt-1 text-2xl font-bold text-emerald-800">{{ $conciliacao->linhas_ok }}</p>
+        <p class="mt-1 text-2xl font-bold text-emerald-800">{{ number_format($okResumo['linhas'], 0, ',', '.') }}</p>
     </div>
     <div class="rounded-xl border border-amber-200 bg-amber-50 p-4">
         <p class="text-xs font-bold uppercase text-amber-700">Divergentes</p>
-        <p class="mt-1 text-2xl font-bold text-amber-800">{{ $conciliacao->linhas_divergentes }}</p>
+        <p class="mt-1 text-2xl font-bold text-amber-800">{{ number_format($divResumo['linhas'], 0, ',', '.') }}</p>
     </div>
     <div class="rounded-xl border border-red-200 bg-red-50 p-4">
         <p class="text-xs font-bold uppercase text-red-700">Sem estabelecimento</p>
-        <p class="mt-1 text-2xl font-bold text-red-800">{{ $conciliacao->linhas_sem_estabelecimento }}</p>
+        <p class="mt-1 text-2xl font-bold text-red-800">{{ number_format($semEstabStatus['linhas'], 0, ',', '.') }}</p>
         <p class="mt-1 text-xs text-red-600">{{ $sem['clientes'] }} clientes distintos</p>
         @if ($sem['clientes'] > 0)
             <a href="{{ route('admin.conciliacoes.diferenca', $conciliacao) }}" class="mt-2 inline-block text-xs font-semibold text-red-800 hover:underline">
@@ -240,7 +285,7 @@
     </div>
     <div class="rounded-xl border border-orange-200 bg-orange-50 p-4">
         <p class="text-xs font-bold uppercase text-orange-700">Sem EDI</p>
-        <p class="mt-1 text-2xl font-bold text-orange-800">{{ $conciliacao->linhas_sem_edi }}</p>
+        <p class="mt-1 text-2xl font-bold text-orange-800">{{ number_format($semEdiStatus['linhas'], 0, ',', '.') }}</p>
         <p class="mt-1 text-xs text-orange-600">Estão na planilha e não no EDI</p>
         <a href="{{ route('admin.conciliacoes.diferenca', $conciliacao) }}" class="mt-2 inline-block text-xs font-semibold text-orange-800 hover:underline">
             Ver relatório
@@ -248,30 +293,18 @@
     </div>
 </div>
 
-<form class="mb-4 grid gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:grid-cols-5">
-    <input name="busca" value="{{ $filtros['busca'] ?? '' }}" placeholder="Nome do EC, ID, chave, bandeira..." class="rounded-lg border border-gray-200 px-3 py-2 text-sm md:col-span-2">
-    <input name="id_cliente" value="{{ $filtros['id_cliente'] ?? '' }}" placeholder="ID cliente ou token" class="rounded-lg border border-gray-200 px-3 py-2 text-sm">
-    <select name="status" class="rounded-lg border border-gray-200 bg-white px-3 text-sm">
-        <option value="">Status</option>
-        @foreach (['ok', 'divergente', 'sem_estabelecimento', 'sem_edi', 'so_edi', 'pendente'] as $status)
-            <option value="{{ $status }}" @selected(($filtros['status'] ?? '') === $status)>{{ $status === 'so_edi' ? 'Só no EDI' : ucfirst(str_replace('_', ' ', $status)) }}</option>
-        @endforeach
-    </select>
-    <button class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Filtrar</button>
-</form>
-
 @if ($detalheCliente)
     @php
         $totaisEc = $detalheCliente['totais'];
         $nomeEc = $detalheCliente['estabelecimento']?->nome_fantasia
             ?: $detalheCliente['estabelecimento']?->razao_social
             ?: $detalheCliente['estabelecimento']?->nome_completo
-            ?: ($filtros['id_cliente'] ?? 'EC');
+            ?: ($filtros['estabelecimento_id'] ?? $filtros['id_cliente'] ?? 'EC');
     @endphp
     <div class="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-4">
         <p class="text-xs font-bold uppercase tracking-wide text-sky-700">Relatório completo do EC</p>
         <p class="mt-1 text-lg font-bold text-sky-950">{{ $nomeEc }}</p>
-        <p class="text-sm text-sky-800">{{ $filtros['id_cliente'] }} · {{ $detalheCliente['linhas']->count() }} linhas (planilha + EDI)</p>
+        <p class="text-sm text-sky-800">{{ $filtros['estabelecimento_id'] ?? $filtros['id_cliente'] ?? '' }} · {{ $detalheCliente['linhas']->count() }} linhas (planilha + EDI)</p>
     </div>
     <div class="mb-4 grid gap-3 md:grid-cols-4">
         <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
@@ -314,6 +347,36 @@
             </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
+            @if ($linhasSoEdi)
+                @forelse ($linhasSoEdi as $linha)
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3">
+                            <span class="rounded-full px-2 py-1 text-xs font-semibold {{ $statusClasses['so_edi'] }}">Só no EDI</span>
+                        </td>
+                        <td class="px-4 py-3 font-mono text-xs">{{ $linha->id_cliente }}</td>
+                        <td class="px-4 py-3">
+                            @if ($linha->estabelecimento)
+                                <a href="{{ route('estabelecimentos.show', $linha->estabelecimento) }}" class="font-semibold text-blue-600 hover:underline">
+                                    {{ $linha->estabelecimento->nome_fantasia ?: $linha->estabelecimento->razao_social ?: $linha->estabelecimento->nome_completo }}
+                                </a>
+                            @else
+                                <span class="text-sky-700">—</span>
+                            @endif
+                        </td>
+                        <td class="px-4 py-3 text-gray-400">—</td>
+                        <td class="px-4 py-3 text-gray-400">{{ number_format($linha->vendas, 0, ',', '.') }} vendas</td>
+                        <td class="px-4 py-3 text-gray-400">{{ $linha->linhas }} grupos</td>
+                        <td class="px-4 py-3 text-right">R$ 0,00</td>
+                        <td class="px-4 py-3 text-right font-semibold text-sky-700">R$ {{ number_format((float) $linha->tpv, 2, ',', '.') }}</td>
+                        <td class="px-4 py-3 text-right">R$ 0,00</td>
+                        <td class="px-4 py-3 text-right font-semibold text-sky-700">R$ {{ number_format((float) $linha->comissao, 2, ',', '.') }}</td>
+                    </tr>
+                @empty
+                    <tr>
+                        <td colspan="10" class="px-4 py-8 text-center text-gray-500">Nenhuma linha encontrada.</td>
+                    </tr>
+                @endforelse
+            @else
             @forelse (($detalheCliente['linhas'] ?? $linhas) as $linha)
                 @php
                     $status = $linha->status;
@@ -356,13 +419,17 @@
                     <td colspan="10" class="px-4 py-8 text-center text-gray-500">Nenhuma linha encontrada.</td>
                 </tr>
             @endforelse
+            @endif
         </tbody>
     </table>
 </div>
 
-@if (! $detalheCliente)
+@if (! $detalheCliente && ! $linhasSoEdi)
     <div class="mt-4">{{ $linhas->links() }}</div>
 @endif
+
+@include('admin.conciliacoes.partials.filtros-drawer')
+</div>
 
 @if ($confrontoEmAndamento)
 <script>

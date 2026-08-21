@@ -7,6 +7,7 @@ use App\Models\ConciliacaoLinha;
 use App\Models\Estabelecimento;
 use App\Support\ComissaoAdminSql;
 use App\Support\ConciliacaoDimensao;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -394,14 +395,153 @@ class ConciliacaoConfrontoService
     }
 
     /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function queryLinhas(Conciliacao $conciliacao, array $filtros = []): Builder
+    {
+        $query = ConciliacaoLinha::query()
+            ->where('conciliacao_linhas.conciliacao_id', $conciliacao->id);
+
+        if ($this->temFiltroEstabelecimento($filtros)) {
+            $query->leftJoin('estabelecimentos as e', 'e.id', '=', 'conciliacao_linhas.estabelecimento_id')
+                ->select('conciliacao_linhas.*');
+        }
+
+        $status = trim((string) ($filtros['status'] ?? ''));
+        if ($status !== '' && $status !== 'so_edi') {
+            $query->where('conciliacao_linhas.status', $status);
+        } elseif ($status === 'so_edi') {
+            $query->whereRaw('0 = 1');
+        }
+
+        $idEstab = trim((string) ($filtros['estabelecimento_id'] ?? $filtros['id_cliente'] ?? ''));
+        if ($idEstab !== '') {
+            $tokens = $this->resolverIdentificadoresCliente($idEstab);
+            $idsNumericos = array_values(array_filter($tokens, 'ctype_digit'));
+
+            $query->where(function (Builder $q) use ($tokens, $idsNumericos) {
+                $q->whereIn('conciliacao_linhas.id_cliente', $tokens)
+                    ->orWhereIn('e.token_pagseguro', $tokens);
+
+                if ($idsNumericos !== []) {
+                    $q->orWhereIn('conciliacao_linhas.estabelecimento_id', $idsNumericos)
+                        ->orWhereIn('e.id', $idsNumericos);
+                }
+            });
+        }
+
+        $nome = trim((string) ($filtros['nome'] ?? ''));
+        if ($nome !== '') {
+            $like = '%'.$nome.'%';
+            $query->where(function (Builder $q) use ($like) {
+                $q->where('e.nome_fantasia', 'like', $like)
+                    ->orWhere('e.razao_social', 'like', $like)
+                    ->orWhere('e.nome_completo', 'like', $like);
+            });
+        }
+
+        if (filled($filtros['marketplace_id'] ?? null)) {
+            $query->where('e.marketplace_id', (int) $filtros['marketplace_id']);
+        }
+
+        if (filled($filtros['revenda_id'] ?? null)) {
+            $query->where('e.revenda_id', (int) $filtros['revenda_id']);
+        }
+
+        return $query;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function identificadorEcUnico(array $filtros): ?string
+    {
+        $id = trim((string) ($filtros['estabelecimento_id'] ?? $filtros['id_cliente'] ?? ''));
+        if ($id !== '') {
+            return $id;
+        }
+
+        if (! $this->temFiltroEstabelecimento($filtros)) {
+            return null;
+        }
+
+        $estabs = $this->estabelecimentosDosFiltros($filtros);
+        if ($estabs === null || $estabs->count() !== 1) {
+            return null;
+        }
+
+        $estab = $estabs->first();
+
+        return filled($estab->token_pagseguro) ? (string) $estab->token_pagseguro : (string) $estab->id;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function temFiltroEstabelecimento(array $filtros): bool
+    {
+        return filled($filtros['nome'] ?? null)
+            || filled($filtros['estabelecimento_id'] ?? null)
+            || filled($filtros['id_cliente'] ?? null)
+            || filled($filtros['marketplace_id'] ?? null)
+            || filled($filtros['revenda_id'] ?? null);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return Collection<int, Estabelecimento>|null
+     */
+    public function estabelecimentosDosFiltros(array $filtros): ?Collection
+    {
+        if (! $this->temFiltroEstabelecimento($filtros)) {
+            return null;
+        }
+
+        $query = Estabelecimento::withoutGlobalScopes();
+
+        $idEstab = trim((string) ($filtros['estabelecimento_id'] ?? $filtros['id_cliente'] ?? ''));
+        if ($idEstab !== '') {
+            $tokens = $this->resolverIdentificadoresCliente($idEstab);
+            $idsNumericos = array_values(array_filter($tokens, 'ctype_digit'));
+            $query->where(function ($q) use ($tokens, $idsNumericos) {
+                $q->whereIn('token_pagseguro', $tokens);
+                if ($idsNumericos !== []) {
+                    $q->orWhereIn('id', $idsNumericos);
+                }
+            });
+        }
+
+        $nome = trim((string) ($filtros['nome'] ?? ''));
+        if ($nome !== '') {
+            $like = '%'.$nome.'%';
+            $query->where(function ($q) use ($like) {
+                $q->where('nome_fantasia', 'like', $like)
+                    ->orWhere('razao_social', 'like', $like)
+                    ->orWhere('nome_completo', 'like', $like);
+            });
+        }
+
+        if (filled($filtros['marketplace_id'] ?? null)) {
+            $query->where('marketplace_id', (int) $filtros['marketplace_id']);
+        }
+
+        if (filled($filtros['revenda_id'] ?? null)) {
+            $query->where('revenda_id', (int) $filtros['revenda_id']);
+        }
+
+        return $query->get(['id', 'token_pagseguro', 'nome_fantasia', 'razao_social', 'nome_completo']);
+    }
+
+    /**
      * Volume do EDI do mês que não aparece na planilha PagSeguro:
      * chaves sem linha correspondente, ou TPV a mais na mesma chave.
      *
+     * @param  array<string, mixed>  $filtros
      * @return array{so_edi: Collection, extra_edi: Collection}
      */
-    public function recorteInversoEdi(Conciliacao $conciliacao): array
+    public function recorteInversoEdi(Conciliacao $conciliacao, array $filtros = []): array
     {
-        $grupos = $this->agruparRecorteInverso($conciliacao);
+        $grupos = $this->agruparRecorteInverso($conciliacao, $filtros);
 
         return [
             'so_edi' => $this->hidratarRecorteEdi($grupos['so_edi']),
@@ -410,11 +550,12 @@ class ConciliacaoConfrontoService
     }
 
     /**
+     * @param  array<string, mixed>  $filtros
      * @return array{linhas: int, clientes: int, tpv: float, comissao: float}
      */
-    public function resumoSoEdi(Conciliacao $conciliacao): array
+    public function resumoSoEdi(Conciliacao $conciliacao, array $filtros = []): array
     {
-        $soEdi = $this->agruparRecorteInverso($conciliacao)['so_edi'];
+        $soEdi = $this->agruparRecorteInverso($conciliacao, $filtros)['so_edi'];
 
         return [
             'linhas' => (int) array_sum(array_column($soEdi, 'linhas')),
@@ -638,9 +779,10 @@ class ConciliacaoConfrontoService
     }
 
     /**
+     * @param  array<string, mixed>  $filtros
      * @return array{so_edi: array<string, array>, extra_edi: array<string, array>}
      */
-    private function agruparRecorteInverso(Conciliacao $conciliacao): array
+    private function agruparRecorteInverso(Conciliacao $conciliacao, array $filtros = []): array
     {
         $vazio = ['so_edi' => [], 'extra_edi' => []];
 
@@ -650,11 +792,13 @@ class ConciliacaoConfrontoService
 
         $inicio = $conciliacao->referencia_mes->copy()->startOfMonth()->toDateString();
         $fim = $conciliacao->referencia_mes->copy()->endOfMonth()->toDateString();
-        $agregados = $this->agregarEdi($inicio, $fim);
+        $agregados = $this->agregarEdi($inicio, $fim, $this->escopoEdiDosFiltros($filtros));
 
         $planilha = [];
+        $filtrosPlanilha = $filtros;
+        unset($filtrosPlanilha['status']);
 
-        foreach ($conciliacao->linhas()->orderBy('id')->cursor() as $linha) {
+        foreach ($this->queryLinhas($conciliacao, $filtrosPlanilha)->orderBy('conciliacao_linhas.id')->cursor() as $linha) {
             $chave = $this->chaveDaLinha($linha);
 
             if (! isset($planilha[$chave])) {
@@ -752,7 +896,7 @@ class ConciliacaoConfrontoService
      *     sem_estabelecimento: array{linhas: int, clientes: int, tpv: float, comissao: float}
      * }
      */
-    public function resumoEstabelecimentos(Conciliacao $conciliacao): array
+    public function resumoEstabelecimentos(Conciliacao $conciliacao, array $filtros = []): array
     {
         $vazio = ['linhas' => 0, 'clientes' => 0, 'tpv' => 0.0, 'comissao' => 0.0];
         $resumo = [
@@ -760,10 +904,12 @@ class ConciliacaoConfrontoService
             'sem_estabelecimento' => $vazio,
         ];
 
-        $rows = ConciliacaoLinha::query()
-            ->where('conciliacao_id', $conciliacao->id)
-            ->selectRaw('sem_estabelecimento, COUNT(*) as linhas, COUNT(DISTINCT id_cliente) as clientes, SUM(tpv) as tpv, SUM(ms_comissao) as comissao')
-            ->groupBy('sem_estabelecimento')
+        $filtrosCards = $filtros;
+        unset($filtrosCards['status']);
+
+        $rows = $this->clonarSemSelect($this->queryLinhas($conciliacao, $filtrosCards))
+            ->selectRaw('conciliacao_linhas.sem_estabelecimento, COUNT(*) as linhas, COUNT(DISTINCT conciliacao_linhas.id_cliente) as clientes, SUM(conciliacao_linhas.tpv) as tpv, SUM(conciliacao_linhas.ms_comissao) as comissao')
+            ->groupBy('conciliacao_linhas.sem_estabelecimento')
             ->get();
 
         foreach ($rows as $row) {
@@ -824,7 +970,7 @@ class ConciliacaoConfrontoService
      *     por_status: array<string, array{linhas: int, tpv: float, comissao: float, edi_tpv: float, edi_comissao: float}>
      * }
      */
-    public function resumoMensal(Conciliacao $conciliacao): array
+    public function resumoMensal(Conciliacao $conciliacao, array $filtros = []): array
     {
         $vazio = ['linhas' => 0, 'tpv' => 0.0, 'comissao' => 0.0, 'edi_tpv' => 0.0, 'edi_comissao' => 0.0];
         $porStatus = [
@@ -835,10 +981,13 @@ class ConciliacaoConfrontoService
             'pendente' => $vazio,
         ];
 
-        $rows = ConciliacaoLinha::query()
-            ->where('conciliacao_id', $conciliacao->id)
-            ->selectRaw('status, COUNT(*) as linhas, SUM(tpv) as tpv, SUM(ms_comissao) as comissao, SUM(COALESCE(edi_tpv, 0)) as edi_tpv, SUM(COALESCE(edi_comissao, 0)) as edi_comissao')
-            ->groupBy('status')
+        $filtrosCards = $filtros;
+        unset($filtrosCards['status']);
+        $query = $this->queryLinhas($conciliacao, $filtrosCards);
+
+        $rows = $this->clonarSemSelect($query)
+            ->selectRaw('conciliacao_linhas.status, COUNT(*) as linhas, SUM(conciliacao_linhas.tpv) as tpv, SUM(conciliacao_linhas.ms_comissao) as comissao, SUM(COALESCE(conciliacao_linhas.edi_tpv, 0)) as edi_tpv, SUM(COALESCE(conciliacao_linhas.edi_comissao, 0)) as edi_comissao')
+            ->groupBy('conciliacao_linhas.status')
             ->get();
 
         foreach ($rows as $row) {
@@ -851,24 +1000,63 @@ class ConciliacaoConfrontoService
             ];
         }
 
-        $pagseguroTpv = (float) $conciliacao->total_tpv;
-        $pagseguroComissao = (float) $conciliacao->total_comissao;
-        $ediTpv = (float) $conciliacao->linhas()->sum('edi_tpv');
-        $ediComissao = (float) $conciliacao->linhas()->sum('edi_comissao');
+        $totais = $this->clonarSemSelect($query)
+            ->selectRaw('SUM(conciliacao_linhas.tpv) as pagseguro_tpv, SUM(conciliacao_linhas.ms_comissao) as pagseguro_comissao, COUNT(DISTINCT conciliacao_linhas.id_cliente) as pagseguro_clientes, SUM(COALESCE(conciliacao_linhas.edi_tpv, 0)) as edi_tpv, SUM(COALESCE(conciliacao_linhas.edi_comissao, 0)) as edi_comissao, COUNT(DISTINCT CASE WHEN conciliacao_linhas.estabelecimento_id IS NOT NULL THEN conciliacao_linhas.id_cliente END) as edi_clientes')
+            ->first();
+
+        $pagseguroTpv = (float) ($totais->pagseguro_tpv ?? 0);
+        $pagseguroComissao = (float) ($totais->pagseguro_comissao ?? 0);
+        $ediTpv = (float) ($totais->edi_tpv ?? 0);
+        $ediComissao = (float) ($totais->edi_comissao ?? 0);
 
         return [
             'pagseguro_tpv' => $pagseguroTpv,
             'pagseguro_comissao' => $pagseguroComissao,
-            'pagseguro_clientes' => (int) $conciliacao->total_clientes,
+            'pagseguro_clientes' => (int) ($totais->pagseguro_clientes ?? 0),
             'edi_tpv' => $ediTpv,
             'edi_comissao' => $ediComissao,
-            'edi_clientes' => (int) $conciliacao->linhas()
-                ->whereNotNull('estabelecimento_id')
-                ->distinct('id_cliente')
-                ->count('id_cliente'),
+            'edi_clientes' => (int) ($totais->edi_clientes ?? 0),
             'tpv_so_relatorio' => round($pagseguroTpv - $ediTpv, 2),
             'comissao_so_relatorio' => round($pagseguroComissao - $ediComissao, 4),
             'por_status' => $porStatus,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<string>
+     */
+    private function escopoEdiDosFiltros(array $filtros): array
+    {
+        if (! $this->temFiltroEstabelecimento($filtros)) {
+            return [];
+        }
+
+        $tokens = [];
+        $idEstab = trim((string) ($filtros['estabelecimento_id'] ?? $filtros['id_cliente'] ?? ''));
+        if ($idEstab !== '') {
+            $tokens = $this->resolverIdentificadoresCliente($idEstab);
+        }
+
+        $estabs = $this->estabelecimentosDosFiltros($filtros) ?? collect();
+        foreach ($estabs as $estab) {
+            $tokens[] = (string) $estab->id;
+            if (filled($estab->token_pagseguro)) {
+                $tokens[] = (string) $estab->token_pagseguro;
+            }
+        }
+
+        $tokens = array_values(array_unique(array_filter($tokens)));
+
+        return $tokens === [] ? ['__nenhum__'] : $tokens;
+    }
+
+    private function clonarSemSelect(Builder $query): Builder
+    {
+        $clone = clone $query;
+        $clone->getQuery()->columns = null;
+        $clone->getQuery()->orders = null;
+
+        return $clone;
     }
 }
