@@ -22,6 +22,8 @@ class EdiMovimento extends Model
             'valor_liquido_transacao' => 'decimal:2',
             'taxa_intermediacao' => 'decimal:2',
             'tarifa_intermediacao' => 'decimal:2',
+            'comissao_percentual' => 'decimal:2',
+            'comissao_valor' => 'decimal:4',
             'processado' => 'boolean',
             'data_importacao' => 'datetime',
         ];

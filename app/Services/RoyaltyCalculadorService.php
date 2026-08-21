@@ -100,6 +100,7 @@ class RoyaltyCalculadorService
             ->groupBy(fn (EstabelecimentoRoyalty $royalty) => $royalty->estabelecimento_id.'_'.$royalty->plano_taxa_id);
 
         $taxasPorPlano = PlanoTaxa::query()
+            ->with(['royalties' => fn ($q) => $q->where('nivel', 'admin')])
             ->whereIn('plano_id', $estabelecimentos->pluck('plano_id')->filter()->unique())
             ->where('ativo', true)
             ->get()
@@ -115,46 +116,40 @@ class RoyaltyCalculadorService
             ->get(['id', 'tipo', 'percentual_retencao_pai'])
             ->keyBy('id');
 
-        $processadosIds = [];
-
         foreach ($movimentos as $movimento) {
             $planoTaxa = $this->resolverPlanoTaxa($movimento, $estabelecimentos, $taxasPorPlano);
 
-            if (! $planoTaxa) {
-                $processadosIds[] = $movimento->id;
+            $comissao = $this->comissaoAdminDaTransacao($movimento, $planoTaxa);
 
-                continue;
-            }
+            if ($planoTaxa) {
+                $royalties = $royaltiesPorEstabTaxa->get($movimento->estabelecimento_id.'_'.$planoTaxa->id, collect());
 
-            $royalties = $royaltiesPorEstabTaxa->get($movimento->estabelecimento_id.'_'.$planoTaxa->id, collect());
-
-            $lancamentos = $this->distribuirComissoes(
-                (float) $movimento->valor_total_transacao,
-                $royalties,
-                $usuarios,
-            );
-
-            foreach ($lancamentos as $usuarioId => $dados) {
-                TransacaoRoyalty::updateOrCreate(
-                    [
-                        'edi_movimento_id' => $movimento->id,
-                        'usuario_id' => $usuarioId,
-                    ],
-                    [
-                        'nivel' => $dados['nivel'],
-                        'percentual_royalty' => $dados['percentual_efetivo'],
-                        'valor_royalty' => $dados['valor'],
-                    ]
+                $lancamentos = $this->distribuirComissoes(
+                    (float) $movimento->valor_total_transacao,
+                    $royalties,
+                    $usuarios,
                 );
+
+                foreach ($lancamentos as $usuarioId => $dados) {
+                    TransacaoRoyalty::updateOrCreate(
+                        [
+                            'edi_movimento_id' => $movimento->id,
+                            'usuario_id' => $usuarioId,
+                        ],
+                        [
+                            'nivel' => $dados['nivel'],
+                            'percentual_royalty' => $dados['percentual_efetivo'],
+                            'valor_royalty' => $dados['valor'],
+                        ]
+                    );
+                }
             }
 
-            $processadosIds[] = $movimento->id;
-        }
-
-        if ($processadosIds !== []) {
-            EdiMovimento::withoutGlobalScopes()
-                ->whereIn('id', $processadosIds)
-                ->update(['processado' => true]);
+            $movimento->update([
+                'comissao_percentual' => $comissao['percentual'],
+                'comissao_valor' => $comissao['valor'],
+                'processado' => true,
+            ]);
         }
 
         return $movimentos->count();
@@ -300,6 +295,22 @@ class RoyaltyCalculadorService
                 ->get()
                 ->groupBy('plano_id'),
         );
+    }
+
+    /**
+     * @return array{percentual: ?float, valor: ?float}
+     */
+    public function comissaoAdminDaTransacao(EdiMovimento $movimento, ?PlanoTaxa $taxa): array
+    {
+        $percentual = $taxa?->comissaoAdminPercentual();
+        $tpv = (float) $movimento->valor_total_transacao;
+
+        return [
+            'percentual' => $percentual,
+            'valor' => $percentual !== null && $tpv > 0
+                ? round($tpv * $percentual / 100, 4)
+                : null,
+        ];
     }
 
     /**

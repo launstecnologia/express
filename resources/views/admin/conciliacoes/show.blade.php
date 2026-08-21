@@ -6,8 +6,6 @@
 @php
     $confrontoEmAndamento = in_array($conciliacao->confronto_status, ['na_fila', 'processando'], true);
     $semEdiResumo = $resumo['por_status']['sem_edi'] ?? ['tpv' => 0, 'linhas' => 0, 'comissao' => 0];
-    $comissaoDesatualizada = $resumo['edi_comissao'] > $resumo['pagseguro_comissao']
-        && $resumo['edi_tpv'] + 0.02 < $resumo['pagseguro_tpv'];
     $statusClasses = [
         'ok' => 'bg-emerald-100 text-emerald-700',
         'divergente' => 'bg-amber-100 text-amber-700',
@@ -78,13 +76,6 @@
     </div>
 @endif
 
-@if ($comissaoDesatualizada && ! $confrontoEmAndamento)
-    <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        A comissão do EDI ainda está no cálculo antigo (percentual do plano), por isso ficou maior que a da planilha mesmo com menos TPV.
-        Clique em <strong>Atualizar vínculos e reconfrontar</strong> para usar a alíquota da planilha sobre o volume EDI.
-    </div>
-@endif
-
 <div class="mb-5 grid gap-3 md:grid-cols-3">
     <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <p class="text-xs font-bold uppercase tracking-wide text-gray-400">TPV PagSeguro</p>
@@ -113,21 +104,15 @@
         <p class="mt-1 text-xs text-gray-500">MS Comissão da planilha</p>
     </div>
     <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <p class="text-xs font-bold uppercase tracking-wide text-gray-400">Comissão no TPV EDI</p>
+        <p class="text-xs font-bold uppercase tracking-wide text-gray-400">Comissão EDI (grade do plano)</p>
         <p class="mt-2 text-2xl font-bold text-sky-700">R$ {{ number_format($resumo['edi_comissao'], 2, ',', '.') }}</p>
-        <p class="mt-1 text-xs text-gray-500">Mesma alíquota da planilha, sobre o volume EDI</p>
+        <p class="mt-1 text-xs text-gray-500">TPV EDI × % da coluna Comissão (ex.: 0,20% no 1x)</p>
     </div>
     <div class="rounded-xl border border-orange-200 bg-orange-50 p-4">
-        <p class="text-xs font-bold uppercase tracking-wide text-orange-700">Comissão só no relatório</p>
-        <p class="mt-2 text-2xl font-bold text-orange-800">
-            @if ($comissaoDesatualizada)
-                —
-            @else
-                R$ {{ number_format($resumo['comissao_so_relatorio'], 2, ',', '.') }}
-            @endif
-        </p>
+        <p class="text-xs font-bold uppercase tracking-wide text-orange-700">Diferença de comissão</p>
+        <p class="mt-2 text-2xl font-bold text-orange-800">R$ {{ number_format($resumo['comissao_so_relatorio'], 2, ',', '.') }}</p>
         <p class="mt-1 text-xs text-orange-700">
-            Comissão do TPV que não está no EDI
+            Planilha − EDI
             · R$ {{ number_format($semEdiResumo['comissao'], 2, ',', '.') }} nas linhas sem EDI
         </p>
     </div>

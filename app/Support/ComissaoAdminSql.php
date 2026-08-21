@@ -34,6 +34,26 @@ class ComissaoAdminSql
         });
     }
 
+    /**
+     * Uma linha por plano + arranjo + parcelas, para não duplicar TPV no confronto.
+     */
+    public static function lookupPercentualPorChave(): Builder
+    {
+        return DB::table('plano_taxas as pt')
+            ->leftJoin('plano_taxa_royalties as ptr_admin', function (JoinClause $join) {
+                $join->on('ptr_admin.plano_taxa_id', '=', 'pt.id')
+                    ->where('ptr_admin.nivel', '=', 'admin');
+            })
+            ->where('pt.ativo', true)
+            ->groupBy('pt.plano_id', 'pt.arranjo_ur', 'pt.parcelas')
+            ->select([
+                'pt.plano_id',
+                'pt.arranjo_ur',
+                'pt.parcelas',
+                DB::raw('MAX('.self::percentual().') as comissao_percentual'),
+            ]);
+    }
+
     public static function whereTemComissao(Builder $query): Builder
     {
         return $query->whereNotNull(DB::raw(self::percentual()));

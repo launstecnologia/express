@@ -7,36 +7,25 @@ use PHPUnit\Framework\TestCase;
 
 class ConciliacaoConfrontoServiceTest extends TestCase
 {
-    public function test_comissao_cai_quando_edi_tem_menos_tpv(): void
+    public function test_rateia_comissao_registrada_pelo_tpv_da_linha(): void
     {
-        $comissao = ConciliacaoConfrontoService::comissaoNaProporcaoDoTpv(
-            40.0,
-            16_000.0,
-            12_000.0,
-        );
-
-        $this->assertSame(30.0, $comissao);
+        $this->assertSame(25.0, ConciliacaoConfrontoService::ratear(50.0, 100.0, 200.0));
     }
 
-    public function test_comissao_bate_quando_tpv_bate(): void
+    public function test_ratear_zera_quando_o_grupo_nao_tem_peso(): void
     {
-        $comissao = ConciliacaoConfrontoService::comissaoNaProporcaoDoTpv(
-            40.807,
-            16_878.07,
-            16_878.07,
-        );
-
-        $this->assertSame(40.807, $comissao);
-    }
-
-    public function test_comissao_zerada_quando_nao_ha_tpv_na_planilha(): void
-    {
-        $this->assertSame(0.0, ConciliacaoConfrontoService::comissaoNaProporcaoDoTpv(10.0, 0.0, 50.0));
+        $this->assertSame(0.0, ConciliacaoConfrontoService::ratear(50.0, 100.0, 0.0));
     }
 
     public function test_tpv_compativel_respeita_tolerancia(): void
     {
         $this->assertTrue(ConciliacaoConfrontoService::tpvCompativel(100.00, 100.02));
         $this->assertFalse(ConciliacaoConfrontoService::tpvCompativel(100.00, 100.03));
+    }
+
+    public function test_comissao_compativel_usa_a_mesma_tolerancia(): void
+    {
+        $this->assertTrue(ConciliacaoConfrontoService::valoresCompativeis(40.807, 40.82));
+        $this->assertFalse(ConciliacaoConfrontoService::valoresCompativeis(40.807, 40.85));
     }
 }

@@ -30,6 +30,8 @@ class EdiMovimentoDetalhe
         'valor_liquido_transacao' => 'Valor líquido transação',
         'taxa_intermediacao' => 'Taxa intermediação',
         'tarifa_intermediacao' => 'Tarifa intermediação',
+        'comissao_percentual' => 'Comissão % (plano do EC)',
+        'comissao_valor' => 'Comissão da transação',
         'pagamento_prazo' => 'Pagamento prazo',
         'plano' => 'Plano',
         'parcela' => 'Parcela',
@@ -63,6 +65,7 @@ class EdiMovimentoDetalhe
         'valor_liquido_transacao',
         'taxa_intermediacao',
         'tarifa_intermediacao',
+        'comissao_valor',
     ];
 
     /** @var array<int, string> */
