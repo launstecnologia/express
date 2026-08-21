@@ -211,6 +211,13 @@
     </div>
 </div>
 
+<div class="mb-5">
+    <a href="{{ route('admin.conciliacoes.diferenca', $conciliacao) }}#so-edi" class="block rounded-xl border border-sky-200 bg-sky-50 p-4 hover:bg-sky-100">
+        <p class="text-xs font-bold uppercase text-sky-700">No EDI, não na planilha</p>
+        <p class="mt-1 text-sm font-semibold text-sky-900">Ver estabelecimentos e TPV que estão no EDI e não no relatório PagSeguro</p>
+    </a>
+</div>
+
 <form class="mb-4 grid gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:grid-cols-5">
     <input name="busca" value="{{ $filtros['busca'] ?? '' }}" placeholder="Buscar ID, chave, bandeira..." class="rounded-lg border border-gray-200 px-3 py-2 text-sm md:col-span-2">
     <input name="id_cliente" value="{{ $filtros['id_cliente'] ?? '' }}" placeholder="ID cliente" class="rounded-lg border border-gray-200 px-3 py-2 text-sm">

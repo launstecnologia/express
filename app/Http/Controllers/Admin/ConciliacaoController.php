@@ -117,12 +117,17 @@ class ConciliacaoController extends Controller
         $resumo = $confronto->resumoMensal($conciliacao);
         $semCadastro = $confronto->clientesSemEstabelecimento($conciliacao);
         $semEdi = $confronto->estabelecimentosSemEdi($conciliacao);
+        $inversoEdi = $confronto->recorteInversoEdi($conciliacao);
+        $soEdi = $inversoEdi['so_edi'];
+        $extraEdi = $inversoEdi['extra_edi'];
 
         return view('admin.conciliacoes.diferenca', compact(
             'conciliacao',
             'resumo',
             'semCadastro',
             'semEdi',
+            'soEdi',
+            'extraEdi',
         ));
     }
 
@@ -176,6 +181,38 @@ class ConciliacaoController extends Controller
                     $cliente->linhas,
                     number_format((float) $cliente->tpv, 2, '.', ''),
                     number_format((float) $cliente->comissao, 4, '.', ''),
+                ], ';');
+            }
+
+            fclose($handle);
+        }, $nomeArquivo, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    public function relatorioSoEdi(Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto): StreamedResponse
+    {
+        $clientes = $confronto->recorteInversoEdi($conciliacao)['so_edi'];
+        $mes = $conciliacao->referencia_mes?->format('Y-m') ?? 'conciliacao';
+        $nomeArquivo = "estabelecimentos-so-edi-{$mes}.csv";
+
+        return response()->streamDownload(function () use ($clientes) {
+            $handle = fopen('php://output', 'w');
+            fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
+            fputcsv($handle, ['id_cliente', 'estabelecimento', 'vendas', 'tpv'], ';');
+
+            foreach ($clientes as $cliente) {
+                $estab = $cliente->estabelecimento;
+                $nome = $estab?->nome_fantasia
+                    ?: $estab?->razao_social
+                    ?: $estab?->nome_completo
+                    ?: '';
+
+                fputcsv($handle, [
+                    $cliente->id_cliente,
+                    $nome,
+                    $cliente->vendas,
+                    number_format((float) $cliente->tpv, 2, '.', ''),
                 ], ';');
             }
 

@@ -288,7 +288,7 @@ class ConciliacaoConfrontoService
     }
 
     /**
-     * @return Collection<string, array{tpv: float, qtd: int}>
+     * @return Collection<string, array{tpv: float, qtd: int, id_cliente: string, estabelecimento_id: mixed}>
      */
     private function agregarEdi(string $inicio, string $fim): Collection
     {
@@ -298,6 +298,7 @@ class ConciliacaoConfrontoService
             ->whereNotNull('em.estabelecimento_id')
             ->select([
                 'em.id',
+                'em.estabelecimento_id',
                 'em.tipo_transacao',
                 'em.meio_pagamento',
                 'em.arranjo_ur',
@@ -336,7 +337,12 @@ class ConciliacaoConfrontoService
             );
 
             if (! isset($grupos[$chave])) {
-                $grupos[$chave] = ['tpv' => 0.0, 'qtd' => 0];
+                $grupos[$chave] = [
+                    'tpv' => 0.0,
+                    'qtd' => 0,
+                    'id_cliente' => $idCliente,
+                    'estabelecimento_id' => $mov->estabelecimento_id,
+                ];
             }
 
             $grupos[$chave]['tpv'] += (float) $mov->valor_total_transacao;
@@ -346,7 +352,116 @@ class ConciliacaoConfrontoService
         return collect($grupos)->map(fn (array $item) => [
             'tpv' => round($item['tpv'], 2),
             'qtd' => $item['qtd'],
+            'id_cliente' => $item['id_cliente'],
+            'estabelecimento_id' => $item['estabelecimento_id'],
         ]);
+    }
+
+    /**
+     * Volume do EDI do mês que não aparece na planilha PagSeguro:
+     * chaves sem linha correspondente, ou TPV a mais na mesma chave.
+     *
+     * @return array{so_edi: Collection, extra_edi: Collection}
+     */
+    public function recorteInversoEdi(Conciliacao $conciliacao): array
+    {
+        $vazio = ['so_edi' => collect(), 'extra_edi' => collect()];
+
+        if (! $conciliacao->referencia_mes) {
+            return $vazio;
+        }
+
+        $inicio = $conciliacao->referencia_mes->copy()->startOfMonth()->toDateString();
+        $fim = $conciliacao->referencia_mes->copy()->endOfMonth()->toDateString();
+        $agregados = $this->agregarEdi($inicio, $fim);
+
+        $planilha = [];
+
+        foreach ($conciliacao->linhas()->orderBy('id')->cursor() as $linha) {
+            $chave = $this->chaveDaLinha($linha);
+
+            if (! isset($planilha[$chave])) {
+                $planilha[$chave] = 0.0;
+            }
+
+            $planilha[$chave] += (float) $linha->tpv;
+        }
+
+        $soEdi = [];
+        $extraEdi = [];
+
+        foreach ($agregados as $chave => $edi) {
+            $grupoChave = (string) ($edi['estabelecimento_id'] ?: $edi['id_cliente']);
+
+            if (! isset($planilha[$chave])) {
+                $this->acumularRecorteEdi($soEdi, $grupoChave, $edi, (float) $edi['tpv']);
+
+                continue;
+            }
+
+            $extra = round((float) $edi['tpv'] - (float) $planilha[$chave], 2);
+
+            if ($extra > self::TOLERANCIA) {
+                $this->acumularRecorteEdi($extraEdi, $grupoChave, $edi, $extra);
+            }
+        }
+
+        return [
+            'so_edi' => $this->hidratarRecorteEdi($soEdi),
+            'extra_edi' => $this->hidratarRecorteEdi($extraEdi),
+        ];
+    }
+
+    /**
+     * @param  array<string, array{id_cliente: string, estabelecimento_id: mixed, vendas: int, tpv: float}>  $grupos
+     * @param  array{tpv: float, qtd: int, id_cliente: string, estabelecimento_id: mixed}  $edi
+     */
+    private function acumularRecorteEdi(array &$grupos, string $grupoChave, array $edi, float $tpv): void
+    {
+        if (! isset($grupos[$grupoChave])) {
+            $grupos[$grupoChave] = [
+                'id_cliente' => $edi['id_cliente'],
+                'estabelecimento_id' => $edi['estabelecimento_id'],
+                'vendas' => 0,
+                'tpv' => 0.0,
+            ];
+        }
+
+        $grupos[$grupoChave]['vendas'] += (int) $edi['qtd'];
+        $grupos[$grupoChave]['tpv'] += $tpv;
+    }
+
+    /**
+     * @param  array<string, array{id_cliente: string, estabelecimento_id: mixed, vendas: int, tpv: float}>  $grupos
+     */
+    private function hidratarRecorteEdi(array $grupos): Collection
+    {
+        $linhas = collect($grupos)
+            ->map(fn (array $item) => (object) [
+                'id_cliente' => $item['id_cliente'],
+                'estabelecimento_id' => $item['estabelecimento_id'],
+                'vendas' => $item['vendas'],
+                'tpv' => round($item['tpv'], 2),
+            ])
+            ->sortByDesc('tpv')
+            ->values();
+
+        $ids = $linhas->pluck('estabelecimento_id')->filter()->unique()->all();
+
+        if ($ids === []) {
+            return $linhas;
+        }
+
+        $estabelecimentos = Estabelecimento::withoutGlobalScopes()
+            ->whereIn('id', $ids)
+            ->get(['id', 'nome_fantasia', 'razao_social', 'nome_completo', 'token_pagseguro'])
+            ->keyBy('id');
+
+        foreach ($linhas as $linha) {
+            $linha->estabelecimento = $estabelecimentos->get($linha->estabelecimento_id);
+        }
+
+        return $linhas;
     }
 
     /**
