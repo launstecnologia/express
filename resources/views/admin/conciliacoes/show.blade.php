@@ -32,6 +32,10 @@
         </p>
     </div>
     <div class="flex flex-wrap gap-2">
+        <a href="{{ route('admin.conciliacoes.diferenca', $conciliacao) }}" class="inline-flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-800 hover:bg-orange-100">
+            <i class="fa-solid fa-table"></i>
+            Relatório da diferença
+        </a>
         <form method="POST" action="{{ route('admin.conciliacoes.confrontar', $conciliacao) }}">
             @csrf
             <button @disabled($confrontoEmAndamento) class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:cursor-wait disabled:opacity-60" title="Religa estabelecimentos cadastrados depois da importação e confronta de novo com o EDI">
@@ -94,6 +98,9 @@
             {{ number_format($semEdiResumo['linhas'], 0, ',', '.') }} linhas sem EDI
             · R$ {{ number_format($semEdiResumo['tpv'], 2, ',', '.') }}
         </p>
+        <a href="{{ route('admin.conciliacoes.diferenca', $conciliacao) }}" class="mt-2 inline-block text-xs font-semibold text-orange-800 hover:underline">
+            Ver estabelecimentos
+        </a>
     </div>
 </div>
 
@@ -148,9 +155,9 @@
         <div class="flex flex-wrap items-start justify-between gap-2">
             <p class="text-xs font-bold uppercase text-red-700">Sem estabelecimento</p>
             @if ($sem['clientes'] > 0)
-                <a href="{{ route('admin.conciliacoes.relatorio-sem-estabelecimento', $conciliacao) }}"
+                <a href="{{ route('admin.conciliacoes.diferenca', $conciliacao) }}"
                    class="inline-flex items-center gap-1 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100">
-                    <i class="fa-solid fa-download"></i> Baixar relatório CSV
+                    <i class="fa-solid fa-table"></i> Ver relatório
                 </a>
             @endif
         </div>
@@ -188,11 +195,19 @@
         <p class="text-xs font-bold uppercase text-red-700">Sem estabelecimento</p>
         <p class="mt-1 text-2xl font-bold text-red-800">{{ $conciliacao->linhas_sem_estabelecimento }}</p>
         <p class="mt-1 text-xs text-red-600">{{ $sem['clientes'] }} clientes distintos</p>
+        @if ($sem['clientes'] > 0)
+            <a href="{{ route('admin.conciliacoes.diferenca', $conciliacao) }}" class="mt-2 inline-block text-xs font-semibold text-red-800 hover:underline">
+                Ver relatório
+            </a>
+        @endif
     </div>
     <div class="rounded-xl border border-orange-200 bg-orange-50 p-4">
         <p class="text-xs font-bold uppercase text-orange-700">Sem EDI</p>
         <p class="mt-1 text-2xl font-bold text-orange-800">{{ $conciliacao->linhas_sem_edi }}</p>
         <p class="mt-1 text-xs text-orange-600">Estão na planilha e não no EDI</p>
+        <a href="{{ route('admin.conciliacoes.diferenca', $conciliacao) }}" class="mt-2 inline-block text-xs font-semibold text-orange-800 hover:underline">
+            Ver relatório
+        </a>
     </div>
 </div>
 

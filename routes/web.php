@@ -215,7 +215,9 @@ Route::middleware(['auth', 'trocar.senha', 'tenant.access'])->group(function () 
             Route::get('/importar', [ConciliacaoController::class, 'create'])->name('create');
             Route::post('/', [ConciliacaoController::class, 'store'])->name('store');
             Route::get('/{conciliacao}', [ConciliacaoController::class, 'show'])->name('show');
+            Route::get('/{conciliacao}/diferenca', [ConciliacaoController::class, 'diferenca'])->name('diferenca');
             Route::get('/{conciliacao}/relatorio-sem-estabelecimento', [ConciliacaoController::class, 'relatorioSemEstabelecimento'])->name('relatorio-sem-estabelecimento');
+            Route::get('/{conciliacao}/relatorio-sem-edi', [ConciliacaoController::class, 'relatorioSemEdi'])->name('relatorio-sem-edi');
             Route::post('/{conciliacao}/confrontar', [ConciliacaoController::class, 'confrontar'])->name('confrontar');
             Route::delete('/{conciliacao}', [ConciliacaoController::class, 'destroy'])->name('destroy');
         });

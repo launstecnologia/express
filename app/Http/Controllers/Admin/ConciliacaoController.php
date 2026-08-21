@@ -112,6 +112,20 @@ class ConciliacaoController extends Controller
         ));
     }
 
+    public function diferenca(Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto)
+    {
+        $resumo = $confronto->resumoMensal($conciliacao);
+        $semCadastro = $confronto->clientesSemEstabelecimento($conciliacao);
+        $semEdi = $confronto->estabelecimentosSemEdi($conciliacao);
+
+        return view('admin.conciliacoes.diferenca', compact(
+            'conciliacao',
+            'resumo',
+            'semCadastro',
+            'semEdi',
+        ));
+    }
+
     public function relatorioSemEstabelecimento(Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto): StreamedResponse
     {
         $clientes = $confronto->clientesSemEstabelecimento($conciliacao);
@@ -126,6 +140,39 @@ class ConciliacaoController extends Controller
             foreach ($clientes as $cliente) {
                 fputcsv($handle, [
                     $cliente->id_cliente,
+                    $cliente->linhas,
+                    number_format((float) $cliente->tpv, 2, '.', ''),
+                    number_format((float) $cliente->comissao, 4, '.', ''),
+                ], ';');
+            }
+
+            fclose($handle);
+        }, $nomeArquivo, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    public function relatorioSemEdi(Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto): StreamedResponse
+    {
+        $clientes = $confronto->estabelecimentosSemEdi($conciliacao);
+        $mes = $conciliacao->referencia_mes?->format('Y-m') ?? 'conciliacao';
+        $nomeArquivo = "estabelecimentos-sem-edi-{$mes}.csv";
+
+        return response()->streamDownload(function () use ($clientes) {
+            $handle = fopen('php://output', 'w');
+            fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
+            fputcsv($handle, ['id_cliente', 'estabelecimento', 'linhas', 'tpv', 'comissao'], ';');
+
+            foreach ($clientes as $cliente) {
+                $estab = $cliente->estabelecimento;
+                $nome = $estab?->nome_fantasia
+                    ?: $estab?->razao_social
+                    ?: $estab?->nome_completo
+                    ?: '';
+
+                fputcsv($handle, [
+                    $cliente->id_cliente,
+                    $nome,
                     $cliente->linhas,
                     number_format((float) $cliente->tpv, 2, '.', ''),
                     number_format((float) $cliente->comissao, 4, '.', ''),

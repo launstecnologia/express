@@ -400,6 +400,24 @@ class ConciliacaoConfrontoService
     }
 
     /**
+     * @return \Illuminate\Support\Collection<int, object>
+     */
+    public function estabelecimentosSemEdi(Conciliacao $conciliacao): Collection
+    {
+        $linhas = ConciliacaoLinha::query()
+            ->where('conciliacao_id', $conciliacao->id)
+            ->where('status', 'sem_edi')
+            ->selectRaw('id_cliente, estabelecimento_id, COUNT(*) as linhas, SUM(tpv) as tpv, SUM(ms_comissao) as comissao')
+            ->groupBy('id_cliente', 'estabelecimento_id')
+            ->orderByDesc('tpv')
+            ->get();
+
+        $linhas->load('estabelecimento:id,nome_fantasia,razao_social,nome_completo,token_pagseguro');
+
+        return $linhas;
+    }
+
+    /**
      * @return array{
      *     edi_tpv: float,
      *     edi_comissao: float,
