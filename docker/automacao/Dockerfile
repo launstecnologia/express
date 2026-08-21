@@ -2,7 +2,7 @@ FROM python:3.11-slim-bookworm
 
 # Instala dependências do sistema e Google Chrome
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        wget gnupg2 curl ca-certificates unzip xvfb \
+        wget gnupg2 curl ca-certificates unzip xvfb xauth \
         libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
         libdrm2 libgbm1 libxkbcommon0 libx11-xcb1 \
         libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
