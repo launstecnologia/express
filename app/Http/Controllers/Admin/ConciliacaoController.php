@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\ConfrontarConciliacaoJob;
 use App\Models\Conciliacao;
 use App\Models\ConciliacaoLinha;
+use App\Models\Estabelecimento;
 use App\Services\ConciliacaoConfrontoService;
 use App\Services\ConciliacaoImportService;
 use Illuminate\Http\Request;
@@ -82,6 +83,35 @@ class ConciliacaoController extends Controller
     {
         $filtros = $request->only(['status', 'id_cliente', 'busca']);
 
+        if (blank($filtros['id_cliente'] ?? null) && filled($filtros['busca'] ?? null)) {
+            $busca = trim((string) $filtros['busca']);
+            $porNome = Estabelecimento::withoutGlobalScopes()
+                ->where(function ($q) use ($busca) {
+                    $q->where('nome_fantasia', 'like', '%'.$busca.'%')
+                        ->orWhere('razao_social', 'like', '%'.$busca.'%')
+                        ->orWhere('nome_completo', 'like', '%'.$busca.'%')
+                        ->orWhere('token_pagseguro', $busca);
+                })
+                ->limit(2)
+                ->get(['id', 'token_pagseguro']);
+
+            if ($porNome->count() === 1) {
+                $filtros['id_cliente'] = $porNome->first()->token_pagseguro ?: (string) $porNome->first()->id;
+            }
+        }
+
+        $detalheCliente = null;
+
+        if (filled($filtros['id_cliente'] ?? null)) {
+            $detalheCliente = $confronto->detalheCliente($conciliacao, (string) $filtros['id_cliente']);
+
+            if (filled($filtros['status'] ?? null)) {
+                $detalheCliente['linhas'] = $detalheCliente['linhas']
+                    ->where('status', $filtros['status'])
+                    ->values();
+            }
+        }
+
         $linhas = ConciliacaoLinha::query()
             ->with('estabelecimento:id,nome_fantasia,razao_social,nome_completo,token_pagseguro')
             ->where('conciliacao_id', $conciliacao->id)
@@ -110,6 +140,7 @@ class ConciliacaoController extends Controller
             'resumo',
             'resumoEstabelecimentos',
             'resumoSoEdi',
+            'detalheCliente',
             'filtros',
         ));
     }

@@ -289,9 +289,10 @@ class ConciliacaoConfrontoService
     }
 
     /**
-     * @return Collection<string, array{tpv: float, qtd: int, comissao: float, id_cliente: string, estabelecimento_id: mixed}>
+     * @param  list<string>  $idClientes
+     * @return Collection<string, array{tpv: float, qtd: int, comissao: float, id_cliente: string, estabelecimento_id: mixed, meio: string, parcelamento: string, bandeira: string, escrow: string, solucao: string}>
      */
-    private function agregarEdi(string $inicio, string $fim): Collection
+    private function agregarEdi(string $inicio, string $fim, array $idClientes = []): Collection
     {
         $comissaoDoPlano = ComissaoAdminSql::lookupPercentualPorChave();
 
@@ -304,6 +305,14 @@ class ConciliacaoConfrontoService
             })
             ->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
             ->whereNotNull('em.estabelecimento_id')
+            ->when($idClientes !== [], function ($q) use ($idClientes) {
+                $q->where(function ($sub) use ($idClientes) {
+                    $sub->whereIn('e.token_pagseguro', $idClientes)
+                        ->orWhereIn('em.estabelecimento', $idClientes)
+                        ->orWhereIn('em.id_cliente', $idClientes)
+                        ->orWhereIn('e.id', array_filter($idClientes, 'ctype_digit'));
+                });
+            })
             ->select([
                 'em.id',
                 'em.estabelecimento_id',
@@ -331,18 +340,24 @@ class ConciliacaoConfrontoService
                 continue;
             }
 
+            $meio = ConciliacaoDimensao::meioDoEdi(
+                $mov->tipo_transacao,
+                $mov->meio_pagamento,
+                $mov->arranjo_ur,
+                $mov->quantidade_parcela,
+            );
+            $parcelamento = ConciliacaoDimensao::parcelamentoDoEdi($mov->quantidade_parcela);
+            $bandeira = ConciliacaoDimensao::bandeiraDoEdi($mov->instituicao_financeira, $mov->tipo_transacao, $mov->arranjo_ur);
+            $escrow = ConciliacaoDimensao::escrowDoEdi($mov->pagamento_prazo, $mov->plano);
+            $solucao = ConciliacaoDimensao::solucaoDoEdi($mov->meio_captura, $mov->canal_entrada, $mov->leitor);
+
             $chave = ConciliacaoDimensao::chaveConfrontoDaLinha(
                 $idCliente,
-                ConciliacaoDimensao::meioDoEdi(
-                    $mov->tipo_transacao,
-                    $mov->meio_pagamento,
-                    $mov->arranjo_ur,
-                    $mov->quantidade_parcela,
-                ),
-                ConciliacaoDimensao::parcelamentoDoEdi($mov->quantidade_parcela),
-                ConciliacaoDimensao::bandeiraDoEdi($mov->instituicao_financeira, $mov->tipo_transacao, $mov->arranjo_ur),
-                ConciliacaoDimensao::escrowDoEdi($mov->pagamento_prazo, $mov->plano),
-                ConciliacaoDimensao::solucaoDoEdi($mov->meio_captura, $mov->canal_entrada, $mov->leitor),
+                $meio,
+                $parcelamento,
+                $bandeira,
+                $escrow,
+                $solucao,
             );
 
             if (! isset($grupos[$chave])) {
@@ -352,6 +367,11 @@ class ConciliacaoConfrontoService
                     'comissao' => 0.0,
                     'id_cliente' => $idCliente,
                     'estabelecimento_id' => $mov->estabelecimento_id,
+                    'meio' => $meio,
+                    'parcelamento' => $parcelamento,
+                    'bandeira' => $bandeira,
+                    'escrow' => $escrow,
+                    'solucao' => $solucao,
                 ];
             }
 
@@ -367,6 +387,11 @@ class ConciliacaoConfrontoService
             'comissao' => round($item['comissao'], 4),
             'id_cliente' => $item['id_cliente'],
             'estabelecimento_id' => $item['estabelecimento_id'],
+            'meio' => $item['meio'],
+            'parcelamento' => $item['parcelamento'],
+            'bandeira' => $item['bandeira'],
+            'escrow' => $item['escrow'],
+            'solucao' => $item['solucao'],
         ]);
     }
 
@@ -399,6 +424,173 @@ class ConciliacaoConfrontoService
             'tpv' => round((float) array_sum(array_column($soEdi, 'tpv')), 2),
             'comissao' => round((float) array_sum(array_column($soEdi, 'comissao')), 4),
         ];
+    }
+
+    /**
+     * Relatório completo de um EC: OK, divergente, só planilha e só EDI.
+     *
+     * @return array{linhas: Collection, totais: array<string, array{linhas: int, tpv_ps: float, tpv_edi: float, comissao_ps: float, comissao_edi: float}>, estabelecimento: ?Estabelecimento}
+     */
+    public function detalheCliente(Conciliacao $conciliacao, string $identificador): array
+    {
+        $tokens = $this->resolverIdentificadoresCliente($identificador);
+        $vazioTotais = ['linhas' => 0, 'tpv_ps' => 0.0, 'tpv_edi' => 0.0, 'comissao_ps' => 0.0, 'comissao_edi' => 0.0];
+        $totais = [
+            'ok' => $vazioTotais,
+            'divergente' => $vazioTotais,
+            'sem_edi' => $vazioTotais,
+            'so_edi' => $vazioTotais,
+            'sem_estabelecimento' => $vazioTotais,
+            'geral' => $vazioTotais,
+        ];
+
+        $linhasPs = ConciliacaoLinha::query()
+            ->with('estabelecimento:id,nome_fantasia,razao_social,nome_completo,token_pagseguro')
+            ->where('conciliacao_id', $conciliacao->id)
+            ->whereIn('id_cliente', $tokens)
+            ->orderBy('status')
+            ->orderByDesc('tpv')
+            ->get();
+
+        $chavesPs = [];
+        $linhas = collect();
+
+        foreach ($linhasPs as $linha) {
+            $chavesPs[$this->chaveDaLinha($linha)] = true;
+            $linhas->push($this->linhaDetalheDaPlanilha($linha));
+            $this->acumularTotaisDetalhe($totais, $linha->status, (float) $linha->tpv, (float) ($linha->edi_tpv ?? 0), (float) $linha->ms_comissao, (float) ($linha->edi_comissao ?? 0));
+        }
+
+        $inicio = $conciliacao->referencia_mes?->copy()->startOfMonth()->toDateString();
+        $fim = $conciliacao->referencia_mes?->copy()->endOfMonth()->toDateString();
+        $ediGrupos = ($inicio && $fim) ? $this->agregarEdi($inicio, $fim, $tokens) : collect();
+
+        foreach ($ediGrupos as $chave => $edi) {
+            if (isset($chavesPs[$chave])) {
+                continue;
+            }
+
+            $linhas->push((object) [
+                'status' => 'so_edi',
+                'id_cliente' => $edi['id_cliente'],
+                'estabelecimento_id' => $edi['estabelecimento_id'],
+                'meio_pagamento' => $edi['meio'],
+                'bandeira' => $edi['bandeira'],
+                'parcelamento_agrupado' => $edi['parcelamento'],
+                'solucao' => $edi['solucao'],
+                'tpv' => 0.0,
+                'edi_tpv' => $edi['tpv'],
+                'ms_comissao' => 0.0,
+                'edi_comissao' => $edi['comissao'],
+                'diff_tpv' => round(0 - (float) $edi['tpv'], 2),
+                'diff_comissao' => round(0 - (float) $edi['comissao'], 4),
+                'edi_qtd' => $edi['qtd'],
+                'estabelecimento' => null,
+            ]);
+            $this->acumularTotaisDetalhe($totais, 'so_edi', 0.0, (float) $edi['tpv'], 0.0, (float) $edi['comissao']);
+        }
+
+        $ids = $linhas->pluck('estabelecimento_id')->filter()->unique()->all();
+        if ($linhasPs->isNotEmpty()) {
+            $ids = array_unique(array_merge($ids, $linhasPs->pluck('estabelecimento_id')->filter()->all()));
+        }
+
+        $estabelecimentos = $ids === []
+            ? collect()
+            : Estabelecimento::withoutGlobalScopes()
+                ->whereIn('id', $ids)
+                ->get(['id', 'nome_fantasia', 'razao_social', 'nome_completo', 'token_pagseguro'])
+                ->keyBy('id');
+
+        foreach ($linhas as $linha) {
+            if ($linha->estabelecimento) {
+                continue;
+            }
+            $linha->estabelecimento = $estabelecimentos->get($linha->estabelecimento_id)
+                ?? $linhasPs->first()?->estabelecimento;
+        }
+
+        $ordem = ['ok' => 0, 'divergente' => 1, 'sem_edi' => 2, 'so_edi' => 3, 'sem_estabelecimento' => 4, 'pendente' => 5];
+        $linhas = $linhas
+            ->sortBy(fn ($linha) => sprintf(
+                '%d-%020.2f',
+                $ordem[$linha->status] ?? 9,
+                -((float) $linha->tpv + (float) $linha->edi_tpv),
+            ))
+            ->values();
+
+        return [
+            'linhas' => $linhas,
+            'totais' => $totais,
+            'estabelecimento' => $linhas->first()?->estabelecimento ?? $linhasPs->first()?->estabelecimento,
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function resolverIdentificadoresCliente(string $identificador): array
+    {
+        $valor = trim($identificador);
+        $tokens = [$valor];
+
+        $query = Estabelecimento::withoutGlobalScopes()
+            ->where('token_pagseguro', $valor);
+
+        if (ctype_digit($valor)) {
+            $query->orWhere('id', $valor);
+        }
+
+        $encontrados = $query->get(['id', 'token_pagseguro']);
+
+        foreach ($encontrados as $estab) {
+            $tokens[] = (string) $estab->id;
+            if (filled($estab->token_pagseguro)) {
+                $tokens[] = (string) $estab->token_pagseguro;
+            }
+        }
+
+        return array_values(array_unique(array_filter($tokens)));
+    }
+
+    private function linhaDetalheDaPlanilha(ConciliacaoLinha $linha): object
+    {
+        return (object) [
+            'status' => $linha->status,
+            'id_cliente' => $linha->id_cliente,
+            'estabelecimento_id' => $linha->estabelecimento_id,
+            'meio_pagamento' => $linha->meio_pagamento,
+            'bandeira' => $linha->bandeira,
+            'parcelamento_agrupado' => $linha->parcelamento_agrupado,
+            'solucao' => $linha->solucao,
+            'tpv' => (float) $linha->tpv,
+            'edi_tpv' => $linha->edi_tpv !== null ? (float) $linha->edi_tpv : 0.0,
+            'ms_comissao' => (float) $linha->ms_comissao,
+            'edi_comissao' => $linha->edi_comissao !== null ? (float) $linha->edi_comissao : 0.0,
+            'diff_tpv' => (float) ($linha->diff_tpv ?? 0),
+            'diff_comissao' => (float) ($linha->diff_comissao ?? 0),
+            'edi_qtd' => $linha->edi_qtd,
+            'estabelecimento' => $linha->estabelecimento,
+        ];
+    }
+
+    /**
+     * @param  array<string, array{linhas: int, tpv_ps: float, tpv_edi: float, comissao_ps: float, comissao_edi: float}>  $totais
+     */
+    private function acumularTotaisDetalhe(array &$totais, string $status, float $tpvPs, float $tpvEdi, float $comPs, float $comEdi): void
+    {
+        if (! isset($totais[$status])) {
+            $status = 'pendente';
+            $totais[$status] ??= ['linhas' => 0, 'tpv_ps' => 0.0, 'tpv_edi' => 0.0, 'comissao_ps' => 0.0, 'comissao_edi' => 0.0];
+        }
+
+        foreach ([$status, 'geral'] as $chave) {
+            $totais[$chave]['linhas']++;
+            $totais[$chave]['tpv_ps'] += $tpvPs;
+            $totais[$chave]['tpv_edi'] += $tpvEdi;
+            $totais[$chave]['comissao_ps'] += $comPs;
+            $totais[$chave]['comissao_edi'] += $comEdi;
+        }
     }
 
     /**

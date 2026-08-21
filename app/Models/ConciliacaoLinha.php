@@ -71,6 +71,7 @@ class ConciliacaoLinha extends Model
             'divergente' => 'Divergente',
             'sem_estabelecimento' => 'Sem estabelecimento',
             'sem_edi' => 'Sem EDI',
+            'so_edi' => 'Só no EDI',
             default => 'Pendente',
         };
     }

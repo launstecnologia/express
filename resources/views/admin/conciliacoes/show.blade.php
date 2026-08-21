@@ -11,7 +11,16 @@
         'divergente' => 'bg-amber-100 text-amber-700',
         'sem_estabelecimento' => 'bg-red-100 text-red-700',
         'sem_edi' => 'bg-orange-100 text-orange-700',
+        'so_edi' => 'bg-sky-100 text-sky-700',
         'pendente' => 'bg-gray-100 text-gray-600',
+    ];
+    $statusLabels = [
+        'ok' => 'OK',
+        'divergente' => 'Divergente',
+        'sem_estabelecimento' => 'Sem estabelecimento',
+        'sem_edi' => 'Só na planilha',
+        'so_edi' => 'Só no EDI',
+        'pendente' => 'Pendente',
     ];
 @endphp
 
@@ -240,16 +249,53 @@
 </div>
 
 <form class="mb-4 grid gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:grid-cols-5">
-    <input name="busca" value="{{ $filtros['busca'] ?? '' }}" placeholder="Buscar ID, chave, bandeira..." class="rounded-lg border border-gray-200 px-3 py-2 text-sm md:col-span-2">
-    <input name="id_cliente" value="{{ $filtros['id_cliente'] ?? '' }}" placeholder="ID cliente" class="rounded-lg border border-gray-200 px-3 py-2 text-sm">
+    <input name="busca" value="{{ $filtros['busca'] ?? '' }}" placeholder="Nome do EC, ID, chave, bandeira..." class="rounded-lg border border-gray-200 px-3 py-2 text-sm md:col-span-2">
+    <input name="id_cliente" value="{{ $filtros['id_cliente'] ?? '' }}" placeholder="ID cliente ou token" class="rounded-lg border border-gray-200 px-3 py-2 text-sm">
     <select name="status" class="rounded-lg border border-gray-200 bg-white px-3 text-sm">
         <option value="">Status</option>
-        @foreach (['ok', 'divergente', 'sem_estabelecimento', 'sem_edi', 'pendente'] as $status)
-            <option value="{{ $status }}" @selected(($filtros['status'] ?? '') === $status)>{{ ucfirst(str_replace('_', ' ', $status)) }}</option>
+        @foreach (['ok', 'divergente', 'sem_estabelecimento', 'sem_edi', 'so_edi', 'pendente'] as $status)
+            <option value="{{ $status }}" @selected(($filtros['status'] ?? '') === $status)>{{ $status === 'so_edi' ? 'Só no EDI' : ucfirst(str_replace('_', ' ', $status)) }}</option>
         @endforeach
     </select>
     <button class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Filtrar</button>
 </form>
+
+@if ($detalheCliente)
+    @php
+        $totaisEc = $detalheCliente['totais'];
+        $nomeEc = $detalheCliente['estabelecimento']?->nome_fantasia
+            ?: $detalheCliente['estabelecimento']?->razao_social
+            ?: $detalheCliente['estabelecimento']?->nome_completo
+            ?: ($filtros['id_cliente'] ?? 'EC');
+    @endphp
+    <div class="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-4">
+        <p class="text-xs font-bold uppercase tracking-wide text-sky-700">Relatório completo do EC</p>
+        <p class="mt-1 text-lg font-bold text-sky-950">{{ $nomeEc }}</p>
+        <p class="text-sm text-sky-800">{{ $filtros['id_cliente'] }} · {{ $detalheCliente['linhas']->count() }} linhas (planilha + EDI)</p>
+    </div>
+    <div class="mb-4 grid gap-3 md:grid-cols-4">
+        <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+            <p class="text-xs font-bold uppercase text-emerald-700">Bateram (OK)</p>
+            <p class="mt-1 text-2xl font-bold text-emerald-800">{{ $totaisEc['ok']['linhas'] }}</p>
+            <p class="mt-1 text-xs text-emerald-700">TPV R$ {{ number_format($totaisEc['ok']['tpv_ps'], 2, ',', '.') }}</p>
+        </div>
+        <div class="rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <p class="text-xs font-bold uppercase text-amber-700">Conflitos</p>
+            <p class="mt-1 text-2xl font-bold text-amber-800">{{ $totaisEc['divergente']['linhas'] }}</p>
+            <p class="mt-1 text-xs text-amber-700">PS R$ {{ number_format($totaisEc['divergente']['tpv_ps'], 2, ',', '.') }} · EDI R$ {{ number_format($totaisEc['divergente']['tpv_edi'], 2, ',', '.') }}</p>
+        </div>
+        <div class="rounded-xl border border-orange-200 bg-orange-50 p-4">
+            <p class="text-xs font-bold uppercase text-orange-700">Só na planilha</p>
+            <p class="mt-1 text-2xl font-bold text-orange-800">{{ $totaisEc['sem_edi']['linhas'] }}</p>
+            <p class="mt-1 text-xs text-orange-700">TPV R$ {{ number_format($totaisEc['sem_edi']['tpv_ps'], 2, ',', '.') }}</p>
+        </div>
+        <div class="rounded-xl border border-sky-200 bg-sky-50 p-4">
+            <p class="text-xs font-bold uppercase text-sky-700">Só no EDI</p>
+            <p class="mt-1 text-2xl font-bold text-sky-800">{{ $totaisEc['so_edi']['linhas'] }}</p>
+            <p class="mt-1 text-xs text-sky-700">TPV R$ {{ number_format($totaisEc['so_edi']['tpv_edi'], 2, ',', '.') }}</p>
+        </div>
+    </div>
+@endif
 
 <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
     <table class="min-w-full text-sm">
@@ -268,11 +314,19 @@
             </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
-            @forelse ($linhas as $linha)
+            @forelse (($detalheCliente['linhas'] ?? $linhas) as $linha)
+                @php
+                    $status = $linha->status;
+                    $label = $statusLabels[$status] ?? ($linha instanceof \App\Models\ConciliacaoLinha ? $linha->statusLabel() : ucfirst(str_replace('_', ' ', (string) $status)));
+                    $tpvEdi = $linha->edi_tpv;
+                    $comEdi = $linha->edi_comissao;
+                    $destacaTpv = abs((float) ($linha->diff_tpv ?? 0)) > 0.02 || $status === 'so_edi';
+                    $destacaCom = abs((float) ($linha->diff_comissao ?? 0)) > 0.02 || $status === 'so_edi';
+                @endphp
                 <tr class="hover:bg-gray-50">
                     <td class="px-4 py-3">
-                        <span class="rounded-full px-2 py-1 text-xs font-semibold {{ $statusClasses[$linha->status] ?? $statusClasses['pendente'] }}">
-                            {{ $linha->statusLabel() }}
+                        <span class="rounded-full px-2 py-1 text-xs font-semibold {{ $statusClasses[$status] ?? $statusClasses['pendente'] }}">
+                            {{ $label }}
                         </span>
                     </td>
                     <td class="px-4 py-3 font-mono text-xs">{{ $linha->id_cliente }}</td>
@@ -282,19 +336,19 @@
                                 {{ $linha->estabelecimento->nome_fantasia ?: $linha->estabelecimento->razao_social ?: $linha->estabelecimento->nome_completo }}
                             </a>
                         @else
-                            <span class="text-red-600">Não cadastrado</span>
+                            <span class="{{ $status === 'so_edi' ? 'text-sky-700' : 'text-red-600' }}">{{ $status === 'so_edi' ? '—' : 'Não cadastrado' }}</span>
                         @endif
                     </td>
                     <td class="px-4 py-3">{{ $linha->meio_pagamento }} / {{ $linha->bandeira }}</td>
                     <td class="px-4 py-3">{{ $linha->parcelamento_agrupado }}</td>
                     <td class="px-4 py-3">{{ $linha->solucao }}</td>
-                    <td class="px-4 py-3 text-right">R$ {{ number_format($linha->tpv, 2, ',', '.') }}</td>
-                    <td class="px-4 py-3 text-right {{ abs((float) $linha->diff_tpv) > 0.02 ? 'text-amber-700 font-semibold' : '' }}">
-                        {{ $linha->edi_tpv !== null ? 'R$ '.number_format($linha->edi_tpv, 2, ',', '.') : '—' }}
+                    <td class="px-4 py-3 text-right">R$ {{ number_format((float) $linha->tpv, 2, ',', '.') }}</td>
+                    <td class="px-4 py-3 text-right {{ $destacaTpv ? ($status === 'so_edi' ? 'font-semibold text-sky-700' : 'font-semibold text-amber-700') : '' }}">
+                        {{ $tpvEdi !== null ? 'R$ '.number_format((float) $tpvEdi, 2, ',', '.') : '—' }}
                     </td>
-                    <td class="px-4 py-3 text-right">R$ {{ number_format($linha->ms_comissao, 2, ',', '.') }}</td>
-                    <td class="px-4 py-3 text-right {{ abs((float) $linha->diff_comissao) > 0.02 ? 'text-amber-700 font-semibold' : '' }}">
-                        {{ $linha->edi_comissao !== null ? 'R$ '.number_format($linha->edi_comissao, 2, ',', '.') : '—' }}
+                    <td class="px-4 py-3 text-right">R$ {{ number_format((float) $linha->ms_comissao, 2, ',', '.') }}</td>
+                    <td class="px-4 py-3 text-right {{ $destacaCom ? ($status === 'so_edi' ? 'font-semibold text-sky-700' : 'font-semibold text-amber-700') : '' }}">
+                        {{ $comEdi !== null ? 'R$ '.number_format((float) $comEdi, 2, ',', '.') : '—' }}
                     </td>
                 </tr>
             @empty
@@ -306,7 +360,9 @@
     </table>
 </div>
 
-<div class="mt-4">{{ $linhas->links() }}</div>
+@if (! $detalheCliente)
+    <div class="mt-4">{{ $linhas->links() }}</div>
+@endif
 
 @if ($confrontoEmAndamento)
 <script>
