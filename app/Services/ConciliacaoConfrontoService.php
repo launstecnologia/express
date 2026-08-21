@@ -79,7 +79,12 @@ class ConciliacaoConfrontoService
                 $tpvLinha = (float) $linha->tpv;
                 $comissaoPlanilha = (float) $linha->ms_comissao;
 
-                if ($edi === null) {
+                $ediTpv = $edi !== null ? (float) $edi['tpv'] : 0.0;
+                $mesmoVolume = $edi !== null && self::tpvCompativel($grupoTpv, $ediTpv);
+
+                // TPV diferente = outra transação: a planilha fica sem EDI e o
+                // volume do EDI aparece no recorte inverso / só no EDI.
+                if ($edi === null || ! $mesmoVolume) {
                     $semEdi++;
                     $lote[] = [
                         'id' => (int) $linha->id,
@@ -94,21 +99,14 @@ class ConciliacaoConfrontoService
                     continue;
                 }
 
-                $bate = self::tpvCompativel($grupoTpv, (float) $edi['tpv']);
-
-                if ($bate) {
-                    $ok++;
-                } else {
-                    $divergentes++;
-                }
-
+                $ok++;
                 $ratioTpv = $grupoTpv > 0 ? $tpvLinha / $grupoTpv : 0.0;
-                $ediTpvLinha = round((float) $edi['tpv'] * $ratioTpv, 2);
+                $ediTpvLinha = round($ediTpv * $ratioTpv, 2);
                 $ediComissaoLinha = self::comissaoPlanilhaNoTpvEdi($comissaoPlanilha, $tpvLinha, $ediTpvLinha);
 
                 $lote[] = [
                     'id' => (int) $linha->id,
-                    'status' => $bate ? 'ok' : 'divergente',
+                    'status' => 'ok',
                     'edi_tpv' => $ediTpvLinha,
                     'edi_comissao' => $ediComissaoLinha,
                     'edi_qtd' => (int) round($edi['qtd'] * $ratioTpv),
@@ -452,21 +450,36 @@ class ConciliacaoConfrontoService
             ->orderByDesc('tpv')
             ->get();
 
-        $chavesPs = [];
-        $linhas = collect();
-
+        $tpvPorChave = [];
         foreach ($linhasPs as $linha) {
-            $chavesPs[$this->chaveDaLinha($linha)] = true;
-            $linhas->push($this->linhaDetalheDaPlanilha($linha));
-            $this->acumularTotaisDetalhe($totais, $linha->status, (float) $linha->tpv, (float) ($linha->edi_tpv ?? 0), (float) $linha->ms_comissao, (float) ($linha->edi_comissao ?? 0));
+            $chave = $this->chaveDaLinha($linha);
+            $tpvPorChave[$chave] = ($tpvPorChave[$chave] ?? 0.0) + (float) $linha->tpv;
         }
 
         $inicio = $conciliacao->referencia_mes?->copy()->startOfMonth()->toDateString();
         $fim = $conciliacao->referencia_mes?->copy()->endOfMonth()->toDateString();
         $ediGrupos = ($inicio && $fim) ? $this->agregarEdi($inicio, $fim, $tokens) : collect();
+        $chavesPareadas = $this->chavesPareadas($tpvPorChave, $ediGrupos);
+
+        $linhas = collect();
+
+        foreach ($linhasPs as $linha) {
+            $chave = $this->chaveDaLinha($linha);
+            $pareada = isset($chavesPareadas[$chave]);
+            $detalhe = $this->linhaDetalheDaPlanilha($linha, $pareada);
+            $linhas->push($detalhe);
+            $this->acumularTotaisDetalhe(
+                $totais,
+                $detalhe->status,
+                (float) $detalhe->tpv,
+                (float) $detalhe->edi_tpv,
+                (float) $detalhe->ms_comissao,
+                (float) $detalhe->edi_comissao,
+            );
+        }
 
         foreach ($ediGrupos as $chave => $edi) {
-            if (isset($chavesPs[$chave])) {
+            if (isset($chavesPareadas[$chave])) {
                 continue;
             }
 
@@ -553,10 +566,41 @@ class ConciliacaoConfrontoService
         return array_values(array_unique(array_filter($tokens)));
     }
 
-    private function linhaDetalheDaPlanilha(ConciliacaoLinha $linha): object
+    /**
+     * @param  array<string, float>  $tpvPlanilha
+     * @param  Collection<string, array{tpv: float}>  $agregados
+     * @return array<string, true>
+     */
+    private function chavesPareadas(array $tpvPlanilha, Collection $agregados): array
     {
+        $pareadas = [];
+
+        foreach ($agregados as $chave => $edi) {
+            if (! isset($tpvPlanilha[$chave])) {
+                continue;
+            }
+
+            if (self::tpvCompativel((float) $tpvPlanilha[$chave], (float) $edi['tpv'])) {
+                $pareadas[$chave] = true;
+            }
+        }
+
+        return $pareadas;
+    }
+
+    private function linhaDetalheDaPlanilha(ConciliacaoLinha $linha, bool $pareada): object
+    {
+        $status = $linha->status;
+
+        if ($status !== 'sem_estabelecimento' && $status !== 'pendente' && ! $pareada) {
+            $status = 'sem_edi';
+        }
+
+        $ediTpv = $pareada && $linha->edi_tpv !== null ? (float) $linha->edi_tpv : 0.0;
+        $ediComissao = $pareada && $linha->edi_comissao !== null ? (float) $linha->edi_comissao : 0.0;
+
         return (object) [
-            'status' => $linha->status,
+            'status' => $status,
             'id_cliente' => $linha->id_cliente,
             'estabelecimento_id' => $linha->estabelecimento_id,
             'meio_pagamento' => $linha->meio_pagamento,
@@ -564,12 +608,12 @@ class ConciliacaoConfrontoService
             'parcelamento_agrupado' => $linha->parcelamento_agrupado,
             'solucao' => $linha->solucao,
             'tpv' => (float) $linha->tpv,
-            'edi_tpv' => $linha->edi_tpv !== null ? (float) $linha->edi_tpv : 0.0,
+            'edi_tpv' => $ediTpv,
             'ms_comissao' => (float) $linha->ms_comissao,
-            'edi_comissao' => $linha->edi_comissao !== null ? (float) $linha->edi_comissao : 0.0,
-            'diff_tpv' => (float) ($linha->diff_tpv ?? 0),
-            'diff_comissao' => (float) ($linha->diff_comissao ?? 0),
-            'edi_qtd' => $linha->edi_qtd,
+            'edi_comissao' => $ediComissao,
+            'diff_tpv' => $pareada ? (float) ($linha->diff_tpv ?? 0) : round((float) $linha->tpv, 2),
+            'diff_comissao' => $pareada ? (float) ($linha->diff_comissao ?? 0) : round((float) $linha->ms_comissao, 4),
+            'edi_qtd' => $pareada ? $linha->edi_qtd : 0,
             'estabelecimento' => $linha->estabelecimento,
         ];
     }
@@ -623,20 +667,16 @@ class ConciliacaoConfrontoService
         $soEdi = [];
         $extraEdi = [];
 
+        $chavesPareadas = $this->chavesPareadas($planilha, $agregados);
+
         foreach ($agregados as $chave => $edi) {
             $grupoChave = (string) ($edi['estabelecimento_id'] ?: $edi['id_cliente']);
 
-            if (! isset($planilha[$chave])) {
-                $this->acumularRecorteEdi($soEdi, $grupoChave, $edi, (float) $edi['tpv']);
-
+            if (isset($chavesPareadas[$chave])) {
                 continue;
             }
 
-            $extra = round((float) $edi['tpv'] - (float) $planilha[$chave], 2);
-
-            if ($extra > self::TOLERANCIA) {
-                $this->acumularRecorteEdi($extraEdi, $grupoChave, $edi, $extra);
-            }
+            $this->acumularRecorteEdi($soEdi, $grupoChave, $edi, (float) $edi['tpv']);
         }
 
         return [
