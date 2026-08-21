@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Conciliacao;
 use App\Models\ConciliacaoLinha;
-use App\Models\EdiMovimento;
 use App\Models\Estabelecimento;
 use App\Support\ComissaoAdminSql;
 use App\Support\ConciliacaoDimensao;
@@ -294,7 +293,7 @@ class ConciliacaoConfrontoService
             })
             ->whereBetween('em.data_inicial_transacao', [$inicio, $fim])
             ->whereNotNull('em.estabelecimento_id')
-            ->select(array_values(array_filter([
+            ->select([
                 'em.id',
                 'em.tipo_transacao',
                 'em.meio_pagamento',
@@ -307,10 +306,9 @@ class ConciliacaoConfrontoService
                 'em.pagamento_prazo',
                 'em.plano',
                 'em.valor_total_transacao',
-                EdiMovimento::temColunaComissao() ? 'em.comissao_valor' : null,
                 'pc.comissao_percentual',
                 DB::raw('COALESCE(e.token_pagseguro, em.estabelecimento, em.id_cliente) as id_cliente'),
-            ])));
+            ]);
 
         $grupos = [];
 
@@ -340,9 +338,7 @@ class ConciliacaoConfrontoService
             }
 
             $valor = (float) $mov->valor_total_transacao;
-            $comissao = $mov->comissao_valor !== null
-                ? (float) $mov->comissao_valor
-                : $valor * (float) ($mov->comissao_percentual ?? 0) / 100;
+            $comissao = $valor * (float) ($mov->comissao_percentual ?? 0) / 100;
 
             $grupos[$chave]['tpv'] += $valor;
             $grupos[$chave]['comissao'] += $comissao;
