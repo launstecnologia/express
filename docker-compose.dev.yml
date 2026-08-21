@@ -64,7 +64,7 @@ services:
       dockerfile: Dockerfile
     container_name: express-queue
     restart: unless-stopped
-    command: php artisan queue:work --queue=conciliacao,default --tries=3 --sleep=3 --timeout=900
+    command: php artisan queue:work --queue=automacao,conciliacao,default --tries=3 --sleep=3 --timeout=900
     volumes:
       - .:/var/www/html
       - vendor:/var/www/html/vendor
@@ -84,6 +84,8 @@ services:
       REDIS_CLIENT: predis
       REDIS_HOST: redis
       SESSION_DRIVER: database
+      AUTOMACAO_API_URL: "http://express.app.br:8001"
+      AUTOMACAO_API_KEY: "automacaoapikey2026!"
     depends_on:
       mysql:
         condition: service_healthy

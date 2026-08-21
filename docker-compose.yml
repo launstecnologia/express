@@ -135,6 +135,12 @@ services:
       - automacao-chrome:/tmp/automacao_chrome
     ports:
       - "8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
     networks:
       - app-network
 

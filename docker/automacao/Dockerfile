@@ -20,10 +20,11 @@ COPY automacao/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY automacao/ .
+COPY docker/automacao/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh \
+    && mkdir -p /tmp/automacao_screenshots /tmp/automacao_db /tmp/automacao_chrome
 
-RUN mkdir -p /tmp/automacao_screenshots /tmp/automacao_db /tmp/automacao_chrome
-
-# Chrome usa xvfb (display virtual) para a extensão Capsolver funcionar
+# Chrome usa Xvfb (display virtual) para a extensão Capsolver funcionar
 ENV AUTOMACAO_HEADLESS=true \
     AUTOMACAO_DB_PATH=/tmp/automacao_db/jobs.db \
     AUTOMACAO_SCREENSHOT_DIR=/tmp/automacao_screenshots \
@@ -32,4 +33,7 @@ ENV AUTOMACAO_HEADLESS=true \
 
 EXPOSE 8001
 
-CMD ["xvfb-run", "-a", "--server-args=-screen 0 1366x768x24", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "1", "--reload"]
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
+    CMD curl -fsS http://127.0.0.1:8001/health || exit 1
+
+CMD ["/entrypoint.sh"]
