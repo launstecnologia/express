@@ -26,9 +26,11 @@ import os
 import sys
 import time
 
+from pathlib import Path
+
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent / '.env')
 
 from main import AUTOMACAO_CODIGO_VERSAO, CadastradorFV
 

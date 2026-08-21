@@ -15,12 +15,14 @@ import threading
 import uuid
 from datetime import datetime
 
+from pathlib import Path
+
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent / '.env')
 
 log = logging.getLogger('automacao_api')
 logging.basicConfig(

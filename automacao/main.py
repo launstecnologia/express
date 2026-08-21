@@ -16,10 +16,16 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import ElementClickInterceptedException, TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 
+from pathlib import Path
+
+from dotenv import load_dotenv
+
 from progresso import reportar as reportar_etapa
+
+load_dotenv(Path(__file__).resolve().parent / '.env')
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,7 +38,7 @@ FV_URL = 'https://gestaocomercial.pagbank.com.br/login'
 FV_HOME = 'https://gestaocomercial.pagbank.com.br/'
 
 # Incremente a cada deploy — confira em GET /health (campo codigo_versao)
-AUTOMACAO_CODIGO_VERSAO = '2026.08.13-sessao-fv'
+AUTOMACAO_CODIGO_VERSAO = '2026.08.21-recaptcha-overlay'
 
 
 class ClienteInternoPagBankError(Exception):
@@ -501,9 +507,18 @@ class CadastradorFV:
     def _clicar(self, by, seletor, descricao=''):
         try:
             el = self.wait.until(EC.element_to_be_clickable((by, seletor)))
-            self.driver.execute_script('arguments[0].scrollIntoView(true);', el)
+            self.driver.execute_script('arguments[0].scrollIntoView({block: "center"});', el)
             time.sleep(0.3)
-            el.click()
+            try:
+                el.click()
+            except ElementClickInterceptedException:
+                log.warning(
+                    f'Clique interceptado em {descricao or seletor} — '
+                    'fechando overlay do reCAPTCHA e clicando via JavaScript'
+                )
+                self._esconder_desafio_recaptcha()
+                time.sleep(0.2)
+                self.driver.execute_script('arguments[0].click();', el)
             log.info(f'Clicou: {descricao or seletor}')
             return el
         except TimeoutException:
@@ -1139,28 +1154,112 @@ class CadastradorFV:
             for el in self.driver.find_elements(By.CSS_SELECTOR, sel):
                 if self._elemento_visivel(el):
                     return True
+        return self._desafio_recaptcha_visivel()
+
+    def _iframes_desafio_recaptcha(self) -> list:
+        seletores = (
+            'iframe[title*="recaptcha challenge"]',
+            'iframe[title*="expires in two minutes"]',
+            'iframe[src*="bframe"]',
+        )
+        vistos = []
+        for sel in seletores:
+            for el in self.driver.find_elements(By.CSS_SELECTOR, sel):
+                if el not in vistos:
+                    vistos.append(el)
+        return vistos
+
+    def _desafio_recaptcha_visivel(self) -> bool:
+        for el in self._iframes_desafio_recaptcha():
+            if self._elemento_visivel(el):
+                return True
         return False
+
+    def _esconder_desafio_recaptcha(self) -> None:
+        """Tira o iframe do desafio de imagens de cima do botão Entrar."""
+        if not self._iframes_desafio_recaptcha():
+            return
+        log.info('Fechando overlay do desafio reCAPTCHA')
+        self.driver.execute_script(
+            """
+            const sels = [
+                'iframe[title*="recaptcha challenge"]',
+                'iframe[title*="expires in two minutes"]',
+                'iframe[src*="bframe"]',
+            ];
+            document.querySelectorAll(sels.join(',')).forEach((iframe) => {
+                let node = iframe;
+                for (let i = 0; i < 6 && node; i++) {
+                    node.style.setProperty('display', 'none', 'important');
+                    node.style.setProperty('visibility', 'hidden', 'important');
+                    node.style.setProperty('pointer-events', 'none', 'important');
+                    node = node.parentElement;
+                }
+            });
+            document.querySelectorAll('body *').forEach((el) => {
+                const z = parseInt(window.getComputedStyle(el).zIndex, 10);
+                if (z >= 2000000000) {
+                    el.style.setProperty('display', 'none', 'important');
+                    el.style.setProperty('pointer-events', 'none', 'important');
+                }
+            });
+            """
+        )
+
+    def _params_iframe_recaptcha(self) -> dict[str, str]:
+        from urllib.parse import parse_qs, urlparse
+
+        for iframe in self.driver.find_elements(By.CSS_SELECTOR, 'iframe[src*="recaptcha"]'):
+            src = iframe.get_attribute('src') or ''
+            if not src:
+                continue
+            qs = parse_qs(urlparse(src).query)
+            return {
+                'src': src,
+                'k': (qs.get('k') or [''])[0].strip(),
+                'sa': (qs.get('sa') or [''])[0].strip(),
+                's': (qs.get('s') or [''])[0].strip(),
+                'size': (qs.get('size') or [''])[0].strip().lower(),
+            }
+        return {}
 
     def _sitekey_recaptcha(self) -> str | None:
         for el in self.driver.find_elements(By.CSS_SELECTOR, '[data-sitekey]'):
             chave = (el.get_attribute('data-sitekey') or '').strip()
             if chave:
                 return chave
+        chave = self._params_iframe_recaptcha().get('k') or ''
+        return chave or None
 
-        from urllib.parse import parse_qs, urlparse
-
-        for iframe in self.driver.find_elements(By.CSS_SELECTOR, 'iframe[src*="recaptcha"]'):
-            src = iframe.get_attribute('src') or ''
-            chave = (parse_qs(urlparse(src).query).get('k') or [''])[0].strip()
-            if chave:
-                return chave
-        return None
+    def _recaptcha_e_enterprise(self) -> bool:
+        params = self._params_iframe_recaptcha()
+        blob = (params.get('src') or '').lower()
+        if 'enterprise' in blob:
+            return True
+        for script in self.driver.find_elements(By.CSS_SELECTOR, 'script[src*="recaptcha"]'):
+            if 'enterprise' in (script.get_attribute('src') or '').lower():
+                return True
+        try:
+            return bool(self.driver.execute_script(
+                "return !!(window.grecaptcha && grecaptcha.enterprise);"
+            ))
+        except Exception:
+            return False
 
     def _token_recaptcha(self) -> str:
         try:
             token = self.driver.execute_script(
-                "return (document.querySelector('#g-recaptcha-response,"
-                " textarea[name=\"g-recaptcha-response\"]') || {}).value || '';"
+                """
+                const els = document.querySelectorAll(
+                    '#g-recaptcha-response, textarea[name="g-recaptcha-response"],'
+                    + ' textarea[id^="g-recaptcha-response"]'
+                );
+                for (const el of els) {
+                    const v = (el.value || el.innerHTML || '').trim();
+                    if (v.length > 20) return v;
+                }
+                return '';
+                """
             )
         except Exception:
             token = ''
@@ -1202,32 +1301,48 @@ class CadastradorFV:
         self.driver.execute_script(
             """
             const token = arguments[0];
-            document.querySelectorAll(
-                '#g-recaptcha-response, textarea[name="g-recaptcha-response"]'
-            ).forEach((el) => {
+            const setEl = (el) => {
+                if (!el) return;
                 el.style.display = 'block';
                 el.value = token;
                 el.innerHTML = token;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            };
+            document.querySelectorAll(
+                '#g-recaptcha-response, textarea[name="g-recaptcha-response"],'
+                + ' textarea[id^="g-recaptcha-response"]'
+            ).forEach(setEl);
+
+            document.querySelectorAll('[data-callback]').forEach((el) => {
+                const nome = el.getAttribute('data-callback');
+                if (nome && typeof window[nome] === 'function') {
+                    try { window[nome](token); } catch (e) {}
+                }
             });
-            if (typeof ___grecaptcha_cfg === 'undefined') return;
-            const seen = new Set();
-            const walk = (obj, depth) => {
-                if (!obj || depth > 6 || seen.has(obj)) return;
+
+            const walk = (obj, depth, seen) => {
+                if (!obj || depth > 8 || seen.has(obj)) return;
                 if (typeof obj === 'object') seen.add(obj);
                 if (typeof obj.callback === 'function') {
                     try { obj.callback(token); } catch (e) {}
                 }
                 if (typeof obj === 'object') {
                     for (const key of Object.keys(obj)) {
-                        try { walk(obj[key], depth + 1); } catch (e) {}
+                        try { walk(obj[key], depth + 1, seen); } catch (e) {}
                     }
                 }
             };
-            Object.values(___grecaptcha_cfg.clients || {}).forEach((c) => walk(c, 0));
+            if (typeof ___grecaptcha_cfg !== 'undefined') {
+                Object.values(___grecaptcha_cfg.clients || {}).forEach(
+                    (c) => walk(c, 0, new Set())
+                );
+            }
             """,
             token,
         )
-        time.sleep(0.5)
+        time.sleep(0.8)
+        self._esconder_desafio_recaptcha()
 
     def _chave_servico_captcha(self) -> tuple[str, str] | tuple[None, None]:
         capsolver = (os.getenv('CAPSOLVER_API_KEY') or '').strip()
@@ -1242,6 +1357,81 @@ class CadastradorFV:
             return '2captcha', twocaptcha
         return None, None
 
+    def _user_agent_navegador(self) -> str:
+        try:
+            return (self.driver.execute_script('return navigator.userAgent') or '').strip()
+        except Exception:
+            return ''
+
+    def _montar_tarefa_capsolver(self, sitekey: str, enterprise: bool) -> dict:
+        params = self._params_iframe_recaptcha()
+        page_url = self.driver.current_url or FV_URL
+        if '/login' not in (page_url or '').lower():
+            page_url = FV_URL
+
+        tarefa: dict = {
+            'type': (
+                'ReCaptchaV2EnterpriseTaskProxyLess'
+                if enterprise
+                else 'ReCaptchaV2TaskProxyLess'
+            ),
+            'websiteURL': page_url,
+            'websiteKey': sitekey,
+        }
+        ua = self._user_agent_navegador()
+        if ua:
+            tarefa['userAgent'] = ua
+        if params.get('size') == 'invisible':
+            tarefa['isInvisible'] = True
+        if params.get('sa'):
+            tarefa['pageAction'] = params['sa']
+        if params.get('s'):
+            if enterprise:
+                tarefa['enterprisePayload'] = {'s': params['s']}
+            else:
+                tarefa['recaptchaDataSValue'] = params['s']
+        return tarefa
+
+    def _esperar_resultado_capsolver(self, api_key: str, task_id: str) -> dict:
+        import requests
+
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            time.sleep(3)
+            res = requests.post(
+                'https://api.capsolver.com/getTaskResult',
+                json={'clientKey': api_key, 'taskId': task_id},
+                timeout=30,
+            ).json()
+            if res.get('status') == 'ready':
+                return res.get('solution') or {}
+            if res.get('errorId'):
+                raise Exception(f'Capsolver: {res.get("errorDescription") or res}')
+        raise Exception('Capsolver: timeout ao resolver reCAPTCHA')
+
+    def _criar_tarefa_capsolver(self, api_key: str, tarefa: dict) -> str:
+        import requests
+
+        log.info(f'Capsolver createTask type={tarefa.get("type")} key={tarefa.get("websiteKey", "")[:12]}...')
+        criar = requests.post(
+            'https://api.capsolver.com/createTask',
+            json={'clientKey': api_key, 'task': tarefa},
+            timeout=30,
+        ).json()
+        if criar.get('errorId') or not criar.get('taskId'):
+            raise Exception(f'Capsolver: {criar.get("errorDescription") or criar}')
+        return criar['taskId']
+
+    def _aplicar_cookies_capsolver(self, solucao: dict) -> None:
+        for nome in ('recaptcha-ca-e', 'recaptcha-ca-t'):
+            valor = (solucao.get(nome) or '').strip()
+            if not valor:
+                continue
+            try:
+                self.driver.add_cookie({'name': nome, 'value': valor})
+            except Exception:
+                pass
+
     def _resolver_recaptcha_servico(self, sitekey: str) -> str:
         import requests
 
@@ -1249,40 +1439,32 @@ class CadastradorFV:
         if not provedor or not api_key:
             raise Exception('Serviço de captcha não configurado')
 
-        page_url = self.driver.current_url
-        log.info(f'Resolvendo reCAPTCHA via {provedor}...')
+        page_url = self.driver.current_url or FV_URL
+        log.info(f'Resolvendo reCAPTCHA via {provedor} (não clicar no checkbox)...')
 
         if provedor == 'capsolver':
-            criar = requests.post(
-                'https://api.capsolver.com/createTask',
-                json={
-                    'clientKey': api_key,
-                    'task': {
-                        'type': 'ReCaptchaV2TaskProxyLess',
-                        'websiteURL': page_url,
-                        'websiteKey': sitekey,
-                    },
-                },
-                timeout=30,
-            ).json()
-            if criar.get('errorId'):
-                raise Exception(f'Capsolver: {criar.get("errorDescription") or criar}')
-            task_id = criar.get('taskId')
-            deadline = time.time() + 120
-            while time.time() < deadline:
-                time.sleep(3)
-                res = requests.post(
-                    'https://api.capsolver.com/getTaskResult',
-                    json={'clientKey': api_key, 'taskId': task_id},
-                    timeout=30,
-                ).json()
-                if res.get('status') == 'ready':
-                    token = (res.get('solution') or {}).get('gRecaptchaResponse')
+            tipos = []
+            if self._recaptcha_e_enterprise():
+                tipos = [True, False]
+            else:
+                tipos = [False, True]
+
+            ultimo_erro = None
+            for enterprise in tipos:
+                tarefa: dict = {}
+                try:
+                    tarefa = self._montar_tarefa_capsolver(sitekey, enterprise)
+                    task_id = self._criar_tarefa_capsolver(api_key, tarefa)
+                    solucao = self._esperar_resultado_capsolver(api_key, task_id)
+                    token = (solucao.get('gRecaptchaResponse') or '').strip()
                     if token:
+                        self._aplicar_cookies_capsolver(solucao)
                         return token
-                if res.get('errorId'):
-                    raise Exception(f'Capsolver: {res.get("errorDescription") or res}')
-            raise Exception('Capsolver: timeout ao resolver reCAPTCHA')
+                except Exception as exc:
+                    ultimo_erro = exc
+                    log.warning(f'Capsolver falhou ({tarefa.get("type", "?")}): {exc}')
+                    continue
+            raise Exception(str(ultimo_erro or 'Capsolver não retornou token'))
 
         criar = requests.post(
             'https://2captcha.com/in.php',
@@ -1317,24 +1499,38 @@ class CadastradorFV:
         if not self._tem_recaptcha():
             return
 
-        log.warning('reCAPTCHA detectado no login do Força de Vendas')
+        provedor, _ = self._chave_servico_captcha()
+        log.warning(
+            'reCAPTCHA detectado no login do Força de Vendas '
+            f'(serviço={provedor or "nenhum"})'
+        )
         self._salvar_screenshot('login_recaptcha')
 
         if self._recaptcha_marcado():
             log.info('reCAPTCHA já estava resolvido')
             return
 
-        if self._tentar_clicar_checkbox_recaptcha():
-            log.info('reCAPTCHA marcado pelo clique no checkbox')
-            return
-
         sitekey = self._sitekey_recaptcha()
-        provedor, _ = self._chave_servico_captcha()
+
+        # Com Capsolver/2Captcha, NÃO clique no checkbox: o Google abre o
+        # desafio de imagens e o login falha com "Erro de acesso".
         if sitekey and provedor:
-            token = self._resolver_recaptcha_servico(sitekey)
-            self._injetar_token_recaptcha(token)
-            if self._recaptcha_marcado() or len(self._token_recaptcha()) > 20:
-                log.info('reCAPTCHA resolvido pelo serviço')
+            try:
+                token = self._resolver_recaptcha_servico(sitekey)
+                self._injetar_token_recaptcha(token)
+                if len(self._token_recaptcha()) > 20 or self._recaptcha_marcado():
+                    log.info('reCAPTCHA resolvido pelo serviço')
+                    self._salvar_screenshot('login_recaptcha_ok')
+                    return
+                log.warning('Token do serviço injetado, mas o widget não confirmou — seguindo mesmo assim')
+                return
+            except Exception as exc:
+                log.error(f'Falha ao resolver reCAPTCHA via {provedor}: {exc}')
+                self._salvar_screenshot('login_recaptcha_servico_falhou')
+
+        if not provedor:
+            if self._tentar_clicar_checkbox_recaptcha():
+                log.info('reCAPTCHA marcado pelo clique no checkbox')
                 return
 
         if not self.headless:
@@ -1400,9 +1596,18 @@ class CadastradorFV:
         return any(trecho.lower() in texto for trecho in trechos)
 
     def _clicar_entrar(self) -> None:
+        self._esconder_desafio_recaptcha()
+        time.sleep(0.2)
+        try:
+            self._clicar(By.CSS_SELECTOR, 'button[data-testid="entrar"]', 'botao_entrar')
+            return
+        except Exception:
+            pass
         self._clicar(
             By.XPATH,
-            "//button[contains(text(), 'Entrar')] | //input[@value='Entrar']",
+            "//button[@data-testid='entrar']"
+            " | //button[contains(text(), 'Entrar') or contains(text(), 'ENTRAR')]"
+            " | //input[@value='Entrar']",
             'botao_entrar',
         )
 
