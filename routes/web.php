@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\ChamadoController as AdminChamadoController;
 use App\Http\Controllers\Admin\AdminKycController;
 use App\Http\Controllers\Admin\ConciliacaoController;
 use App\Http\Controllers\Admin\ConfiguracaoPlataformaController;
+use App\Http\Controllers\Admin\ConsultaCnpjTransacoesController;
 use App\Http\Controllers\Admin\EdiTransacaoRelatorioController;
 use App\Http\Controllers\Admin\EstabelecimentoTransacaoRelatorioController;
 use App\Http\Controllers\Admin\EdiPipefyController;
@@ -216,6 +217,8 @@ Route::middleware(['auth', 'usuario.ativo', 'trocar.senha', 'tenant.access'])->g
         });
         Route::prefix('admin/relatorios')->name('admin.relatorios.')->group(function () {
             Route::get('/edi-transacoes', [EdiTransacaoRelatorioController::class, 'index'])->name('edi-transacoes');
+            Route::get('/consulta-cnpj', [ConsultaCnpjTransacoesController::class, 'index'])->name('consulta-cnpj');
+            Route::get('/consulta-cnpj/excel', [ConsultaCnpjTransacoesController::class, 'excel'])->name('consulta-cnpj.excel');
         });
         Route::prefix('admin/relatorios')->name('admin.relatorios.')->middleware('financeiro.visivel')->group(function () {
             Route::get('/estabelecimentos-transacoes', [EstabelecimentoTransacaoRelatorioController::class, 'index'])->name('estabelecimentos-transacoes');

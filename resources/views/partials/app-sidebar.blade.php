@@ -131,8 +131,12 @@
                     <i class="fa-solid fa-scale-balanced w-5 text-center text-[15px]"></i>
                     <span>Conciliação</span>
                 </a>
+                <a href="{{ route('admin.relatorios.consulta-cnpj') }}" class="{{ $navClass('admin.relatorios.consulta-cnpj*') }}">
+                    <i class="fa-solid fa-file-excel w-5 text-center text-[15px]"></i>
+                    <span>Consulta CNPJ</span>
+                </a>
                 @if (\App\Support\FinanceiroUi::visivel() && Route::has('admin.relatorios.estabelecimentos-transacoes'))
-                    <a href="{{ route('admin.relatorios.estabelecimentos-transacoes') }}" class="{{ $navClass('admin.relatorios.*') }}">
+                    <a href="{{ route('admin.relatorios.estabelecimentos-transacoes') }}" class="{{ $navClass('admin.relatorios.estabelecimentos-transacoes*') }}">
                         <i class="fa-solid fa-file-excel w-5 text-center text-[15px]"></i>
                         <span>Transações MKT</span>
                     </a>
