@@ -179,10 +179,17 @@ cmd_update() {
     log "Reiniciando containers..."
     $COMPOSE up -d --remove-orphans
 
+    log "Aguardando app subir..."
+    wait_for_app || err "Container app não está rodando — veja: bash deploy.sh logs app"
+
+    # Permissões ANTES do restart do PHP: senão a primeira request já tenta
+    # gravar views compiladas e cai com Permission denied.
+    ensure_storage_dirs
+
     log "Reiniciando PHP (OPcache não recarrega arquivos sem restart)..."
     $COMPOSE restart app queue queue-conciliacao scheduler 2>/dev/null || $COMPOSE restart app 2>/dev/null || true
 
-    log "Aguardando app subir..."
+    log "Aguardando app voltar..."
     wait_for_app || err "Container app não está rodando — veja: bash deploy.sh logs app"
 
     log "Rodando migrations..."
@@ -297,6 +304,14 @@ cmd_provision_ssl() {
 }
 
 # ----------------------------------------------------------------
+# Corrige dono do storage (www-data) sem fazer deploy completo
+# ----------------------------------------------------------------
+cmd_perms() {
+    wait_for_app || err "Container app não está rodando"
+    ensure_storage_dirs
+}
+
+# ----------------------------------------------------------------
 # Artisan helper
 # ----------------------------------------------------------------
 cmd_artisan() {
@@ -319,6 +334,7 @@ case "$COMMAND" in
     backup)   cmd_backup ;;
     provision-ssl) cmd_provision_ssl "$@" ;;
     artisan)  cmd_artisan "$@" ;;
+    perms)    cmd_perms ;;
     *)
         echo ""
         echo "Uso: bash deploy.sh <comando>"
@@ -333,6 +349,7 @@ case "$COMMAND" in
         echo "  backup    — Faz backup do banco de dados"
         echo "  provision-ssl — Emite SSL Let's Encrypt para domínio de marketplace"
         echo "  artisan   — Executa php artisan no container app"
+        echo "  perms     — Corrige dono/permissão de storage e bootstrap/cache"
         echo ""
         echo "Exemplos:"
         echo "  bash deploy.sh install"

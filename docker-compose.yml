@@ -58,6 +58,7 @@ services:
       dockerfile: Dockerfile.prod
     container_name: express-queue
     restart: unless-stopped
+    user: www-data
     command: php artisan queue:work --queue=automacao,default --tries=3 --sleep=3 --timeout=900
     volumes:
       - .:/var/www/html
@@ -82,6 +83,7 @@ services:
       dockerfile: Dockerfile.prod
     container_name: express-queue-conciliacao
     restart: unless-stopped
+    user: www-data
     command: php artisan queue:work --queue=conciliacao --tries=1 --sleep=3 --timeout=900
     volumes:
       - .:/var/www/html
@@ -104,6 +106,7 @@ services:
       dockerfile: Dockerfile.prod
     container_name: express-scheduler
     restart: unless-stopped
+    user: www-data
     command: sh -c "while true; do php artisan schedule:run --no-interaction; sleep 60; done"
     volumes:
       - .:/var/www/html
