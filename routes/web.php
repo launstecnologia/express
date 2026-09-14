@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\ChamadoController as AdminChamadoController;
 use App\Http\Controllers\Admin\AdminKycController;
 use App\Http\Controllers\Admin\ConciliacaoController;
 use App\Http\Controllers\Admin\ConfiguracaoPlataformaController;
+use App\Http\Controllers\Admin\EdiDumpController;
 use App\Http\Controllers\Admin\ConsultaCnpjTransacoesController;
 use App\Http\Controllers\Admin\EdiTransacaoRelatorioController;
 use App\Http\Controllers\Admin\EstabelecimentoTransacaoRelatorioController;
@@ -214,6 +215,11 @@ Route::middleware(['auth', 'usuario.ativo', 'trocar.senha', 'tenant.access'])->g
                 ->where('filename', '[a-zA-Z0-9_\-\.]+\.png')
                 ->name('screenshot');
             Route::get('/{solicitacao}', [EdiPipefyController::class, 'show'])->name('show');
+        });
+        Route::prefix('admin/edi-dump')->name('admin.edi-dump.')->group(function () {
+            Route::get('/', [EdiDumpController::class, 'index'])->name('index');
+            Route::post('/', [EdiDumpController::class, 'store'])->name('store');
+            Route::get('/{dump}', [EdiDumpController::class, 'show'])->whereNumber('dump')->name('show');
         });
         Route::prefix('admin/relatorios')->name('admin.relatorios.')->group(function () {
             Route::get('/edi-transacoes', [EdiTransacaoRelatorioController::class, 'index'])->name('edi-transacoes');

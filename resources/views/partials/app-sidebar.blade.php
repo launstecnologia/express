@@ -135,6 +135,10 @@
                     <i class="fa-solid fa-file-excel w-5 text-center text-[15px]"></i>
                     <span>Consulta CNPJ</span>
                 </a>
+                <a href="{{ route('admin.edi-dump.index') }}" class="{{ $navClass('admin.edi-dump.*') }}">
+                    <i class="fa-solid fa-database w-5 text-center text-[15px]"></i>
+                    <span>Dump EDI</span>
+                </a>
                 @if (\App\Support\FinanceiroUi::visivel() && Route::has('admin.relatorios.estabelecimentos-transacoes'))
                     <a href="{{ route('admin.relatorios.estabelecimentos-transacoes') }}" class="{{ $navClass('admin.relatorios.estabelecimentos-transacoes*') }}">
                         <i class="fa-solid fa-file-excel w-5 text-center text-[15px]"></i>
