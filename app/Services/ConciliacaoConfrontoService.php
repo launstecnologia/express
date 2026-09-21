@@ -566,6 +566,24 @@ class ConciliacaoConfrontoService
     }
 
     /**
+     * Relatório completo da conciliação: planilha PagSeguro + EDI sem casar,
+     * com coluna de status para filtrar no Excel.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array{cabecalhos: list<string>, linhas: iterable<int, list<string|int|float|null>>}
+     */
+    public function relatorioCompleto(Conciliacao $conciliacao, array $filtros = []): array
+    {
+        @set_time_limit(900);
+        unset($filtros['status']);
+
+        return [
+            'cabecalhos' => $this->cabecalhosExcelCompleto(),
+            'linhas' => $this->iterarRelatorioCompleto($conciliacao, $filtros),
+        ];
+    }
+
+    /**
      * Transações EDI do mês cuja chave não casou com a planilha PagSeguro.
      *
      * @param  array<string, mixed>  $filtros
@@ -593,6 +611,222 @@ class ConciliacaoConfrontoService
             'cabecalhos' => $cabecalhos,
             'linhas' => $this->iterarTransacoesSoEdi($inicio, $fim, $filtros, $chavesSoEdi),
         ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function cabecalhosExcelCompleto(): array
+    {
+        return [
+            'Status',
+            'Origem',
+            'ID cliente',
+            'Estabelecimento ID',
+            'Estabelecimento',
+            'Documento',
+            'Marketplace',
+            'Revenda',
+            'Meio pagamento',
+            'Bandeira',
+            'Parcelamento',
+            'Escrow',
+            'Solução',
+            'MCC',
+            'TPV PagSeguro',
+            'TPV EDI',
+            'Diff TPV',
+            'Comissão PagSeguro',
+            'Comissão EDI',
+            'Diff comissão',
+            'Qtd EDI',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return \Generator<int, list<string|int|float|null>>
+     */
+    private function iterarRelatorioCompleto(Conciliacao $conciliacao, array $filtros): \Generator
+    {
+        $tpvPlanilha = [];
+        $query = $this->queryLinhasExcel($conciliacao, $filtros);
+
+        foreach ($query->orderBy('conciliacao_linhas.id')->cursor() as $linha) {
+            $chave = $this->chaveDaLinha($linha);
+            $tpvPlanilha[$chave] = ($tpvPlanilha[$chave] ?? 0.0) + (float) $linha->tpv;
+
+            yield $this->linhaExcelCompleto(
+                status: (string) $linha->status,
+                origem: 'Planilha PagSeguro',
+                idCliente: (string) $linha->id_cliente,
+                estabelecimentoId: $linha->estabelecimento_id,
+                estabelecimento: (string) ($linha->estabelecimento_nome ?? ''),
+                documento: (string) ($linha->estabelecimento_documento ?? ''),
+                marketplace: (string) ($linha->marketplace_nome ?? ''),
+                revenda: (string) ($linha->revenda_nome ?? ''),
+                meio: (string) ($linha->meio_pagamento ?? ''),
+                bandeira: (string) ($linha->bandeira ?? ''),
+                parcelamento: (string) ($linha->parcelamento_agrupado ?? ''),
+                escrow: (string) ($linha->escrow ?? ''),
+                solucao: (string) ($linha->solucao ?? ''),
+                mcc: (string) ($linha->mcc ?? ''),
+                tpvPs: (float) $linha->tpv,
+                tpvEdi: $linha->edi_tpv !== null ? (float) $linha->edi_tpv : 0.0,
+                diffTpv: $linha->diff_tpv !== null ? (float) $linha->diff_tpv : round((float) $linha->tpv, 2),
+                comissaoPs: (float) $linha->ms_comissao,
+                comissaoEdi: $linha->edi_comissao !== null ? (float) $linha->edi_comissao : 0.0,
+                diffComissao: $linha->diff_comissao !== null ? (float) $linha->diff_comissao : round((float) $linha->ms_comissao, 4),
+                qtdEdi: (int) ($linha->edi_qtd ?? 0),
+            );
+        }
+
+        if (! $conciliacao->referencia_mes) {
+            return;
+        }
+
+        $inicio = $conciliacao->referencia_mes->copy()->startOfMonth()->toDateString();
+        $fim = $conciliacao->referencia_mes->copy()->endOfMonth()->toDateString();
+        $agregados = $this->agregarEdi($inicio, $fim, $this->escopoEdiDosFiltros($filtros));
+        $pareadas = $this->chavesPareadas($tpvPlanilha, $agregados);
+
+        $idsEdi = [];
+        foreach ($agregados as $chave => $edi) {
+            if (isset($pareadas[$chave])) {
+                continue;
+            }
+            if (filled($edi['estabelecimento_id'] ?? null)) {
+                $idsEdi[] = (int) $edi['estabelecimento_id'];
+            }
+        }
+
+        $ecs = $idsEdi === []
+            ? collect()
+            : Estabelecimento::withoutGlobalScopes()
+                ->with(['marketplace', 'revenda'])
+                ->whereIn('id', array_values(array_unique($idsEdi)))
+                ->get(['id', 'nome_fantasia', 'razao_social', 'nome_completo', 'cnpj', 'cpf', 'marketplace_id', 'revenda_id'])
+                ->keyBy('id');
+
+        foreach ($agregados as $chave => $edi) {
+            if (isset($pareadas[$chave])) {
+                continue;
+            }
+
+            $ec = $ecs->get($edi['estabelecimento_id'] ?? null);
+
+            yield $this->linhaExcelCompleto(
+                status: 'so_edi',
+                origem: 'Só no EDI',
+                idCliente: (string) ($edi['id_cliente'] ?? ''),
+                estabelecimentoId: $edi['estabelecimento_id'] ?? null,
+                estabelecimento: $ec
+                    ? (string) ($ec->nome_fantasia ?: $ec->razao_social ?: $ec->nome_completo ?: '')
+                    : '',
+                documento: $ec ? (string) ($ec->cnpj ?: $ec->cpf ?: '') : '',
+                marketplace: $ec?->marketplace?->nomeExibicao() ?: '',
+                revenda: $ec?->revenda?->nomeExibicao() ?: '',
+                meio: (string) ($edi['meio'] ?? ''),
+                bandeira: (string) ($edi['bandeira'] ?? ''),
+                parcelamento: (string) ($edi['parcelamento'] ?? ''),
+                escrow: (string) ($edi['escrow'] ?? ''),
+                solucao: (string) ($edi['solucao'] ?? ''),
+                mcc: '',
+                tpvPs: 0.0,
+                tpvEdi: (float) $edi['tpv'],
+                diffTpv: round(0 - (float) $edi['tpv'], 2),
+                comissaoPs: 0.0,
+                comissaoEdi: (float) $edi['comissao'],
+                diffComissao: round(0 - (float) $edi['comissao'], 4),
+                qtdEdi: (int) ($edi['qtd'] ?? 0),
+            );
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function queryLinhasExcel(Conciliacao $conciliacao, array $filtros): Builder
+    {
+        $query = $this->queryLinhas($conciliacao, $filtros);
+
+        if (! $this->temFiltroEstabelecimento($filtros)) {
+            $query->leftJoin('estabelecimentos as e', 'e.id', '=', 'conciliacao_linhas.estabelecimento_id')
+                ->select('conciliacao_linhas.*');
+        }
+
+        return $query
+            ->leftJoin('usuarios as mkt', 'mkt.id', '=', 'e.marketplace_id')
+            ->leftJoin('usuarios as rev', 'rev.id', '=', 'e.revenda_id')
+            ->addSelect([
+                DB::raw('COALESCE(e.nome_fantasia, e.razao_social, e.nome_completo) as estabelecimento_nome'),
+                DB::raw('COALESCE(e.cnpj, e.cpf) as estabelecimento_documento'),
+                DB::raw('COALESCE(mkt.nome_fantasia, mkt.razao_social, mkt.nome_completo, mkt.email) as marketplace_nome'),
+                DB::raw('COALESCE(rev.nome_fantasia, rev.razao_social, rev.nome_completo, rev.email) as revenda_nome'),
+            ]);
+    }
+
+    /**
+     * @return list<string|int|float|null>
+     */
+    private function linhaExcelCompleto(
+        string $status,
+        string $origem,
+        string $idCliente,
+        mixed $estabelecimentoId,
+        string $estabelecimento,
+        string $documento,
+        string $marketplace,
+        string $revenda,
+        string $meio,
+        string $bandeira,
+        string $parcelamento,
+        string $escrow,
+        string $solucao,
+        string $mcc,
+        float $tpvPs,
+        float $tpvEdi,
+        float $diffTpv,
+        float $comissaoPs,
+        float $comissaoEdi,
+        float $diffComissao,
+        int $qtdEdi,
+    ): array {
+        return [
+            $this->statusLabelExcel($status),
+            $origem,
+            $idCliente,
+            $estabelecimentoId !== null && $estabelecimentoId !== '' ? (int) $estabelecimentoId : '',
+            $estabelecimento,
+            $documento,
+            $marketplace,
+            $revenda,
+            $meio,
+            $bandeira,
+            $parcelamento,
+            $escrow,
+            $solucao,
+            $mcc,
+            round($tpvPs, 2),
+            round($tpvEdi, 2),
+            round($diffTpv, 2),
+            round($comissaoPs, 4),
+            round($comissaoEdi, 4),
+            round($diffComissao, 4),
+            $qtdEdi,
+        ];
+    }
+
+    private function statusLabelExcel(string $status): string
+    {
+        return match ($status) {
+            'ok' => 'OK',
+            'divergente' => 'Divergente',
+            'sem_estabelecimento' => 'Sem estabelecimento',
+            'sem_edi' => 'Só na planilha',
+            'so_edi' => 'Só no EDI',
+            default => 'Pendente',
+        };
     }
 
     /**

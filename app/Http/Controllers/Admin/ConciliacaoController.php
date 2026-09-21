@@ -260,6 +260,23 @@ class ConciliacaoController extends Controller
         ])->deleteFileAfterSend(true);
     }
 
+    public function relatorioCompletoExcel(Request $request, Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto): Response
+    {
+        @set_time_limit(900);
+
+        $filtros = $this->filtrosShow($request);
+        unset($filtros['status']);
+
+        $planilha = $confronto->relatorioCompleto($conciliacao, $filtros);
+        $mes = $conciliacao->referencia_mes?->format('Y-m') ?? 'conciliacao';
+        $nomeArquivo = "conciliacao-completa-{$mes}.xlsx";
+        $caminho = SimpleXlsxWriter::file($planilha['cabecalhos'], $planilha['linhas'], 'Conciliacao');
+
+        return response()->download($caminho, $nomeArquivo, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
+    }
+
     public function confrontar(Conciliacao $conciliacao)
     {
         if (in_array($conciliacao->confronto_status, ['na_fila', 'processando'], true)) {

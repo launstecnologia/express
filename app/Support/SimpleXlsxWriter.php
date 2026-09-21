@@ -83,7 +83,10 @@ class SimpleXlsxWriter
             fwrite($handle, self::xmlLinha($numero, $linha));
         }
 
-        fwrite($handle, '</sheetData></worksheet>');
+        $ultimaColuna = self::coluna(max(1, count($cabecalhos)));
+        fwrite($handle, '</sheetData>');
+        fwrite($handle, '<autoFilter ref="A1:'.$ultimaColuna.$numero.'"/>');
+        fwrite($handle, '</worksheet>');
         fclose($handle);
     }
 
