@@ -64,19 +64,68 @@
 </div>
 
 @if ($preview['total'] > 0)
+    @php
+        $idsPendentesTexto = collect($preview['ids'])->implode("\n");
+    @endphp
     <div class="mb-5 overflow-hidden rounded-xl border border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/30">
-        <div class="border-b border-amber-200 px-5 py-3 dark:border-amber-900">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200 px-5 py-3 dark:border-amber-900">
             <p class="text-sm font-semibold text-amber-900 dark:text-amber-200">
-                Próximos IDs a enviar (amostra)
+                Próximos IDs a enviar
+                <span class="ml-1 font-normal text-amber-700 dark:text-amber-300">({{ number_format($preview['total'], 0, ',', '.') }})</span>
             </p>
+            <button
+                type="button"
+                data-copy-ids
+                class="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
+            >
+                <i class="fa-regular fa-copy"></i>
+                Copiar todos
+            </button>
         </div>
-        <div class="max-h-40 overflow-y-auto px-5 py-3 font-mono text-xs text-amber-950 dark:text-amber-100">
-            {{ collect($preview['ids'])->take(40)->implode(', ') }}
-            @if ($preview['total'] > 40)
-                <span class="text-amber-700">… +{{ $preview['total'] - 40 }}</span>
-            @endif
+        <textarea id="edi-pipefy-ids-pendentes" class="hidden" readonly>{{ $idsPendentesTexto }}</textarea>
+        <div class="max-h-[28rem] overflow-auto">
+            <table class="w-full text-sm">
+                <thead class="sticky top-0 bg-amber-100 text-left text-xs font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                    <tr>
+                        <th class="px-5 py-2 w-12">#</th>
+                        <th class="px-5 py-2">Safepay ID</th>
+                        <th class="px-5 py-2">Estabelecimento</th>
+                        <th class="px-5 py-2">Cadastro</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-amber-100 dark:divide-amber-900">
+                    @foreach ($preview['estabelecimentos'] as $i => $ec)
+                        <tr class="hover:bg-amber-100/70 dark:hover:bg-amber-900/40">
+                            <td class="px-5 py-2 tabular-nums text-amber-800 dark:text-amber-300">{{ $i + 1 }}</td>
+                            <td class="px-5 py-2 font-mono text-xs font-semibold text-amber-950 dark:text-amber-100">{{ $ec->token_pagseguro }}</td>
+                            <td class="px-5 py-2 text-amber-950 dark:text-amber-100">
+                                {{ $ec->nome_fantasia ?: $ec->razao_social ?: $ec->nome_completo ?: 'Estabelecimento #'.$ec->id }}
+                                <span class="ml-1 text-xs font-normal text-amber-700 dark:text-amber-400">#{{ $ec->id }}</span>
+                            </td>
+                            <td class="whitespace-nowrap px-5 py-2 text-xs text-amber-800 dark:text-amber-300">
+                                {{ optional($ec->created_at)->format('d/m/Y') ?: '—' }}
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
         </div>
+        <p class="border-t border-amber-200 px-5 py-2 text-[11px] text-amber-800 dark:border-amber-900 dark:text-amber-300">
+            Lista completa no mesmo critério do chamado (Safepay IDs ainda não enviados com sucesso).
+        </p>
     </div>
+    <script>
+        document.querySelector('[data-copy-ids]')?.addEventListener('click', async function () {
+            const texto = document.getElementById('edi-pipefy-ids-pendentes')?.value || '';
+            try {
+                await navigator.clipboard.writeText(texto);
+                this.innerHTML = '<i class="fa-solid fa-check"></i> Copiado';
+                setTimeout(() => { this.innerHTML = '<i class="fa-regular fa-copy"></i> Copiar todos'; }, 1600);
+            } catch (e) {
+                alert('Não foi possível copiar os IDs.');
+            }
+        });
+    </script>
 @endif
 
 <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">

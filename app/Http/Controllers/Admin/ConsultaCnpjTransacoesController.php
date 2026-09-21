@@ -14,7 +14,9 @@ class ConsultaCnpjTransacoesController extends Controller
     public function index(Request $request, ConsultaCnpjTransacoesService $consulta)
     {
         $filtros = $this->filtros($request);
+        $parceiros = collect();
         $estabelecimentos = collect();
+        $origemEstabelecimentos = collect();
         $transacoes = null;
         $totais = null;
         $consultou = filled($filtros['cnpj']);
@@ -24,6 +26,7 @@ class ConsultaCnpjTransacoesController extends Controller
                 'cnpj' => ['required', 'string', 'max:18'],
                 'mes_numero' => ['nullable', 'integer', 'between:1,12'],
                 'ano' => ['nullable', 'integer', 'between:2020,2100'],
+                'rede' => ['nullable'],
             ]);
 
             $digitos = DocumentoBrasil::apenasDigitos($filtros['cnpj']);
@@ -34,7 +37,10 @@ class ConsultaCnpjTransacoesController extends Controller
                     ->withErrors(['cnpj' => 'Informe um CNPJ (14 dígitos) ou CPF (11 dígitos) válido.']);
             }
 
-            $estabelecimentos = $consulta->buscarEstabelecimentos($filtros['cnpj']);
+            $resultado = $consulta->resolverConsulta($filtros['cnpj'], $filtros['rede']);
+            $parceiros = $resultado['parceiros'];
+            $origemEstabelecimentos = $resultado['origem_estabelecimentos'];
+            $estabelecimentos = $resultado['estabelecimentos'];
 
             if ($estabelecimentos->isNotEmpty()) {
                 $query = $consulta->movimentosQuery($estabelecimentos, $filtros['inicio'], $filtros['fim']);
@@ -46,6 +52,8 @@ class ConsultaCnpjTransacoesController extends Controller
         return view('admin.relatorios.consulta-cnpj', [
             'filtros' => $filtros,
             'consultou' => $consultou,
+            'parceiros' => $parceiros,
+            'origemEstabelecimentos' => $origemEstabelecimentos,
             'estabelecimentos' => $estabelecimentos,
             'transacoes' => $transacoes,
             'totais' => $totais,
@@ -59,12 +67,15 @@ class ConsultaCnpjTransacoesController extends Controller
             'cnpj' => ['required', 'string', 'max:18'],
             'mes_numero' => ['required', 'integer', 'between:1,12'],
             'ano' => ['required', 'integer', 'between:2020,2100'],
+            'rede' => ['nullable'],
         ]);
 
         $digitos = DocumentoBrasil::apenasDigitos($validado['cnpj']);
         abort_unless(in_array(strlen($digitos), [11, 14], true), 422, 'Informe um CNPJ ou CPF válido.');
 
-        $estabelecimentos = $consulta->buscarEstabelecimentos($validado['cnpj']);
+        $incluirRede = $request->boolean('rede');
+        $resultado = $consulta->resolverConsulta($validado['cnpj'], $incluirRede);
+        $estabelecimentos = $resultado['estabelecimentos'];
         abort_if($estabelecimentos->isEmpty(), 404, 'Nenhum estabelecimento encontrado com esse documento.');
 
         $mes = Carbon::create((int) $validado['ano'], (int) $validado['mes_numero'], 1)->startOfMonth();
@@ -74,13 +85,13 @@ class ConsultaCnpjTransacoesController extends Controller
             $mes->copy()->endOfMonth()->toDateString(),
         );
 
-        return response()->download($caminho, $consulta->nomeArquivo($estabelecimentos, $mes), [
+        return response()->download($caminho, $consulta->nomeArquivo($estabelecimentos, $mes, $validado['cnpj'], $incluirRede), [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ])->deleteFileAfterSend(true);
     }
 
     /**
-     * @return array{cnpj: string, mes_numero: int, ano: int, inicio: string, fim: string}
+     * @return array{cnpj: string, mes_numero: int, ano: int, inicio: string, fim: string, rede: bool}
      */
     private function filtros(Request $request): array
     {
@@ -94,6 +105,7 @@ class ConsultaCnpjTransacoesController extends Controller
             'ano' => (int) $mes->format('Y'),
             'inicio' => $mes->toDateString(),
             'fim' => $mes->copy()->endOfMonth()->toDateString(),
+            'rede' => $request->boolean('rede'),
         ];
     }
 }

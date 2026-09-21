@@ -4,10 +4,12 @@ namespace App\Services;
 
 use App\Models\EdiMovimento;
 use App\Models\Estabelecimento;
+use App\Models\Usuario;
 use App\Support\DocumentoBrasil;
 use App\Support\EdiStatusPagamento;
 use App\Support\InstituicaoFinanceira;
 use App\Support\SimpleXlsxWriter;
+use App\Support\UsuarioComercial;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -15,6 +17,40 @@ use Illuminate\Support\Collection;
 
 class ConsultaCnpjTransacoesService
 {
+    /**
+     * @return array{
+     *     parceiros: Collection<int, Usuario>,
+     *     origem_estabelecimentos: Collection<int, Estabelecimento>,
+     *     estabelecimentos: Collection<int, Estabelecimento>
+     * }
+     */
+    public function resolverConsulta(string $documento, bool $incluirRede): array
+    {
+        $origem = $this->buscarEstabelecimentos($documento);
+        $parceiros = $this->buscarParceiros($documento);
+        $estabelecimentos = $origem;
+
+        if ($incluirRede) {
+            $rede = collect();
+
+            foreach ($parceiros as $parceiro) {
+                $rede = $rede->merge($this->estabelecimentosDoParceiro($parceiro));
+            }
+
+            foreach ($origem as $ec) {
+                $rede = $rede->merge($this->estabelecimentosDaRedeDoEc($ec));
+            }
+
+            $estabelecimentos = $origem->concat($rede)->unique('id')->values();
+        }
+
+        return [
+            'parceiros' => $parceiros,
+            'origem_estabelecimentos' => $origem,
+            'estabelecimentos' => $estabelecimentos,
+        ];
+    }
+
     public function buscarEstabelecimentos(string $documento): Collection
     {
         $digitos = DocumentoBrasil::apenasDigitos($documento);
@@ -23,21 +59,78 @@ class ConsultaCnpjTransacoesService
             return collect();
         }
 
-        return Estabelecimento::withoutGlobalScopes()
-            ->with(['marketplace', 'revenda'])
-            ->when(strlen($digitos) === 14, function (Builder $query) use ($digitos) {
-                $query->whereRaw(
-                    "REPLACE(REPLACE(REPLACE(COALESCE(cnpj, ''), '.', ''), '/', ''), '-', '') = ?",
-                    [$digitos],
-                );
-            }, function (Builder $query) use ($digitos) {
-                $query->whereRaw(
-                    "REPLACE(REPLACE(COALESCE(cpf, ''), '.', ''), '-', '') = ?",
-                    [$digitos],
-                );
-            })
-            ->orderByDesc('id')
+        $query = Estabelecimento::withoutGlobalScopes()
+            ->with(['marketplace', 'revenda']);
+        $this->filtrarPorDocumento($query, $digitos);
+
+        return $query->orderByDesc('id')->get();
+    }
+
+    public function buscarParceiros(string $documento): Collection
+    {
+        $digitos = DocumentoBrasil::apenasDigitos($documento);
+
+        if (! in_array(strlen($digitos), [11, 14], true)) {
+            return collect();
+        }
+
+        $query = Usuario::query()
+            ->whereIn('tipo', ['marketplace', 'revenda']);
+        $this->filtrarPorDocumento($query, $digitos);
+
+        return $query
+            ->orderBy('tipo')
+            ->orderBy('id')
             ->get();
+    }
+
+    public function estabelecimentosDoParceiro(Usuario $parceiro): Collection
+    {
+        $query = Estabelecimento::withoutGlobalScopes()->with(['marketplace', 'revenda']);
+
+        if ($parceiro->tipo === 'marketplace') {
+            $revendaIds = UsuarioComercial::revendasDo($parceiro)->pluck('id')->all();
+
+            $query->where(function (Builder $q) use ($parceiro, $revendaIds) {
+                $q->where('marketplace_id', $parceiro->id);
+                if ($revendaIds !== []) {
+                    $q->orWhereIn('revenda_id', $revendaIds);
+                }
+            });
+        } elseif ($parceiro->tipo === 'revenda') {
+            $query->where('revenda_id', $parceiro->id);
+        } else {
+            return collect();
+        }
+
+        return $query->orderByDesc('id')->get();
+    }
+
+    public function estabelecimentosDaRedeDoEc(Estabelecimento $ec): Collection
+    {
+        if ($ec->revenda_id) {
+            $revenda = $ec->revenda ?: Usuario::query()->find($ec->revenda_id);
+
+            return $revenda ? $this->estabelecimentosDoParceiro($revenda) : collect([$ec]);
+        }
+
+        if ($ec->marketplace_id) {
+            $marketplace = $ec->marketplace ?: Usuario::query()->find($ec->marketplace_id);
+
+            return $marketplace ? $this->estabelecimentosDoParceiro($marketplace) : collect([$ec]);
+        }
+
+        return collect([$ec]);
+    }
+
+    public function rotuloParceiro(Usuario $usuario): string
+    {
+        return $usuario->tipo === 'marketplace' ? 'Marketplace' : 'Revenda';
+    }
+
+    public function nomeParceiro(Usuario $usuario): string
+    {
+        return $usuario->nomeExibicao();
     }
 
     public function movimentosQuery(Collection $estabelecimentos, string $inicio, string $fim): Builder
@@ -99,13 +192,14 @@ class ConsultaCnpjTransacoesService
         return SimpleXlsxWriter::file($this->cabecalhosExcel(), $linhas, 'Transacoes');
     }
 
-    public function nomeArquivo(Collection $estabelecimentos, Carbon $mes): string
+    public function nomeArquivo(Collection $estabelecimentos, Carbon $mes, ?string $documento = null, bool $rede = false): string
     {
         $primeiro = $estabelecimentos->first();
-        $digitos = DocumentoBrasil::apenasDigitos((string) ($primeiro?->cnpj ?: $primeiro?->cpf ?: 'documento'));
+        $digitos = DocumentoBrasil::apenasDigitos((string) ($documento ?: $primeiro?->cnpj ?: $primeiro?->cpf ?: 'documento'));
         $competencia = $mes->format('Y-m');
+        $prefixo = $rede ? 'rede' : 'transacoes';
 
-        return "transacoes-{$digitos}-{$competencia}.xlsx";
+        return "{$prefixo}-{$digitos}-{$competencia}.xlsx";
     }
 
     public function statusLabel(?string $status): string
@@ -210,5 +304,22 @@ class ConsultaCnpjTransacoesService
             ?: $estabelecimento->razao_social
             ?: $estabelecimento->nome_completo
             ?: 'Estabelecimento #'.$estabelecimento->id;
+    }
+
+    private function filtrarPorDocumento(Builder $query, string $digitos): void
+    {
+        if (strlen($digitos) === 14) {
+            $query->whereRaw(
+                "REPLACE(REPLACE(REPLACE(COALESCE(cnpj, ''), '.', ''), '/', ''), '-', '') = ?",
+                [$digitos],
+            );
+
+            return;
+        }
+
+        $query->whereRaw(
+            "REPLACE(REPLACE(COALESCE(cpf, ''), '.', ''), '-', '') = ?",
+            [$digitos],
+        );
     }
 }
