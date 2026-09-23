@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\SubUsuario;
 use App\Models\Usuario;
 use App\Services\ComissaoPagService;
+use App\Services\ConciliacaoConfrontoService;
+use App\Support\SimpleXlsxWriter;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpFoundation\Response;
 
 class RoyaltyController extends Controller
 {
@@ -18,32 +21,15 @@ class RoyaltyController extends Controller
 
     public function index(Request $request)
     {
-        $usuario = Auth::user();
-        if ($usuario instanceof SubUsuario) {
-            $usuario = $usuario->dono;
-        }
-
-        $ehAdmin = $usuario instanceof Usuario && $usuario->tipo === 'admin';
-        $ehMaster = $usuario instanceof Usuario && $usuario->tipo === 'master';
-        $ehMarketplace = $usuario instanceof Usuario && $usuario->tipo === 'marketplace';
-        $ehRevenda = $usuario instanceof Usuario && $usuario->tipo === 'revenda';
-        $podeSelecionarVisao = $ehAdmin || $ehMaster || $ehMarketplace;
-
-        $visao = $podeSelecionarVisao && $request->input('visao') === 'revenda'
-            ? 'revenda'
-            : 'marketplace';
-
-        $mesesDisponiveis = $this->comissaoPag->mesesDisponiveis(
-            $usuario instanceof Usuario ? $usuario : null
-        );
-        $referenciaMes = $this->comissaoPag->parseMesReferencia($request->input('mes'))
-            ?? ($mesesDisponiveis->first()?->valor
-                ? $this->comissaoPag->parseMesReferencia($mesesDisponiveis->first()->valor)
-                : $this->comissaoPag->mesPadrao());
-
-        $usuarioFiltro = $usuario instanceof Usuario && in_array($usuario->tipo, ['marketplace', 'revenda'], true)
-            ? $usuario
-            : null;
+        $ctx = $this->contexto($request);
+        $visao = $ctx['visao'];
+        $referenciaMes = $ctx['referenciaMes'];
+        $mesesDisponiveis = $ctx['mesesDisponiveis'];
+        $usuarioFiltro = $ctx['usuarioFiltro'];
+        $ehAdmin = $ctx['ehAdmin'];
+        $ehMarketplace = $ctx['ehMarketplace'];
+        $ehRevenda = $ctx['ehRevenda'];
+        $podeSelecionarVisao = $ctx['podeSelecionarVisao'];
 
         $linhas = $referenciaMes
             ? $this->comissaoPag->extratoMarketplace($referenciaMes, $usuarioFiltro, $visao)
@@ -77,5 +63,115 @@ class RoyaltyController extends Controller
             'visao' => $visao,
             'podeSelecionarVisao' => $podeSelecionarVisao,
         ]);
+    }
+
+    public function excel(Request $request, ConciliacaoConfrontoService $confronto): Response
+    {
+        @set_time_limit(900);
+
+        $ctx = $this->contexto($request);
+        $referenciaMes = $ctx['referenciaMes'];
+        abort_if($referenciaMes === null, 404, 'Nenhuma planilha PagSeguro neste mês.');
+
+        $conciliacao = $this->comissaoPag->conciliacaoDoMes($referenciaMes);
+        abort_if($conciliacao === null, 404, 'Nenhuma planilha PagSeguro importada para o mês.');
+
+        $filtros = $this->filtrosExcel($request, $ctx);
+        $planilha = $confronto->planilhaPorMarketplace($conciliacao, $filtros);
+        abort_if($planilha['planilhas'] === [], 404, 'Nenhum estabelecimento com volume neste mês.');
+
+        $caminho = SimpleXlsxWriter::fileSheets($planilha['planilhas']);
+
+        return response()->download($caminho, $planilha['nome_arquivo'], [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
+    }
+
+    /**
+     * @return array{
+     *     usuario: mixed,
+     *     visao: string,
+     *     referenciaMes: \Illuminate\Support\Carbon|null,
+     *     mesesDisponiveis: \Illuminate\Support\Collection,
+     *     usuarioFiltro: ?Usuario,
+     *     ehAdmin: bool,
+     *     ehMarketplace: bool,
+     *     ehRevenda: bool,
+     *     podeSelecionarVisao: bool
+     * }
+     */
+    private function contexto(Request $request): array
+    {
+        $usuario = Auth::user();
+        if ($usuario instanceof SubUsuario) {
+            $usuario = $usuario->dono;
+        }
+
+        $ehAdmin = $usuario instanceof Usuario && $usuario->tipo === 'admin';
+        $ehMaster = $usuario instanceof Usuario && $usuario->tipo === 'master';
+        $ehMarketplace = $usuario instanceof Usuario && $usuario->tipo === 'marketplace';
+        $ehRevenda = $usuario instanceof Usuario && $usuario->tipo === 'revenda';
+        $podeSelecionarVisao = $ehAdmin || $ehMaster || $ehMarketplace;
+
+        $visao = $podeSelecionarVisao && $request->input('visao') === 'revenda'
+            ? 'revenda'
+            : 'marketplace';
+
+        $mesesDisponiveis = $this->comissaoPag->mesesDisponiveis(
+            $usuario instanceof Usuario ? $usuario : null
+        );
+        $referenciaMes = $this->comissaoPag->parseMesReferencia($request->input('mes'))
+            ?? ($mesesDisponiveis->first()?->valor
+                ? $this->comissaoPag->parseMesReferencia($mesesDisponiveis->first()->valor)
+                : $this->comissaoPag->mesPadrao());
+
+        $usuarioFiltro = $usuario instanceof Usuario && in_array($usuario->tipo, ['marketplace', 'revenda'], true)
+            ? $usuario
+            : null;
+
+        return [
+            'usuario' => $usuario,
+            'visao' => $visao,
+            'referenciaMes' => $referenciaMes,
+            'mesesDisponiveis' => $mesesDisponiveis,
+            'usuarioFiltro' => $usuarioFiltro,
+            'ehAdmin' => $ehAdmin,
+            'ehMaster' => $ehMaster,
+            'ehMarketplace' => $ehMarketplace,
+            'ehRevenda' => $ehRevenda,
+            'podeSelecionarVisao' => $podeSelecionarVisao,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $ctx
+     * @return array<string, int>
+     */
+    private function filtrosExcel(Request $request, array $ctx): array
+    {
+        $filtros = [];
+        $usuario = $ctx['usuario'];
+
+        if ($usuario instanceof Usuario && $usuario->tipo === 'marketplace') {
+            $filtros['marketplace_id'] = (int) $usuario->id;
+        }
+
+        if ($usuario instanceof Usuario && $usuario->tipo === 'revenda') {
+            $filtros['revenda_id'] = (int) $usuario->id;
+        }
+
+        $marketplaceId = (int) $request->input('marketplace_id', 0);
+        if ($marketplaceId > 0 && ($ctx['ehAdmin'] || ($ctx['ehMaster'] ?? false) || ($filtros['marketplace_id'] ?? 0) === $marketplaceId)) {
+            $filtros['marketplace_id'] = $marketplaceId;
+        }
+
+        $revendaId = (int) $request->input('revenda_id', 0);
+        if ($revendaId > 0) {
+            if ($ctx['ehAdmin'] || ($ctx['ehMaster'] ?? false) || ($ctx['ehMarketplace'] ?? false) || ($filtros['revenda_id'] ?? 0) === $revendaId) {
+                $filtros['revenda_id'] = $revendaId;
+            }
+        }
+
+        return $filtros;
     }
 }

@@ -160,6 +160,7 @@ Route::middleware(['auth', 'usuario.ativo', 'trocar.senha', 'tenant.access'])->g
     Route::get('/comissoes/meu-plano', [ComissaoMeuPlanoController::class, 'index'])->name('comissoes.meu-plano');
     Route::middleware('financeiro.visivel')->group(function () {
         Route::get('/comissoes', [RoyaltyController::class, 'index'])->name('comissoes.index');
+        Route::get('/comissoes/excel', [RoyaltyController::class, 'excel'])->name('comissoes.excel');
         Route::redirect('/royalties', '/comissoes');
         Route::resource('comissoes/configuracoes', ComissaoConfiguracaoController::class)
             ->middleware('acesso.admin-master')

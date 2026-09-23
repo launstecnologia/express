@@ -666,6 +666,7 @@ class ConciliacaoConfrontoService
             $ecId = (int) $linha->estabelecimento_id;
             if (! isset($ecs[$ecId])) {
                 $ecs[$ecId] = [
+                    'estabelecimento_id' => $ecId,
                     'marketplace_id' => (int) ($linha->marketplace_id ?? 0),
                     'id' => (string) ($linha->token_pagseguro ?: $linha->id_cliente ?: $ecId),
                     'marketplace' => (string) ($linha->marketplace_nome ?? ''),
@@ -732,7 +733,80 @@ class ConciliacaoConfrontoService
             return strcasecmp($a['nome'], $b['nome']);
         });
 
-        return array_values($grupos);
+        return $this->completarEcsSemVolume(array_values($grupos), $filtros);
+    }
+
+    /**
+     * Inclui ECs do marketplace sem movimento no mês, como na planilha DSPAY.
+     *
+     * @param  list<array<string, mixed>>  $grupos
+     * @param  array<string, mixed>  $filtros
+     * @return list<array<string, mixed>>
+     */
+    private function completarEcsSemVolume(array $grupos, array $filtros): array
+    {
+        $mktIds = collect($grupos)->pluck('marketplace_id')->filter()->unique()->values()->all();
+
+        if ($mktIds === []) {
+            return $grupos;
+        }
+
+        $query = Estabelecimento::query()
+            ->with(['marketplace', 'revenda'])
+            ->whereIn('marketplace_id', $mktIds);
+
+        if (filled($filtros['revenda_id'] ?? null)) {
+            $query->where('revenda_id', (int) $filtros['revenda_id']);
+        }
+
+        $indicePorMkt = [];
+        $presentes = [];
+
+        foreach ($grupos as $indice => $grupo) {
+            $mktId = (int) $grupo['marketplace_id'];
+            $indicePorMkt[$mktId] = $indice;
+            $presentes[$mktId] = [];
+
+            foreach ($grupo['ecs'] as $ec) {
+                $presentes[$mktId][(int) ($ec['estabelecimento_id'] ?? 0)] = true;
+            }
+        }
+
+        foreach ($query->get([
+            'id', 'marketplace_id', 'revenda_id', 'token_pagseguro',
+            'nome_fantasia', 'razao_social', 'nome_completo', 'cnpj', 'cpf',
+        ]) as $estab) {
+            $mktId = (int) $estab->marketplace_id;
+
+            if (! isset($indicePorMkt[$mktId], $presentes[$mktId])) {
+                continue;
+            }
+
+            if (isset($presentes[$mktId][(int) $estab->id])) {
+                continue;
+            }
+
+            $indice = $indicePorMkt[$mktId];
+            $grupos[$indice]['ecs'][] = [
+                'estabelecimento_id' => (int) $estab->id,
+                'marketplace_id' => $mktId,
+                'id' => (string) ($estab->token_pagseguro ?: $estab->id),
+                'marketplace' => $estab->marketplace?->nomeExibicao() ?: $grupos[$indice]['nome'],
+                'representante' => $estab->revenda?->nomeExibicao() ?: '',
+                'documento' => DocumentoBrasil::formatarCpfOuCnpj((string) ($estab->cnpj ?: $estab->cpf ?: '')),
+                'nome' => (string) ($estab->nome_fantasia ?: $estab->razao_social ?: $estab->nome_completo ?: 'Estabelecimento #'.$estab->id),
+                'faturamento' => 0.0,
+                'markup' => 0.0,
+            ];
+            $presentes[$mktId][(int) $estab->id] = true;
+        }
+
+        foreach ($grupos as &$grupo) {
+            usort($grupo['ecs'], fn ($a, $b) => strcasecmp($a['nome'], $b['nome']));
+        }
+        unset($grupo);
+
+        return $grupos;
     }
 
     /**
@@ -774,13 +848,12 @@ class ConciliacaoConfrontoService
     private function linhasAbaMarketplace(array $grupo, ComissaoPagService $comissao): array
     {
         $calc = $comissao->comissaoLiquidaParceiro((float) $grupo['markup'], $grupo['marketplace']);
-        $retencao = $calc['percentual'] > 0 ? round($calc['percentual'] / 100, 4) : 0.0;
 
         $linhas = [
             [], [], [], [], [], [],
             ['', '', '', 'PAGSEGURO'],
             [], [],
-            ['', '', 'FATURAMENTO', 'MARKUP', $retencao, 'COMISSÃO'],
+            ['', '', 'FATURAMENTO', 'MARKUP', $calc['percentual'] > 0 ? round($calc['percentual']).'%' : '0%', 'COMISSÃO'],
             ['', '', (float) $grupo['faturamento'], (float) $grupo['markup'], $calc['royalty'], $calc['liquida']],
             ['', 'ID', 'MARKETPLACE', 'REPRESENTANTE', 'CPF/CNPJ-EC', 'NOME EC', 'FATURAMENTO', 'MARKUP'],
         ];

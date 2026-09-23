@@ -110,7 +110,13 @@
                 · {{ $visaoRevenda ? 'comissão da conciliação dos clientes da revenda' : 'dados da planilha PagSeguro' }}
             </p>
         </div>
-        <button type="button" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">Exportar</button>
+        @if ($conciliacao && Route::has('comissoes.excel'))
+            <a href="{{ route('comissoes.excel', array_filter(['mes' => $mesSelecionado, 'visao' => $visao])) }}" class="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
+                <i class="fa-solid fa-file-excel mr-2"></i> Exportar
+            </a>
+        @else
+            <button type="button" disabled class="cursor-not-allowed rounded-lg bg-gray-200 px-4 py-2 text-sm font-semibold text-gray-500">Exportar</button>
+        @endif
     </div>
     <div class="overflow-x-auto">
         <table class="w-full text-sm" style="min-width: {{ $ehAdmin ? ($visaoRevenda ? '1200px' : '1100px') : ($mostrarReferencia ? '980px' : '860px') }}">
@@ -145,9 +151,24 @@
                     <tr class="border-b border-gray-50 transition-colors hover:bg-gray-50">
                         <td class="max-w-[280px] px-5 py-4">
                             <p class="truncate font-semibold text-gray-800" title="{{ $linha->parceiro_nome ?? $linha->marketplace_nome }}">{{ $linha->parceiro_nome ?? $linha->marketplace_nome }}</p>
-                            @if ($visaoRevenda && ($linha->percentual_retencao ?? 0) > 0)
-                                <p class="mt-0.5 text-[11px] text-gray-400">Participação {{ number_format($linha->percentual_retencao, 0, ',', '.') }}%</p>
-                            @endif
+                            <div class="mt-0.5 flex flex-wrap items-center gap-2">
+                                @if ($visaoRevenda && ($linha->percentual_retencao ?? 0) > 0)
+                                    <span class="text-[11px] text-gray-400">Participação {{ number_format($linha->percentual_retencao, 0, ',', '.') }}%</span>
+                                @endif
+                                @if ($conciliacao && Route::has('comissoes.excel') && $linha->conciliado)
+                                    @php
+                                        $excelParams = ['mes' => $mesSelecionado, 'visao' => $visao];
+                                        if ($visaoRevenda) {
+                                            $excelParams['revenda_id'] = $linha->parceiro_id;
+                                        } else {
+                                            $excelParams['marketplace_id'] = $linha->parceiro_id;
+                                        }
+                                    @endphp
+                                    <a href="{{ route('comissoes.excel', $excelParams) }}" class="text-[11px] font-semibold text-blue-600 hover:underline">
+                                        Excel
+                                    </a>
+                                @endif
+                            </div>
                         </td>
                         @if (($ehAdmin ?? false) && $visaoRevenda)
                             <td class="max-w-[220px] px-5 py-4">
