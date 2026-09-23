@@ -13,8 +13,8 @@
     $totalComissaoBruta = $linhas->sum('total_comissao_bruta');
     $totalRoyalty = $linhas->sum('total_royalty');
     $colspanVazio = $ehAdmin
-        ? ($visaoRevenda ? 8 : 7)
-        : ($mostrarReferencia ? 6 : 5);
+        ? ($visaoRevenda ? 9 : 8)
+        : ($mostrarReferencia ? 7 : 6);
 @endphp
 
 <form method="GET" action="{{ route('comissoes.index') }}" class="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -110,12 +110,10 @@
                 · {{ $visaoRevenda ? 'comissão da conciliação dos clientes da revenda' : 'dados da planilha PagSeguro' }}
             </p>
         </div>
-        @if ($conciliacao && Route::has('comissoes.excel'))
-            <a href="{{ route('comissoes.excel', array_filter(['mes' => $mesSelecionado, 'visao' => $visao])) }}" class="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
-                <i class="fa-solid fa-file-excel mr-2"></i> Exportar
+        @if ($conciliacao)
+            <a href="{{ url('/comissoes/excel') }}?{{ http_build_query(array_filter(['mes' => $mesSelecionado, 'visao' => $visao])) }}" class="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm hover:bg-gray-50">
+                Exportar todos
             </a>
-        @else
-            <button type="button" disabled class="cursor-not-allowed rounded-lg bg-gray-200 px-4 py-2 text-sm font-semibold text-gray-500">Exportar</button>
         @endif
     </div>
     <div class="overflow-x-auto">
@@ -144,6 +142,7 @@
                     <th class="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
                         {{ $visaoRevenda ? 'Comissão revenda' : 'Comissão líquida' }}
                     </th>
+                    <th class="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Planilha</th>
                 </tr>
             </thead>
             <tbody>
@@ -151,24 +150,9 @@
                     <tr class="border-b border-gray-50 transition-colors hover:bg-gray-50">
                         <td class="max-w-[280px] px-5 py-4">
                             <p class="truncate font-semibold text-gray-800" title="{{ $linha->parceiro_nome ?? $linha->marketplace_nome }}">{{ $linha->parceiro_nome ?? $linha->marketplace_nome }}</p>
-                            <div class="mt-0.5 flex flex-wrap items-center gap-2">
-                                @if ($visaoRevenda && ($linha->percentual_retencao ?? 0) > 0)
-                                    <span class="text-[11px] text-gray-400">Participação {{ number_format($linha->percentual_retencao, 0, ',', '.') }}%</span>
-                                @endif
-                                @if ($conciliacao && Route::has('comissoes.excel') && $linha->conciliado)
-                                    @php
-                                        $excelParams = ['mes' => $mesSelecionado, 'visao' => $visao];
-                                        if ($visaoRevenda) {
-                                            $excelParams['revenda_id'] = $linha->parceiro_id;
-                                        } else {
-                                            $excelParams['marketplace_id'] = $linha->parceiro_id;
-                                        }
-                                    @endphp
-                                    <a href="{{ route('comissoes.excel', $excelParams) }}" class="text-[11px] font-semibold text-blue-600 hover:underline">
-                                        Excel
-                                    </a>
-                                @endif
-                            </div>
+                            @if ($visaoRevenda && ($linha->percentual_retencao ?? 0) > 0)
+                                <p class="mt-0.5 text-[11px] text-gray-400">Participação {{ number_format($linha->percentual_retencao, 0, ',', '.') }}%</p>
+                            @endif
                         </td>
                         @if (($ehAdmin ?? false) && $visaoRevenda)
                             <td class="max-w-[220px] px-5 py-4">
@@ -208,6 +192,22 @@
                             <td class="whitespace-nowrap px-5 py-4 text-right font-semibold tabular-nums text-slate-700">R$&nbsp;{{ number_format($linha->total_comissao_bruta, 2, ',', '.') }}</td>
                         @endif
                         <td class="whitespace-nowrap px-5 py-4 text-right font-semibold tabular-nums text-sky-600">R$&nbsp;{{ number_format($linha->total_comissao, 2, ',', '.') }}</td>
+                        <td class="whitespace-nowrap px-5 py-4 text-right">
+                            @if ($conciliacao && $linha->conciliado)
+                                @php
+                                    $excelParams = array_filter([
+                                        'mes' => $mesSelecionado,
+                                        'visao' => $visao,
+                                        ($visaoRevenda ? 'revenda_id' : 'marketplace_id') => $linha->parceiro_id,
+                                    ]);
+                                @endphp
+                                <a href="{{ url('/comissoes/excel') }}?{{ http_build_query($excelParams) }}" class="inline-flex items-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700">
+                                    <i class="fa-solid fa-file-excel mr-1.5"></i> Excel
+                                </a>
+                            @else
+                                <span class="text-xs text-gray-400">—</span>
+                            @endif
+                        </td>
                     </tr>
                 @empty
                     <tr>
