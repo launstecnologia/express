@@ -29,7 +29,9 @@ class DashboardController extends Controller
 
         $usuario = $request->user();
         $resumo = $dashboardService->resumoRapido($usuario, $periodo);
-        $comissao = $dashboardService->comissaoMes($usuario, $periodo);
+        $comissao = FinanceiroUi::comissaoNosTotaisVisivel()
+            ? $dashboardService->comissaoMes($usuario, $periodo)
+            : ['royaltiesMes' => 0];
         $apuracao = $dashboardService->apuracao($periodo, $usuario);
 
         return view('admin.dashboard', [

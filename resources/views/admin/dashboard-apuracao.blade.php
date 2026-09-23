@@ -115,21 +115,23 @@
                                     >
                                         {{ $planoResumo['nome'] }}
                                     </p>
-                                    <div class="grid grid-cols-2 gap-3">
+                                    <div class="grid {{ \App\Support\FinanceiroUi::comissaoNosTotaisVisivel() ? 'grid-cols-2 gap-3' : 'grid-cols-1' }}">
                                         <div class="min-w-0">
                                             <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Faturamento</p>
                                             <p class="mt-0.5 text-sm font-bold tabular-nums leading-tight text-gray-900 sm:text-base dark:text-gray-100">R$ {{ number_format($planoResumo['faturamento'], 2, ',', '.') }}</p>
                                         </div>
-                                        <div class="min-w-0 text-right">
-                                            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                                                @if (\App\Support\UsuarioComercial::ehMarketplaceOuRevenda())
-                                                    Comissão líquida
-                                                @else
-                                                    Comissão
-                                                @endif
-                                            </p>
-                                            <p class="mt-0.5 text-sm font-bold tabular-nums leading-tight text-blue-700 sm:text-base dark:text-blue-400">R$ {{ number_format($planoResumo['comissao'], 2, ',', '.') }}</p>
-                                        </div>
+                                        @if (\App\Support\FinanceiroUi::comissaoNosTotaisVisivel())
+                                            <div class="min-w-0 text-right">
+                                                <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                                                    @if (\App\Support\UsuarioComercial::ehMarketplaceOuRevenda())
+                                                        Comissão líquida
+                                                    @else
+                                                        Comissão
+                                                    @endif
+                                                </p>
+                                                <p class="mt-0.5 text-sm font-bold tabular-nums leading-tight text-blue-700 sm:text-base dark:text-blue-400">R$ {{ number_format($planoResumo['comissao'], 2, ',', '.') }}</p>
+                                            </div>
+                                        @endif
                                     </div>
                                 </div>
 
@@ -188,15 +190,24 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-6">
-                @foreach ([
+            @php
+                $cardsResumoFinanceiro = [
                     ['label' => 'Faturamento', 'valor' => $resumoPlanos['faturamento_total'], 'cor' => 'text-gray-900 dark:text-gray-100'],
-                    ['label' => 'Comissão', 'valor' => $resumoPlanos['comissao_total'], 'cor' => 'text-blue-700 dark:text-blue-400'],
                     ['label' => 'PIX', 'valor' => $resumoPlanos['pix_total'], 'cor' => 'text-rose-600 dark:text-rose-400'],
                     ['label' => 'Débito', 'valor' => $resumoPlanos['debito_total'], 'cor' => 'text-amber-600 dark:text-amber-400'],
                     ['label' => 'Crédito à vista', 'valor' => $resumoPlanos['credito_total'], 'cor' => 'text-emerald-600 dark:text-emerald-400'],
                     ['label' => 'Parcelado', 'valor' => $resumoPlanos['parcelado_total'] ?? 0, 'cor' => 'text-blue-600 dark:text-blue-400'],
-                ] as $card)
+                ];
+                if (\App\Support\FinanceiroUi::comissaoNosTotaisVisivel()) {
+                    array_splice($cardsResumoFinanceiro, 1, 0, [[
+                        'label' => 'Comissão',
+                        'valor' => $resumoPlanos['comissao_total'],
+                        'cor' => 'text-blue-700 dark:text-blue-400',
+                    ]]);
+                }
+            @endphp
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 {{ \App\Support\FinanceiroUi::comissaoNosTotaisVisivel() ? '2xl:grid-cols-6' : '2xl:grid-cols-5' }}">
+                @foreach ($cardsResumoFinanceiro as $card)
                     <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-3 dark:border-gray-600 dark:bg-gray-800">
                         <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{{ $card['label'] }}</p>
                         <p class="mt-1 text-base font-bold leading-tight {{ $card['cor'] }} sm:text-lg">

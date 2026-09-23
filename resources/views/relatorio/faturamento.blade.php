@@ -3,6 +3,9 @@
 @section('title', 'Faturamento')
 
 @section('content')
+@php
+    $comissaoNosTotaisVisivel = \App\Support\FinanceiroUi::comissaoNosTotaisVisivel();
+@endphp
 <div
     x-data="faturamentoRelatorio()"
     class="space-y-6"
@@ -27,7 +30,7 @@
             </a>
         @endif
     </div>
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+    <div class="grid grid-cols-1 gap-4 {{ $comissaoNosTotaisVisivel ? 'md:grid-cols-3' : 'md:grid-cols-2' }}">
         <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
             <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
@@ -50,17 +53,19 @@
                 </div>
             </div>
         </div>
-        <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-            <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0">
-                    <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Comissões</p>
-                    <p class="mt-2 text-lg font-bold tabular-nums leading-tight text-sky-600 sm:text-xl lg:text-2xl dark:text-sky-400">R$ {{ number_format($totalRoyaltyExibido ?? 0, 2, ',', '.') }}</p>
-                </div>
-                <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600 dark:bg-sky-950 dark:text-sky-400">
-                    <i class="fa-solid fa-hand-holding-dollar text-lg"></i>
+        @if ($comissaoNosTotaisVisivel)
+            <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Comissões</p>
+                        <p class="mt-2 text-lg font-bold tabular-nums leading-tight text-sky-600 sm:text-xl lg:text-2xl dark:text-sky-400">R$ {{ number_format($totalRoyaltyExibido ?? 0, 2, ',', '.') }}</p>
+                    </div>
+                    <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600 dark:bg-sky-950 dark:text-sky-400">
+                        <i class="fa-solid fa-hand-holding-dollar text-lg"></i>
+                    </div>
                 </div>
             </div>
-        </div>
+        @endif
     </div>
 
     <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -93,14 +98,16 @@
                     <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Tipo</th>
                     <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Transações</th>
                     <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Valor</th>
-                    <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Comissão</th>
+                    @if ($comissaoNosTotaisVisivel)
+                        <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Comissão</th>
+                    @endif
                     <th class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500"></th>
                 </tr>
             </thead>
             <tbody>
                 @forelse ($linhas as $linha)
                     @php
-                        $comissao = $linha->comissao_exibida ?? $linha->total_royalty;
+                        $comissao = $comissaoNosTotaisVisivel ? ($linha->comissao_exibida ?? $linha->total_royalty) : 0;
                         $estabelecimentoNome = $linha->estabelecimento?->nome_fantasia
                             ?: $linha->estabelecimento?->razao_social
                             ?: $linha->estabelecimento?->nome_completo
@@ -130,14 +137,16 @@
                         </td>
                         <td class="px-5 py-4 text-gray-600">{{ $linha->total_transacoes }}</td>
                         <td class="px-5 py-4 font-semibold text-green-600">R$ {{ number_format($linha->total_valor, 2, ',', '.') }}</td>
-                        <td class="px-5 py-4 font-semibold text-sky-600">R$ {{ number_format($comissao, 2, ',', '.') }}</td>
+                        @if ($comissaoNosTotaisVisivel)
+                            <td class="px-5 py-4 font-semibold text-sky-600">R$ {{ number_format($comissao, 2, ',', '.') }}</td>
+                        @endif
                         <td class="px-5 py-4 text-right text-gray-400">
                             <i class="fa-solid fa-chevron-right text-xs"></i>
                         </td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="8" class="px-5 py-10 text-center text-sm text-gray-500">Nenhum faturamento encontrado para o filtro atual.</td>
+                        <td colspan="{{ $comissaoNosTotaisVisivel ? 8 : 7 }}" class="px-5 py-10 text-center text-sm text-gray-500">Nenhum faturamento encontrado para o filtro atual.</td>
                     </tr>
                 @endforelse
             </tbody>
@@ -339,7 +348,7 @@
 
                 <template x-if="dados">
                     <div>
-                    <div class="mb-6 grid grid-cols-2 gap-3 rounded-xl bg-gray-50 p-4 text-sm md:grid-cols-4">
+                    <div class="mb-6 grid grid-cols-2 gap-3 rounded-xl bg-gray-50 p-4 text-sm {{ $comissaoNosTotaisVisivel ? 'md:grid-cols-4' : 'md:grid-cols-3' }}">
                         <div>
                             <p class="text-xs text-gray-500">Estabelecimento</p>
                             <p class="font-medium text-gray-800" x-text="dados?.resumo?.estabelecimento || '—'"></p>
@@ -352,10 +361,12 @@
                             <p class="text-xs text-gray-500">Faturamento</p>
                             <p class="font-semibold text-green-600" x-text="formatarMoeda(dados?.resumo?.total_valor)"></p>
                         </div>
-                        <div>
-                            <p class="text-xs text-gray-500">Comissão</p>
-                            <p class="font-semibold text-sky-600" x-text="formatarMoeda(dados?.resumo?.comissao)"></p>
-                        </div>
+                        @if ($comissaoNosTotaisVisivel)
+                            <div>
+                                <p class="text-xs text-gray-500">Comissão</p>
+                                <p class="font-semibold text-sky-600" x-text="formatarMoeda(dados?.resumo?.comissao)"></p>
+                            </div>
+                        @endif
                     </div>
 
                     <p class="mb-3 text-sm font-semibold text-gray-700">
@@ -397,29 +408,31 @@
                                 </div>
                                 <p x-show="!mov.plano_taxa" class="mb-3 text-xs text-amber-700">Nenhuma taxa do plano encontrada para este arranjo/parcelas.</p>
 
-                                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Comissões da transação</p>
-                                <div class="overflow-x-auto">
-                                    <table class="w-full text-xs">
-                                        <thead>
-                                            <tr class="border-b border-gray-100 text-left text-gray-500">
-                                                <th class="py-2 pr-3">Usuário</th>
-                                                <th class="py-2 pr-3">Nível</th>
-                                                <th class="py-2 pr-3">%</th>
-                                                <th class="py-2">Valor</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <template x-for="com in (mov.comissoes ?? [])" :key="mov.id + '-' + com.usuario + '-' + com.nivel">
-                                                <tr class="border-b border-gray-50">
-                                                    <td class="py-2 pr-3 font-medium text-gray-700" x-text="com.usuario"></td>
-                                                    <td class="py-2 pr-3 capitalize text-gray-600" x-text="com.nivel"></td>
-                                                    <td class="py-2 pr-3 text-gray-600" x-text="com.percentual + '%'"></td>
-                                                    <td class="py-2 font-semibold text-sky-600" x-text="formatarMoeda(com.valor)"></td>
+                                @if ($comissaoNosTotaisVisivel)
+                                    <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Comissões da transação</p>
+                                    <div class="overflow-x-auto">
+                                        <table class="w-full text-xs">
+                                            <thead>
+                                                <tr class="border-b border-gray-100 text-left text-gray-500">
+                                                    <th class="py-2 pr-3">Usuário</th>
+                                                    <th class="py-2 pr-3">Nível</th>
+                                                    <th class="py-2 pr-3">%</th>
+                                                    <th class="py-2">Valor</th>
                                                 </tr>
-                                            </template>
-                                        </tbody>
-                                    </table>
-                                </div>
+                                            </thead>
+                                            <tbody>
+                                                <template x-for="com in (mov.comissoes ?? [])" :key="mov.id + '-' + com.usuario + '-' + com.nivel">
+                                                    <tr class="border-b border-gray-50">
+                                                        <td class="py-2 pr-3 font-medium text-gray-700" x-text="com.usuario"></td>
+                                                        <td class="py-2 pr-3 capitalize text-gray-600" x-text="com.nivel"></td>
+                                                        <td class="py-2 pr-3 text-gray-600" x-text="com.percentual + '%'"></td>
+                                                        <td class="py-2 font-semibold text-sky-600" x-text="formatarMoeda(com.valor)"></td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                @endif
                             </div>
                         </template>
                     </div>

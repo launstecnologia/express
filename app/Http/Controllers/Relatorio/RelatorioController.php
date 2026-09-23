@@ -13,6 +13,7 @@ use App\Services\RoyaltyCalculadorService;
 use App\Support\ComissaoAdminSql;
 use App\Support\EdiMovimentoDetalhe;
 use App\Support\EdiStatusPagamento;
+use App\Support\FinanceiroUi;
 use App\Support\InstituicaoFinanceira;
 use App\Support\UsuarioComercial;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
@@ -40,6 +41,7 @@ class RelatorioController extends Controller
         $this->aplicarFiltrosFaturamento($query, $request);
 
         $usuario = $this->usuarioDoRelatorio($request);
+        $exibirComissao = FinanceiroUi::comissaoNosTotaisVisivel();
 
         $totais = (clone $query)->selectRaw('
             COALESCE(SUM(total_transacoes), 0) as total_transacoes,
@@ -48,10 +50,13 @@ class RelatorioController extends Controller
         ')->first();
 
         $linhas = $query->paginate(50)->withQueryString();
-        $this->preencherComissoesExibidas($linhas->getCollection(), $usuario);
+        if ($exibirComissao) {
+            $this->preencherComissoesExibidas($linhas->getCollection(), $usuario);
+        }
 
-        $comissaoBruta = $this->totalComissaoAdmin($request);
-        $totalRoyaltyExibido = $this->comissaoParaUsuario($comissaoBruta, $usuario);
+        $totalRoyaltyExibido = $exibirComissao
+            ? $this->comissaoParaUsuario($this->totalComissaoAdmin($request), $usuario)
+            : 0;
 
         $filtros = $request->only([
             'estabelecimento',
@@ -86,9 +91,10 @@ class RelatorioController extends Controller
     public function faturamentoDetalhe(AggregatedRevenue $linha, Request $request, RoyaltyCalculadorService $royaltyService)
     {
         $usuario = $this->usuarioDoRelatorio($request);
+        $exibirComissao = FinanceiroUi::comissaoNosTotaisVisivel();
 
         $movimentos = EdiMovimento::withoutGlobalScopes()
-            ->with(['estabelecimento.plano', 'royalties.usuario'])
+            ->with($exibirComissao ? ['estabelecimento.plano', 'royalties.usuario'] : ['estabelecimento.plano'])
             ->where('estabelecimento_id', $linha->estabelecimento_id)
             ->whereDate('data_inicial_transacao', $linha->data)
             ->where('instituicao_financeira', $linha->instituicao)
@@ -96,7 +102,7 @@ class RelatorioController extends Controller
             ->where('status_pagamento', $linha->status_pagamento)
             ->orderBy('hora_inicial_transacao')
             ->get()
-            ->map(function (EdiMovimento $movimento) use ($royaltyService) {
+            ->map(function (EdiMovimento $movimento) use ($royaltyService, $exibirComissao) {
                 $taxa = $royaltyService->planoTaxaDoMovimento($movimento);
 
                 return [
@@ -113,12 +119,14 @@ class RelatorioController extends Controller
                         'tipo_transacao' => $taxa->tipo_transacao,
                         'parcelas' => $taxa->parcelas,
                     ] : null,
-                    'comissoes' => $movimento->royalties->map(fn ($royalty) => [
-                        'usuario' => $royalty->usuario?->nomeExibicao() ?? '—',
-                        'nivel' => $royalty->nivel,
-                        'percentual' => (float) $royalty->percentual_royalty,
-                        'valor' => (float) $royalty->valor_royalty,
-                    ])->values(),
+                    'comissoes' => $exibirComissao
+                        ? $movimento->royalties->map(fn ($royalty) => [
+                            'usuario' => $royalty->usuario?->nomeExibicao() ?? '—',
+                            'nivel' => $royalty->nivel,
+                            'percentual' => (float) $royalty->percentual_royalty,
+                            'valor' => (float) $royalty->valor_royalty,
+                        ])->values()
+                        : [],
                 ];
             });
 
@@ -129,7 +137,7 @@ class RelatorioController extends Controller
                 'tipo_transacao' => $linha->tipo_transacao,
                 'total_transacoes' => $linha->total_transacoes,
                 'total_valor' => (float) $linha->total_valor,
-                'comissao' => $this->comissaoExibida($linha, $usuario),
+                'comissao' => $exibirComissao ? $this->comissaoExibida($linha, $usuario) : 0,
                 'estabelecimento' => $linha->estabelecimento?->nome_fantasia
                     ?: $linha->estabelecimento?->razao_social
                     ?: $linha->estabelecimento?->nome_completo,
