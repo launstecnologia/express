@@ -83,11 +83,8 @@ class ConciliacaoConfrontoService
                 $comissaoPlanilha = (float) $linha->ms_comissao;
 
                 $ediTpv = $edi !== null ? (float) $edi['tpv'] : 0.0;
-                $mesmoVolume = $edi !== null && self::tpvCompativel($grupoTpv, $ediTpv);
 
-                // TPV diferente = outra transação: a planilha fica sem EDI e o
-                // volume do EDI aparece no recorte inverso / só no EDI.
-                if ($edi === null || ! $mesmoVolume) {
+                if ($edi === null) {
                     $semEdi++;
                     $lote[] = [
                         'id' => (int) $linha->id,
@@ -102,14 +99,20 @@ class ConciliacaoConfrontoService
                     continue;
                 }
 
-                $ok++;
                 $ratioTpv = $grupoTpv > 0 ? $tpvLinha / $grupoTpv : 0.0;
                 $ediTpvLinha = round($ediTpv * $ratioTpv, 2);
                 $ediComissaoLinha = self::comissaoPlanilhaNoTpvEdi($comissaoPlanilha, $tpvLinha, $ediTpvLinha);
+                $mesmoVolume = self::tpvCompativel($grupoTpv, $ediTpv);
+
+                if ($mesmoVolume) {
+                    $ok++;
+                } else {
+                    $divergentes++;
+                }
 
                 $lote[] = [
                     'id' => (int) $linha->id,
-                    'status' => 'ok',
+                    'status' => $mesmoVolume ? 'ok' : 'divergente',
                     'edi_tpv' => $ediTpvLinha,
                     'edi_comissao' => $ediComissaoLinha,
                     'edi_qtd' => (int) round($edi['qtd'] * $ratioTpv),
@@ -328,16 +331,26 @@ class ConciliacaoConfrontoService
                 'em.pagamento_prazo',
                 'em.plano',
                 'em.valor_total_transacao',
+                'em.nsu',
+                'em.codigo_transacao',
+                'em.tx_id',
+                'em.data_inicial_transacao',
                 'pc.comissao_percentual',
                 DB::raw('COALESCE(e.token_pagseguro, em.estabelecimento, em.id_cliente) as id_cliente'),
             ]);
 
         $grupos = [];
+        $idsVistos = [];
+        $vendasVistas = [];
 
         foreach ($query->orderBy('em.id')->cursor() as $mov) {
             $idCliente = trim((string) $mov->id_cliente);
 
             if ($idCliente === '') {
+                continue;
+            }
+
+            if ($this->movimentoEdiJaContado($mov, $idsVistos, $vendasVistas)) {
                 continue;
             }
 
@@ -864,6 +877,8 @@ class ConciliacaoConfrontoService
                 'marketplace' => (string) ($mapa['Marketplace'] ?? ''),
                 'meio' => (string) ($mapa['Meio'] ?? ''),
                 'parcelamento' => (string) ($mapa['Parcelamento'] ?? ''),
+                'parcela' => (string) ($mapa['Parcela'] ?? ''),
+                'quantidade_parcela' => (string) ($mapa['Quantidade parcelas'] ?? ''),
                 'bandeira' => (string) ($mapa['Bandeira'] ?? ''),
                 'tipo' => (string) ($mapa['Tipo transação'] ?? ''),
                 'instituicao' => (string) ($mapa['Instituição financeira'] ?? ''),
@@ -1226,10 +1241,17 @@ class ConciliacaoConfrontoService
                 DB::raw('COALESCE(rev.nome_fantasia, rev.razao_social, rev.nome_completo, rev.email) as revenda_nome'),
             ]);
 
+        $idsVistos = [];
+        $vendasVistas = [];
+
         foreach ($query->orderBy('em.data_inicial_transacao')->orderBy('em.id')->cursor() as $mov) {
             $idCliente = trim((string) $mov->id_cliente);
 
             if ($idCliente === '') {
+                continue;
+            }
+
+            if ($this->movimentoEdiJaContado($mov, $idsVistos, $vendasVistas)) {
                 continue;
             }
 
@@ -1362,6 +1384,39 @@ class ConciliacaoConfrontoService
     }
 
     /**
+     * @param  array<int|string, true>  $idsVistos
+     * @param  array<string, true>  $vendasVistas
+     */
+    private function movimentoEdiJaContado(object $mov, array &$idsVistos, array &$vendasVistas): bool
+    {
+        $id = (int) ($mov->id ?? 0);
+        if ($id > 0) {
+            if (isset($idsVistos[$id])) {
+                return true;
+            }
+            $idsVistos[$id] = true;
+        }
+
+        $chave = ConciliacaoDimensao::chaveUnicaVenda(
+            $mov->id ?? 0,
+            $mov->valor_total_transacao ?? 0,
+            isset($mov->codigo_transacao) ? (string) $mov->codigo_transacao : null,
+            isset($mov->tx_id) ? (string) $mov->tx_id : null,
+            isset($mov->nsu) ? (string) $mov->nsu : null,
+            $mov->estabelecimento_id ?? null,
+            $mov->data_inicial_transacao ?? null,
+        );
+
+        if (isset($vendasVistas[$chave])) {
+            return true;
+        }
+
+        $vendasVistas[$chave] = true;
+
+        return false;
+    }
+
+    /**
      * Relatório completo de um EC: OK, divergente, só planilha e só EDI.
      *
      * @return array{linhas: Collection, totais: array<string, array{linhas: int, tpv_ps: float, tpv_edi: float, comissao_ps: float, comissao_edi: float}>, estabelecimento: ?Estabelecimento}
@@ -1403,7 +1458,12 @@ class ConciliacaoConfrontoService
         foreach ($linhasPs as $linha) {
             $chave = $this->chaveDaLinha($linha);
             $pareada = isset($chavesPareadas[$chave]);
-            $detalhe = $this->linhaDetalheDaPlanilha($linha, $pareada);
+            $detalhe = $this->linhaDetalheDaPlanilha(
+                $linha,
+                $pareada,
+                $pareada ? $ediGrupos->get($chave) : null,
+                (float) ($tpvPorChave[$chave] ?? 0.0),
+            );
             $linhas->push($detalhe);
             $this->acumularTotaisDetalhe(
                 $totais,
@@ -1427,6 +1487,7 @@ class ConciliacaoConfrontoService
                 'meio_pagamento' => $edi['meio'],
                 'bandeira' => $edi['bandeira'],
                 'parcelamento_agrupado' => $edi['parcelamento'],
+                'escrow' => $edi['escrow'] ?? null,
                 'solucao' => $edi['solucao'],
                 'tpv' => 0.0,
                 'edi_tpv' => $edi['tpv'],
@@ -1513,11 +1574,7 @@ class ConciliacaoConfrontoService
         $pareadas = [];
 
         foreach ($agregados as $chave => $edi) {
-            if (! isset($tpvPlanilha[$chave])) {
-                continue;
-            }
-
-            if (self::tpvCompativel((float) $tpvPlanilha[$chave], (float) $edi['tpv'])) {
+            if (isset($tpvPlanilha[$chave])) {
                 $pareadas[$chave] = true;
             }
         }
@@ -1525,16 +1582,33 @@ class ConciliacaoConfrontoService
         return $pareadas;
     }
 
-    private function linhaDetalheDaPlanilha(ConciliacaoLinha $linha, bool $pareada): object
+    /**
+     * @param  array{tpv: float, qtd: int, comissao: float}|null  $edi
+     */
+    private function linhaDetalheDaPlanilha(ConciliacaoLinha $linha, bool $pareada, ?array $edi = null, float $grupoTpv = 0.0): object
     {
         $status = $linha->status;
+        $tpvLinha = (float) $linha->tpv;
+        $comissaoPlanilha = (float) $linha->ms_comissao;
+        $ediTpv = 0.0;
+        $ediComissao = 0.0;
+        $ediQtd = 0;
+        $diffTpv = round($tpvLinha, 2);
+        $diffComissao = round($comissaoPlanilha, 4);
 
         if ($status !== 'sem_estabelecimento' && $status !== 'pendente' && ! $pareada) {
             $status = 'sem_edi';
         }
 
-        $ediTpv = $pareada && $linha->edi_tpv !== null ? (float) $linha->edi_tpv : 0.0;
-        $ediComissao = $pareada && $linha->edi_comissao !== null ? (float) $linha->edi_comissao : 0.0;
+        if ($pareada && $edi !== null && $status !== 'sem_estabelecimento') {
+            $ratioTpv = $grupoTpv > 0 ? $tpvLinha / $grupoTpv : 0.0;
+            $ediTpv = round((float) $edi['tpv'] * $ratioTpv, 2);
+            $ediComissao = self::comissaoPlanilhaNoTpvEdi($comissaoPlanilha, $tpvLinha, $ediTpv);
+            $ediQtd = (int) round(((int) ($edi['qtd'] ?? 0)) * $ratioTpv);
+            $diffTpv = round($tpvLinha - $ediTpv, 2);
+            $diffComissao = round($comissaoPlanilha - $ediComissao, 4);
+            $status = self::tpvCompativel($grupoTpv, (float) $edi['tpv']) ? 'ok' : 'divergente';
+        }
 
         return (object) [
             'status' => $status,
@@ -1543,14 +1617,15 @@ class ConciliacaoConfrontoService
             'meio_pagamento' => $linha->meio_pagamento,
             'bandeira' => $linha->bandeira,
             'parcelamento_agrupado' => $linha->parcelamento_agrupado,
+            'escrow' => $linha->escrow,
             'solucao' => $linha->solucao,
-            'tpv' => (float) $linha->tpv,
+            'tpv' => $tpvLinha,
             'edi_tpv' => $ediTpv,
-            'ms_comissao' => (float) $linha->ms_comissao,
+            'ms_comissao' => $comissaoPlanilha,
             'edi_comissao' => $ediComissao,
-            'diff_tpv' => $pareada ? (float) ($linha->diff_tpv ?? 0) : round((float) $linha->tpv, 2),
-            'diff_comissao' => $pareada ? (float) ($linha->diff_comissao ?? 0) : round((float) $linha->ms_comissao, 4),
-            'edi_qtd' => $pareada ? $linha->edi_qtd : 0,
+            'diff_tpv' => $diffTpv,
+            'diff_comissao' => $diffComissao,
+            'edi_qtd' => $ediQtd,
             'estabelecimento' => $linha->estabelecimento,
         ];
     }

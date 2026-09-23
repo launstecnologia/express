@@ -248,6 +248,41 @@ class ConciliacaoDimensao
         return strtolower($id);
     }
 
+    /**
+     * Identifica a venda única no EDI. Parcelas da mesma compra repetem NSU,
+     * código e valor; a conciliação deve contar isso uma vez só.
+     */
+    public static function chaveUnicaVenda(
+        mixed $id,
+        mixed $valor,
+        ?string $codigoTransacao = null,
+        ?string $txId = null,
+        ?string $nsu = null,
+        mixed $estabelecimentoId = null,
+        mixed $data = null,
+    ): string {
+        $valorFmt = number_format((float) $valor, 2, '.', '');
+
+        $codigo = trim((string) $codigoTransacao);
+        if ($codigo !== '') {
+            return 'tx:'.$codigo.'|'.$valorFmt;
+        }
+
+        $pix = trim((string) $txId);
+        if ($pix !== '') {
+            return 'pix:'.$pix.'|'.$valorFmt;
+        }
+
+        $nsuLimpo = trim((string) $nsu);
+        $estab = trim((string) $estabelecimentoId);
+        $dia = substr((string) $data, 0, 10);
+        if ($nsuLimpo !== '' && $estab !== '') {
+            return 'nsu:'.$estab.'|'.$dia.'|'.$nsuLimpo.'|'.$valorFmt;
+        }
+
+        return 'id:'.(int) $id;
+    }
+
     private static function normalizarTexto(?string $valor): string
     {
         return strtolower(trim((string) $valor));

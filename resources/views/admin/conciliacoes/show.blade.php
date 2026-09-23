@@ -373,6 +373,9 @@
                 <th class="px-4 py-3">Estabelecimento</th>
                 <th class="px-4 py-3">Meio / Bandeira</th>
                 <th class="px-4 py-3">Parcelas</th>
+                @if ($detalheCliente)
+                    <th class="px-4 py-3">Escrow</th>
+                @endif
                 <th class="px-4 py-3">Solução</th>
                 <th class="px-4 py-3 text-right">TPV PS</th>
                 <th class="px-4 py-3 text-right">TPV EDI</th>
@@ -438,6 +441,9 @@
                     </td>
                     <td class="px-4 py-3">{{ $linha->meio_pagamento }} / {{ $linha->bandeira }}</td>
                     <td class="px-4 py-3">{{ $linha->parcelamento_agrupado }}</td>
+                    @if ($detalheCliente)
+                        <td class="px-4 py-3">{{ $linha->escrow ?? '—' }}</td>
+                    @endif
                     <td class="px-4 py-3">{{ $linha->solucao }}</td>
                     <td class="px-4 py-3 text-right">R$ {{ number_format((float) $linha->tpv, 2, ',', '.') }}</td>
                     <td class="px-4 py-3 text-right {{ $destacaTpv ? ($status === 'so_edi' ? 'font-semibold text-sky-700' : 'font-semibold text-amber-700') : '' }}">

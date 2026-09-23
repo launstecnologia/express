@@ -104,7 +104,17 @@
                             <span class="text-xs text-gray-600">{{ $tx->bandeira ?: $tx->instituicao ?: '—' }}</span>
                         </span>
                     </td>
-                    <td class="px-4 py-3 text-gray-600">{{ $tx->parcelamento ?: '—' }}</td>
+                    <td class="px-4 py-3 text-gray-600">
+                        @php
+                            $qtdParcelas = (int) preg_replace('/\D/', '', (string) $tx->quantidade_parcela);
+                            $parcela = trim((string) $tx->parcela);
+                        @endphp
+                        @if ($qtdParcelas > 1)
+                            {{ $parcela !== '' ? $parcela.'/' : '' }}{{ $qtdParcelas }}x
+                        @else
+                            {{ $tx->parcelamento ?: '—' }}
+                        @endif
+                    </td>
                     <td class="px-4 py-3 font-mono text-xs text-gray-500">{{ $tx->status ?: '—' }}</td>
                     <td class="px-4 py-3 text-right font-semibold text-sky-700">R$ {{ number_format((float) $tx->valor, 2, ',', '.') }}</td>
                 </tr>

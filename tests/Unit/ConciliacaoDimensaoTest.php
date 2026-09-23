@@ -82,4 +82,20 @@ class ConciliacaoDimensaoTest extends TestCase
             ConciliacaoDimensao::meioDoEdi('outros', '3', 'CREDIT_MASTERCARD', '3'),
         );
     }
+
+    public function test_chave_unica_venda_agrupa_parcelas_com_mesmo_nsu_e_valor(): void
+    {
+        $primeira = ConciliacaoDimensao::chaveUnicaVenda(10, 25745.55, null, null, '621914030372', 107, '2026-08-07');
+        $segunda = ConciliacaoDimensao::chaveUnicaVenda(11, 25745.55, null, null, '621914030372', 107, '2026-08-07');
+
+        $this->assertSame($primeira, $segunda);
+    }
+
+    public function test_chave_unica_venda_separa_estorno_com_valor_diferente(): void
+    {
+        $venda = ConciliacaoDimensao::chaveUnicaVenda(10, 25745.55, 'ABC123', null, null, 107, '2026-08-07');
+        $estorno = ConciliacaoDimensao::chaveUnicaVenda(11, -25745.55, 'ABC123', null, null, 107, '2026-08-07');
+
+        $this->assertNotSame($venda, $estorno);
+    }
 }
