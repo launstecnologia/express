@@ -277,6 +277,23 @@ class ConciliacaoController extends Controller
         ])->deleteFileAfterSend(true);
     }
 
+    public function relatorioMarketplaceExcel(Request $request, Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto): Response
+    {
+        @set_time_limit(900);
+
+        $filtros = $this->filtrosShow($request);
+        unset($filtros['status']);
+
+        $planilha = $confronto->planilhaPorMarketplace($conciliacao, $filtros);
+        abort_if($planilha['planilhas'] === [], 404, 'Nenhum estabelecimento com volume nesta conciliação.');
+
+        $caminho = SimpleXlsxWriter::fileSheets($planilha['planilhas']);
+
+        return response()->download($caminho, $planilha['nome_arquivo'], [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
+    }
+
     public function confrontar(Conciliacao $conciliacao)
     {
         if (in_array($conciliacao->confronto_status, ['na_fila', 'processando'], true)) {

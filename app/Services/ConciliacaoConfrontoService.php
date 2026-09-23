@@ -5,8 +5,10 @@ namespace App\Services;
 use App\Models\Conciliacao;
 use App\Models\ConciliacaoLinha;
 use App\Models\Estabelecimento;
+use App\Models\Usuario;
 use App\Support\ComissaoAdminSql;
 use App\Support\ConciliacaoDimensao;
+use App\Support\DocumentoBrasil;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -584,6 +586,230 @@ class ConciliacaoConfrontoService
     }
 
     /**
+     * Planilha no formato DSPAY: uma aba por marketplace (ID, marketplace,
+     * representante, documento, EC, faturamento e markup).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array{nome_arquivo: string, planilhas: list<array{nome: string, linhas: list<list<string|int|float|null>>, autoFiltro: bool}>}
+     */
+    public function planilhaPorMarketplace(Conciliacao $conciliacao, array $filtros = []): array
+    {
+        @set_time_limit(900);
+        unset($filtros['status']);
+
+        $grupos = $this->agregarPorMarketplace($conciliacao, $filtros);
+
+        if ($grupos === []) {
+            return [
+                'nome_arquivo' => 'planilha-marketplace.xlsx',
+                'planilhas' => [],
+            ];
+        }
+
+        $comissao = app(ComissaoPagService::class);
+        $planilhas = [];
+
+        if (count($grupos) > 1) {
+            $planilhas[] = [
+                'nome' => 'Resumo',
+                'autoFiltro' => true,
+                'linhas' => $this->linhasResumoMarketplace($grupos, $comissao),
+            ];
+        }
+
+        foreach ($grupos as $grupo) {
+            $planilhas[] = [
+                'nome' => $grupo['nome_aba'],
+                'autoFiltro' => false,
+                'linhas' => $this->linhasAbaMarketplace($grupo, $comissao),
+            ];
+        }
+
+        return [
+            'nome_arquivo' => $this->nomeArquivoMarketplace($conciliacao, $grupos, $comissao),
+            'planilhas' => $planilhas,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<array{
+     *     marketplace_id: int,
+     *     marketplace: ?Usuario,
+     *     nome: string,
+     *     nome_aba: string,
+     *     faturamento: float,
+     *     markup: float,
+     *     ecs: list<array{id: string, marketplace: string, representante: string, documento: string, nome: string, faturamento: float, markup: float}>
+     * }>
+     */
+    private function agregarPorMarketplace(Conciliacao $conciliacao, array $filtros): array
+    {
+        $ecs = [];
+
+        foreach ($this->queryLinhasExcel($conciliacao, $filtros)->orderBy('conciliacao_linhas.id')->cursor() as $linha) {
+            if ($linha->sem_estabelecimento || ! $linha->estabelecimento_id) {
+                continue;
+            }
+
+            $ecId = (int) $linha->estabelecimento_id;
+            if (! isset($ecs[$ecId])) {
+                $ecs[$ecId] = [
+                    'marketplace_id' => (int) ($linha->marketplace_id ?? 0),
+                    'id' => (string) ($linha->token_pagseguro ?: $linha->id_cliente ?: $ecId),
+                    'marketplace' => (string) ($linha->marketplace_nome ?? ''),
+                    'representante' => (string) ($linha->revenda_nome ?? ''),
+                    'documento' => DocumentoBrasil::formatarCpfOuCnpj((string) ($linha->estabelecimento_documento ?? '')),
+                    'nome' => (string) ($linha->estabelecimento_nome ?: 'Estabelecimento #'.$ecId),
+                    'faturamento' => 0.0,
+                    'markup' => 0.0,
+                ];
+            }
+
+            $ecs[$ecId]['faturamento'] += (float) $linha->tpv;
+            $ecs[$ecId]['markup'] += (float) $linha->ms_comissao;
+        }
+
+        if ($ecs === []) {
+            return [];
+        }
+
+        $mktIds = collect($ecs)->pluck('marketplace_id')->filter()->unique()->all();
+        $marketplaces = $mktIds === []
+            ? collect()
+            : Usuario::query()->whereIn('id', $mktIds)->get()->keyBy('id');
+
+        $grupos = [];
+        foreach ($ecs as $ec) {
+            $mktId = (int) $ec['marketplace_id'];
+            if (! isset($grupos[$mktId])) {
+                $marketplace = $marketplaces->get($mktId);
+                $nome = $marketplace?->nomeExibicao() ?: ($ec['marketplace'] !== '' ? $ec['marketplace'] : 'Sem marketplace');
+                $grupos[$mktId] = [
+                    'marketplace_id' => $mktId,
+                    'marketplace' => $marketplace,
+                    'nome' => $nome,
+                    'nome_aba' => $nome,
+                    'faturamento' => 0.0,
+                    'markup' => 0.0,
+                    'ecs' => [],
+                ];
+            }
+
+            $ec['faturamento'] = round($ec['faturamento'], 2);
+            $ec['markup'] = round($ec['markup'], 4);
+            $grupos[$mktId]['faturamento'] += $ec['faturamento'];
+            $grupos[$mktId]['markup'] += $ec['markup'];
+            $grupos[$mktId]['ecs'][] = $ec;
+        }
+
+        foreach ($grupos as &$grupo) {
+            $grupo['faturamento'] = round($grupo['faturamento'], 2);
+            $grupo['markup'] = round($grupo['markup'], 4);
+            usort($grupo['ecs'], fn ($a, $b) => strcasecmp($a['nome'], $b['nome']));
+        }
+        unset($grupo);
+
+        uasort($grupos, function (array $a, array $b) {
+            if ($a['marketplace_id'] === 0) {
+                return 1;
+            }
+            if ($b['marketplace_id'] === 0) {
+                return -1;
+            }
+
+            return strcasecmp($a['nome'], $b['nome']);
+        });
+
+        return array_values($grupos);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $grupos
+     * @return list<list<string|int|float|null>>
+     */
+    private function linhasResumoMarketplace(array $grupos, ComissaoPagService $comissao): array
+    {
+        $linhas = [[
+            'Marketplace',
+            'Faturamento',
+            'Markup',
+            'Retenção',
+            'Royalty',
+            'Comissão',
+            'ECs',
+        ]];
+
+        foreach ($grupos as $grupo) {
+            $calc = $comissao->comissaoLiquidaParceiro((float) $grupo['markup'], $grupo['marketplace']);
+            $linhas[] = [
+                $grupo['nome'],
+                (float) $grupo['faturamento'],
+                (float) $grupo['markup'],
+                $calc['percentual'] > 0 ? round($calc['percentual'] / 100, 4) : 0,
+                $calc['royalty'],
+                $calc['liquida'],
+                count($grupo['ecs']),
+            ];
+        }
+
+        return $linhas;
+    }
+
+    /**
+     * @param  array<string, mixed>  $grupo
+     * @return list<list<string|int|float|null>>
+     */
+    private function linhasAbaMarketplace(array $grupo, ComissaoPagService $comissao): array
+    {
+        $calc = $comissao->comissaoLiquidaParceiro((float) $grupo['markup'], $grupo['marketplace']);
+        $retencao = $calc['percentual'] > 0 ? round($calc['percentual'] / 100, 4) : 0.0;
+
+        $linhas = [
+            [], [], [], [], [], [],
+            ['', '', '', 'PAGSEGURO'],
+            [], [],
+            ['', '', 'FATURAMENTO', 'MARKUP', $retencao, 'COMISSÃO'],
+            ['', '', (float) $grupo['faturamento'], (float) $grupo['markup'], $calc['royalty'], $calc['liquida']],
+            ['', 'ID', 'MARKETPLACE', 'REPRESENTANTE', 'CPF/CNPJ-EC', 'NOME EC', 'FATURAMENTO', 'MARKUP'],
+        ];
+
+        foreach ($grupo['ecs'] as $ec) {
+            $linhas[] = [
+                '',
+                $ec['id'],
+                $ec['marketplace'] !== '' ? $ec['marketplace'] : $grupo['nome'],
+                $ec['representante'],
+                $ec['documento'],
+                $ec['nome'],
+                $ec['faturamento'] ?: '',
+                $ec['markup'] ?: '',
+            ];
+        }
+
+        return $linhas;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $grupos
+     */
+    private function nomeArquivoMarketplace(Conciliacao $conciliacao, array $grupos, ComissaoPagService $comissao): string
+    {
+        $mes = $conciliacao->referencia_mes?->format('Y-m') ?? 'conciliacao';
+
+        if (count($grupos) !== 1) {
+            return "planilha-marketplace-{$mes}.xlsx";
+        }
+
+        $grupo = $grupos[0];
+        $calc = $comissao->comissaoLiquidaParceiro((float) $grupo['markup'], $grupo['marketplace']);
+        $nome = preg_replace('/[^\pL\pN\s\-\.]+/u', '', (string) $grupo['nome']) ?: 'marketplace';
+        $valor = number_format((float) $calc['liquida'], 2, ',', '.');
+
+        return trim($nome).' R$ '.$valor.'.xlsx';
+    }
+
+    /**
      * Transações EDI do mês cuja chave não casou com a planilha PagSeguro.
      *
      * @param  array<string, mixed>  $filtros
@@ -759,6 +985,8 @@ class ConciliacaoConfrontoService
             ->leftJoin('usuarios as mkt', 'mkt.id', '=', 'e.marketplace_id')
             ->leftJoin('usuarios as rev', 'rev.id', '=', 'e.revenda_id')
             ->addSelect([
+                'e.marketplace_id as marketplace_id',
+                'e.token_pagseguro as token_pagseguro',
                 DB::raw('COALESCE(e.nome_fantasia, e.razao_social, e.nome_completo) as estabelecimento_nome'),
                 DB::raw('COALESCE(e.cnpj, e.cpf) as estabelecimento_documento'),
                 DB::raw('COALESCE(mkt.nome_fantasia, mkt.razao_social, mkt.nome_completo, mkt.email) as marketplace_nome'),

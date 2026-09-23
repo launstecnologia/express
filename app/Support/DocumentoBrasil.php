@@ -91,6 +91,17 @@ class DocumentoBrasil
             .substr($n, 12, 2);
     }
 
+    public static function formatarCpfOuCnpj(?string $valor): string
+    {
+        $n = self::apenasDigitos($valor);
+
+        return match (strlen($n)) {
+            11 => self::formatarCpf($n),
+            14 => self::formatarCnpj($n),
+            default => (string) $valor,
+        };
+    }
+
     public static function celularValido(?string $celular): bool
     {
         $n = self::apenasDigitos($celular);

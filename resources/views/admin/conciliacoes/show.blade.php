@@ -37,6 +37,13 @@
             ->filter(fn ($v) => $v !== null && $v !== '')
             ->all()
     ));
+    $excelMarketplaceUrl = route('admin.conciliacoes.relatorio-marketplace-excel', array_merge(
+        ['conciliacao' => $conciliacao],
+        collect($filtros ?? [])
+            ->except('status')
+            ->filter(fn ($v) => $v !== null && $v !== '')
+            ->all()
+    ));
 @endphp
 
 <div x-data="{ filtrosAberto: false }">
@@ -63,6 +70,12 @@
            class="inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">
             <i class="fa-solid fa-file-excel"></i>
             Excel completo
+        </a>
+        <a href="{{ $excelMarketplaceUrl }}"
+           title="Planilha no formato DSPAY: uma aba por marketplace com ID, representante, CPF/CNPJ, faturamento e markup"
+           class="inline-flex items-center gap-2 rounded-lg border border-sky-300 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-800 hover:bg-sky-100">
+            <i class="fa-solid fa-file-excel"></i>
+            Planilha marketplace
         </a>
         <a href="{{ route('admin.conciliacoes.diferenca', $conciliacao) }}" class="inline-flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-800 hover:bg-orange-100">
             <i class="fa-solid fa-table"></i>

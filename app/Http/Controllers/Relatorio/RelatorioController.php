@@ -5,13 +5,16 @@ namespace App\Http\Controllers\Relatorio;
 use App\Http\Controllers\Controller;
 use App\Models\AggregatedRevenue;
 use App\Models\EdiMovimento;
+use App\Models\Estabelecimento;
 use App\Models\SubUsuario;
 use App\Models\Usuario;
+use App\Services\ComissaoPagService;
+use App\Services\RoyaltyCalculadorService;
 use App\Support\ComissaoAdminSql;
 use App\Support\EdiMovimentoDetalhe;
 use App\Support\EdiStatusPagamento;
 use App\Support\InstituicaoFinanceira;
-use App\Services\RoyaltyCalculadorService;
+use App\Support\UsuarioComercial;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Request;
@@ -36,10 +39,7 @@ class RelatorioController extends Controller
 
         $this->aplicarFiltrosFaturamento($query, $request);
 
-        $usuario = $request->user();
-        if ($usuario instanceof SubUsuario) {
-            $usuario = $usuario->dono;
-        }
+        $usuario = $this->usuarioDoRelatorio($request);
 
         $totais = (clone $query)->selectRaw('
             COALESCE(SUM(total_transacoes), 0) as total_transacoes,
@@ -50,10 +50,8 @@ class RelatorioController extends Controller
         $linhas = $query->paginate(50)->withQueryString();
         $this->preencherComissoesExibidas($linhas->getCollection(), $usuario);
 
-        $ehAdmin = ! ($usuario instanceof Usuario) || $usuario->tipo === 'admin';
-        $totalRoyaltyExibido = $ehAdmin
-            ? $this->totalComissaoAdmin($request)
-            : $this->totalComissaoParceiro($request, $usuario->id);
+        $comissaoBruta = $this->totalComissaoAdmin($request);
+        $totalRoyaltyExibido = $this->comissaoParaUsuario($comissaoBruta, $usuario);
 
         $filtros = $request->only([
             'estabelecimento',
@@ -87,10 +85,7 @@ class RelatorioController extends Controller
 
     public function faturamentoDetalhe(AggregatedRevenue $linha, Request $request, RoyaltyCalculadorService $royaltyService)
     {
-        $usuario = $request->user();
-        if ($usuario instanceof SubUsuario) {
-            $usuario = $usuario->dono;
-        }
+        $usuario = $this->usuarioDoRelatorio($request);
 
         $movimentos = EdiMovimento::withoutGlobalScopes()
             ->with(['estabelecimento.plano', 'royalties.usuario'])
@@ -216,54 +211,45 @@ class RelatorioController extends Controller
         });
     }
 
+    private function usuarioDoRelatorio(Request $request): ?Usuario
+    {
+        $usuario = $request->user();
+
+        if ($usuario instanceof SubUsuario) {
+            $usuario = $usuario->dono;
+        }
+
+        if (! $usuario instanceof Usuario) {
+            $usuario = UsuarioComercial::principal();
+        }
+
+        return $usuario instanceof Usuario ? $usuario : null;
+    }
+
+    private function comissaoParaUsuario(float $comissaoBruta, ?Usuario $usuario): float
+    {
+        if (! $usuario || $usuario->tipo === 'admin') {
+            return round($comissaoBruta, 2);
+        }
+
+        return app(ComissaoPagService::class)->valorComissaoParceiro($comissaoBruta, $usuario);
+    }
+
     private function comissaoExibida(AggregatedRevenue $linha, Usuario|SubUsuario|null $usuario): float
     {
         if ($usuario instanceof SubUsuario) {
             $usuario = $usuario->dono;
         }
 
-        $ehAdmin = ! ($usuario instanceof Usuario) || $usuario->tipo === 'admin';
-
-        // Admin enxerga a comissão da plataforma (comissao_percentual da taxa do plano),
-        // que independe de cadeia comercial. Parceiro enxerga o próprio royalty repassado.
-        if ($ehAdmin) {
-            return $this->comissaoAdminLinha($linha);
-        }
-
-        $royalty = (float) DB::table('transacao_royalties')
-            ->join('edi_movimentos', 'edi_movimentos.id', '=', 'transacao_royalties.edi_movimento_id')
-            ->whereDate('edi_movimentos.data_inicial_transacao', $linha->data)
-            ->where('edi_movimentos.estabelecimento_id', $linha->estabelecimento_id)
-            ->where('edi_movimentos.instituicao_financeira', $linha->instituicao)
-            ->where('edi_movimentos.tipo_transacao', $linha->tipo_transacao)
-            ->where('edi_movimentos.status_pagamento', $linha->status_pagamento)
-            ->where('transacao_royalties.usuario_id', $usuario->id)
-            ->sum('transacao_royalties.valor_royalty');
-
-        if ($royalty > 0) {
-            return $royalty;
-        }
-
-        return $this->comissaoCadeiaLinha($linha, $usuario);
-    }
-
-    /**
-     * Base de movimentos EDI com os mesmos filtros do relatório (aplicados em
-     * edi_movimentos/estabelecimentos), para somar a comissão de todos os
-     * resultados, não apenas da página exibida.
-     */
-    private function baseMovimentosFiltrados(Request $request): \Illuminate\Database\Query\Builder
-    {
-        $query = DB::table('edi_movimentos as em')
-            ->join('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id');
-
-        $this->aplicarFiltrosMovimentosBase($query, $request);
-
-        return $query;
+        return $this->comissaoParaUsuario($this->comissaoAdminLinha($linha), $usuario instanceof Usuario ? $usuario : null);
     }
 
     private function aplicarFiltrosMovimentosBase(\Illuminate\Database\Query\Builder $query, Request $request): void
     {
+        $usuario = $this->usuarioDoRelatorio($request);
+        if ($usuario && $usuario->tipo !== 'admin') {
+            $query->whereIn('e.id', Estabelecimento::query()->select('id'));
+        }
         if ($request->filled('estabelecimento')) {
             $termo = '%'.$request->string('estabelecimento')->trim().'%';
             $query->where(function ($q) use ($termo) {
@@ -327,80 +313,6 @@ class RelatorioController extends Controller
             $this->aplicarFiltrosMovimentosBase($query, $request);
             $query->whereNotNull('e.plano_id');
         })->sum(DB::raw(ComissaoAdminSql::valor()));
-    }
-
-    private function totalComissaoParceiro(Request $request, int $usuarioId): float
-    {
-        $royalty = (float) $this->baseMovimentosFiltrados($request)
-            ->join('transacao_royalties as tr', 'tr.edi_movimento_id', '=', 'em.id')
-            ->where('tr.usuario_id', $usuarioId)
-            ->sum('tr.valor_royalty');
-
-        if ($royalty > 0) {
-            return $royalty;
-        }
-
-        return $this->totalComissaoCadeia($request, $usuarioId);
-    }
-
-    private function totalComissaoCadeia(Request $request, int $usuarioId): float
-    {
-        $query = $this->baseMovimentosFiltrados($request)
-            ->join('plano_taxas as pt', function ($join) {
-                ComissaoAdminSql::joinPlanoTaxa($join);
-            })
-            ->join('estabelecimento_royalties as er', function ($join) use ($usuarioId) {
-                $join->on('er.estabelecimento_id', '=', 'e.id')
-                    ->on('er.plano_taxa_id', '=', 'pt.id')
-                    ->where('er.usuario_id', '=', $usuarioId);
-            });
-
-        $bruta = (float) $query->sum(DB::raw('em.valor_total_transacao * er.percentual_royalty / 100'));
-
-        if ($bruta <= 0) {
-            return 0.0;
-        }
-
-        $parceiro = Usuario::query()->find($usuarioId);
-        $percentual = (float) ($parceiro?->percentual_retencao_pai ?? 0);
-
-        if ($percentual <= 0) {
-            return round($bruta, 2);
-        }
-
-        return round($bruta - round($bruta * $percentual / 100, 2), 2);
-    }
-
-    private function comissaoCadeiaLinha(AggregatedRevenue $linha, Usuario $usuario): float
-    {
-        $bruta = (float) DB::table('edi_movimentos as em')
-            ->join('estabelecimentos as e', 'e.id', '=', 'em.estabelecimento_id')
-            ->join('plano_taxas as pt', function ($join) {
-                ComissaoAdminSql::joinPlanoTaxa($join);
-            })
-            ->join('estabelecimento_royalties as er', function ($join) use ($usuario) {
-                $join->on('er.estabelecimento_id', '=', 'e.id')
-                    ->on('er.plano_taxa_id', '=', 'pt.id')
-                    ->where('er.usuario_id', '=', $usuario->id);
-            })
-            ->whereDate('em.data_inicial_transacao', $linha->data)
-            ->where('em.estabelecimento_id', $linha->estabelecimento_id)
-            ->where('em.instituicao_financeira', $linha->instituicao)
-            ->where('em.tipo_transacao', $linha->tipo_transacao)
-            ->where('em.status_pagamento', $linha->status_pagamento)
-            ->sum(DB::raw('em.valor_total_transacao * er.percentual_royalty / 100'));
-
-        if ($bruta <= 0) {
-            return 0.0;
-        }
-
-        $percentual = (float) ($usuario->percentual_retencao_pai ?? 0);
-
-        if ($percentual <= 0) {
-            return round($bruta, 2);
-        }
-
-        return round($bruta - round($bruta * $percentual / 100, 2), 2);
     }
 
     private function comissaoAdminLinha(AggregatedRevenue $linha): float
@@ -507,19 +419,9 @@ class RelatorioController extends Controller
             $usuario = $usuario->dono;
         }
 
-        $ehAdmin = ! ($usuario instanceof Usuario) || $usuario->tipo === 'admin';
-        if ($ehAdmin) {
-            $mapa = $this->comissoesAdminPorLinhas($linhas);
-        } else {
-            $mapa = $this->comissoesParceiroPorLinhas($linhas, $usuario->id);
-
-            // Preenche linhas sem royalty lançado com o cálculo da cadeia.
-            foreach ($linhas as $linha) {
-                $chave = $this->chaveLinhaFaturamento($linha);
-                if ((float) $mapa->get($chave, 0) <= 0) {
-                    $mapa->put($chave, $this->comissaoCadeiaLinha($linha, $usuario));
-                }
-            }
+        $mapa = $this->comissoesAdminPorLinhas($linhas);
+        if ($usuario instanceof Usuario && $usuario->tipo !== 'admin') {
+            $mapa = $mapa->map(fn ($valor) => $this->comissaoParaUsuario((float) $valor, $usuario));
         }
 
         $linhas->transform(function (AggregatedRevenue $linha) use ($mapa) {
@@ -563,45 +465,6 @@ class RelatorioController extends Controller
                 em.tipo_transacao,
                 em.status_pagamento,
                 SUM('.ComissaoAdminSql::valor().') as comissao
-            ')
-            ->groupBy('data', 'em.estabelecimento_id', 'em.instituicao_financeira', 'em.tipo_transacao', 'em.status_pagamento')
-            ->get()
-            ->mapWithKeys(fn ($row) => [
-                implode('|', [
-                    $row->data,
-                    $row->estabelecimento_id,
-                    $row->instituicao,
-                    $row->tipo_transacao,
-                    $row->status_pagamento,
-                ]) => (float) $row->comissao,
-            ]);
-    }
-
-    /**
-     * @return Collection<string, float>
-     */
-    private function comissoesParceiroPorLinhas(Collection $linhas, int $usuarioId): Collection
-    {
-        $estabelecimentoIds = $linhas->pluck('estabelecimento_id')->filter()->unique()->values();
-        $dataMin = $linhas->min(fn (AggregatedRevenue $linha) => $linha->data?->toDateString());
-        $dataMax = $linhas->max(fn (AggregatedRevenue $linha) => $linha->data?->toDateString());
-
-        if ($estabelecimentoIds->isEmpty() || ! $dataMin || ! $dataMax) {
-            return collect();
-        }
-
-        return DB::table('transacao_royalties as tr')
-            ->join('edi_movimentos as em', 'em.id', '=', 'tr.edi_movimento_id')
-            ->where('tr.usuario_id', $usuarioId)
-            ->whereIn('em.estabelecimento_id', $estabelecimentoIds)
-            ->whereBetween('em.data_inicial_transacao', [$dataMin, $dataMax])
-            ->selectRaw('
-                DATE(em.data_inicial_transacao) as data,
-                em.estabelecimento_id,
-                em.instituicao_financeira as instituicao,
-                em.tipo_transacao,
-                em.status_pagamento,
-                SUM(tr.valor_royalty) as comissao
             ')
             ->groupBy('data', 'em.estabelecimento_id', 'em.instituicao_financeira', 'em.tipo_transacao', 'em.status_pagamento')
             ->get()
