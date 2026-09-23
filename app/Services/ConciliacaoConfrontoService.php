@@ -840,6 +840,42 @@ class ConciliacaoConfrontoService
     }
 
     /**
+     * Transações EDI cuja chave não existe na planilha PagSeguro, para exibir na tela.
+     *
+     * @param  array<string, mixed>  $filtros
+     */
+    public function coletarTransacoesSoEdi(Conciliacao $conciliacao, array $filtros = []): Collection
+    {
+        $planilha = $this->transacoesSoEdi($conciliacao, $filtros);
+        $linhas = collect();
+
+        foreach ($planilha['linhas'] as $row) {
+            $mapa = array_combine($planilha['cabecalhos'], $row) ?: [];
+
+            $linhas->push((object) [
+                'id' => (int) ($mapa['EDI ID'] ?? 0),
+                'nsu' => (string) ($mapa['NSU'] ?? ''),
+                'codigo_autorizacao' => (string) ($mapa['Código autorização'] ?? ''),
+                'data' => (string) ($mapa['Data transação'] ?? ''),
+                'hora' => (string) ($mapa['Hora transação'] ?? ''),
+                'id_cliente' => (string) ($mapa['ID cliente'] ?? ''),
+                'estabelecimento_id' => $mapa['Estabelecimento ID'] ?? '',
+                'estabelecimento' => (string) ($mapa['Estabelecimento'] ?? ''),
+                'marketplace' => (string) ($mapa['Marketplace'] ?? ''),
+                'meio' => (string) ($mapa['Meio'] ?? ''),
+                'parcelamento' => (string) ($mapa['Parcelamento'] ?? ''),
+                'bandeira' => (string) ($mapa['Bandeira'] ?? ''),
+                'tipo' => (string) ($mapa['Tipo transação'] ?? ''),
+                'instituicao' => (string) ($mapa['Instituição financeira'] ?? ''),
+                'status' => (string) ($mapa['Status pagamento'] ?? ''),
+                'valor' => (float) ($mapa['Valor total'] ?? 0),
+            ]);
+        }
+
+        return $linhas;
+    }
+
+    /**
      * @return list<string>
      */
     private function cabecalhosExcelCompleto(): array

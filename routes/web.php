@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\ConciliacaoController;
 use App\Http\Controllers\Admin\ConfiguracaoPlataformaController;
 use App\Http\Controllers\Admin\EdiDumpController;
 use App\Http\Controllers\Admin\ConsultaCnpjTransacoesController;
+use App\Http\Controllers\Admin\EstabelecimentoPendenciasController;
 use App\Http\Controllers\Admin\EdiTransacaoRelatorioController;
 use App\Http\Controllers\Admin\EstabelecimentoTransacaoRelatorioController;
 use App\Http\Controllers\Admin\EdiPipefyController;
@@ -225,6 +226,8 @@ Route::middleware(['auth', 'usuario.ativo', 'trocar.senha', 'tenant.access'])->g
             Route::get('/edi-transacoes', [EdiTransacaoRelatorioController::class, 'index'])->name('edi-transacoes');
             Route::get('/consulta-cnpj', [ConsultaCnpjTransacoesController::class, 'index'])->name('consulta-cnpj');
             Route::get('/consulta-cnpj/excel', [ConsultaCnpjTransacoesController::class, 'excel'])->name('consulta-cnpj.excel');
+            Route::get('/estabelecimento-pendencias', [EstabelecimentoPendenciasController::class, 'index'])->name('estabelecimento-pendencias');
+            Route::get('/estabelecimento-pendencias/excel', [EstabelecimentoPendenciasController::class, 'excel'])->name('estabelecimento-pendencias.excel');
         });
         Route::prefix('admin/relatorios')->name('admin.relatorios.')->middleware('financeiro.visivel')->group(function () {
             Route::get('/estabelecimentos-transacoes', [EstabelecimentoTransacaoRelatorioController::class, 'index'])->name('estabelecimentos-transacoes');
@@ -240,6 +243,7 @@ Route::middleware(['auth', 'usuario.ativo', 'trocar.senha', 'tenant.access'])->g
             Route::get('/{conciliacao}/relatorio-sem-edi', [ConciliacaoController::class, 'relatorioSemEdi'])->name('relatorio-sem-edi');
             Route::get('/{conciliacao}/relatorio-so-edi', [ConciliacaoController::class, 'relatorioSoEdi'])->name('relatorio-so-edi');
             Route::get('/{conciliacao}/relatorio-so-edi-excel', [ConciliacaoController::class, 'relatorioSoEdiExcel'])->name('relatorio-so-edi-excel');
+            Route::get('/{conciliacao}/so-edi-transacoes', [ConciliacaoController::class, 'soEdiTransacoes'])->name('so-edi-transacoes');
             Route::get('/{conciliacao}/relatorio-completo-excel', [ConciliacaoController::class, 'relatorioCompletoExcel'])->name('relatorio-completo-excel');
             Route::get('/{conciliacao}/relatorio-marketplace-excel', [ConciliacaoController::class, 'relatorioMarketplaceExcel'])->name('relatorio-marketplace-excel');
             Route::post('/{conciliacao}/confrontar', [ConciliacaoController::class, 'confrontar'])->name('confrontar');

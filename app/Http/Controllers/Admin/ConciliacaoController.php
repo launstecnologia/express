@@ -11,6 +11,7 @@ use App\Services\ConciliacaoConfrontoService;
 use App\Services\ConciliacaoImportService;
 use App\Support\SimpleXlsxWriter;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -258,6 +259,40 @@ class ConciliacaoController extends Controller
         return response()->download($caminho, $nomeArquivo, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ])->deleteFileAfterSend(true);
+    }
+
+    public function soEdiTransacoes(Request $request, Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto)
+    {
+        @set_time_limit(900);
+
+        $filtros = $this->filtrosShow($request);
+        unset($filtros['status']);
+
+        $todas = $confronto->coletarTransacoesSoEdi($conciliacao, $filtros);
+        $porPagina = (int) $request->integer('por_pagina', 50);
+        if (! in_array($porPagina, [50, 100, 200], true)) {
+            $porPagina = 50;
+        }
+
+        $pagina = max(1, (int) $request->integer('page', 1));
+        $transacoes = new LengthAwarePaginator(
+            $todas->forPage($pagina, $porPagina)->values(),
+            $todas->count(),
+            $porPagina,
+            $pagina,
+        );
+        $transacoes->withQueryString();
+        $transacoes->withPath(route('admin.conciliacoes.so-edi-transacoes', $conciliacao));
+
+        return view('admin.conciliacoes.so-edi-transacoes', [
+            'conciliacao' => $conciliacao,
+            'transacoes' => $transacoes,
+            'totais' => [
+                'quantidade' => $todas->count(),
+                'valor' => (float) $todas->sum('valor'),
+            ],
+            'filtros' => $filtros,
+        ]);
     }
 
     public function relatorioCompletoExcel(Request $request, Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto): Response

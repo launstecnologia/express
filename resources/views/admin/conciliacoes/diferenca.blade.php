@@ -150,6 +150,10 @@
         <h3 class="text-base font-bold text-gray-800">No EDI, não encontrados na planilha</h3>
         @if ($soEdi->isNotEmpty())
             <div class="flex flex-wrap items-center gap-2">
+                <a href="{{ route('admin.conciliacoes.so-edi-transacoes', $conciliacao) }}"
+                   class="inline-flex items-center gap-1 rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-800 hover:bg-sky-100">
+                    <i class="fa-solid fa-list"></i> Exibir transações
+                </a>
                 <a href="{{ route('admin.conciliacoes.relatorio-so-edi-excel', $conciliacao) }}"
                    class="inline-flex items-center gap-1 rounded-lg border border-sky-300 bg-white px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-100">
                     <i class="fa-solid fa-file-excel"></i> Excel das transações
@@ -172,6 +176,7 @@
                     <th class="px-4 py-3 text-right">Vendas</th>
                     <th class="px-4 py-3 text-right">TPV</th>
                     <th class="px-4 py-3 text-right">Comissão</th>
+                    <th class="px-4 py-3 text-right"></th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
@@ -179,6 +184,11 @@
                     @php
                         $estab = $cliente->estabelecimento;
                         $nome = $estab?->nome_fantasia ?: $estab?->razao_social ?: $estab?->nome_completo;
+                        $urlTransacoes = route('admin.conciliacoes.so-edi-transacoes', array_filter([
+                            'conciliacao' => $conciliacao,
+                            'estabelecimento_id' => $cliente->estabelecimento_id,
+                            'id_cliente' => $cliente->id_cliente,
+                        ]));
                     @endphp
                     <tr>
                         <td class="px-4 py-3">
@@ -195,10 +205,15 @@
                         <td class="px-4 py-3 text-right">{{ number_format($cliente->vendas, 0, ',', '.') }}</td>
                         <td class="px-4 py-3 text-right">R$ {{ number_format($cliente->tpv, 2, ',', '.') }}</td>
                         <td class="px-4 py-3 text-right">R$ {{ number_format($cliente->comissao, 2, ',', '.') }}</td>
+                        <td class="px-4 py-3 text-right">
+                            <a href="{{ $urlTransacoes }}" class="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800 hover:bg-sky-100">
+                                <i class="fa-solid fa-eye"></i> Transações
+                            </a>
+                        </td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="6" class="px-4 py-8 text-center text-gray-500">Nenhum volume só no EDI.</td>
+                        <td colspan="7" class="px-4 py-8 text-center text-gray-500">Nenhum volume só no EDI.</td>
                     </tr>
                 @endforelse
             </tbody>
@@ -210,6 +225,7 @@
                         <td class="px-4 py-3 text-right">{{ number_format($soEdi->sum('vendas'), 0, ',', '.') }}</td>
                         <td class="px-4 py-3 text-right">R$ {{ number_format($soEdi->sum('tpv'), 2, ',', '.') }}</td>
                         <td class="px-4 py-3 text-right">R$ {{ number_format($soEdi->sum('comissao'), 2, ',', '.') }}</td>
+                        <td class="px-4 py-3"></td>
                     </tr>
                 </tfoot>
             @endif

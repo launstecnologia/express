@@ -135,6 +135,10 @@
                     <i class="fa-solid fa-file-excel w-5 text-center text-[15px]"></i>
                     <span>Consulta CNPJ</span>
                 </a>
+                <a href="{{ route('admin.relatorios.estabelecimento-pendencias') }}" class="{{ $navClass('admin.relatorios.estabelecimento-pendencias*') }}">
+                    <i class="fa-solid fa-clipboard-list w-5 text-center text-[15px]"></i>
+                    <span>Pendências EC</span>
+                </a>
                 <a href="{{ route('admin.edi-dump.index') }}" class="{{ $navClass('admin.edi-dump.*') }}">
                     <i class="fa-solid fa-database w-5 text-center text-[15px]"></i>
                     <span>Dump EDI</span>
