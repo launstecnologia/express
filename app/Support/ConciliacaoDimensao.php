@@ -15,7 +15,7 @@ class ConciliacaoDimensao
         $partes = [
             self::idClienteNormalizado($idCliente),
             self::meioNormalizado($meio),
-            self::normalizarParcelamento($parcelamento),
+            self::parcelamentoNormalizado($parcelamento),
             self::bandeiraNormalizada($bandeira),
             self::escrowNormalizado($escrow),
             self::solucaoNormalizada($solucao),
@@ -106,7 +106,7 @@ class ConciliacaoDimensao
 
         return match (true) {
             str_contains($arranjo, 'VISA') => 'visa',
-            str_contains($arranjo, 'MASTERCARD'), str_contains($arranjo, 'MASTER') => 'master',
+            str_contains($arranjo, 'MAESTRO'), str_contains($arranjo, 'MASTERCARD'), str_contains($arranjo, 'MASTER') => 'master',
             str_contains($arranjo, 'ELO') => 'elo',
             str_contains($arranjo, 'AMEX') => 'american express',
             str_contains($arranjo, 'PIX') => 'falha',
@@ -125,7 +125,7 @@ class ConciliacaoDimensao
         return match (true) {
             $valor === 'pix', $valor === 'falha' => 'falha',
             str_contains($valor, 'visa') => 'visa',
-            str_contains($valor, 'master') => 'master',
+            str_contains($valor, 'maestro'), str_contains($valor, 'master') => 'master',
             str_contains($valor, 'elo') => 'elo',
             str_contains($valor, 'amex'), str_contains($valor, 'american') => 'american express',
             str_contains($valor, 'banri') => 'banricompras',
@@ -220,7 +220,7 @@ class ConciliacaoDimensao
         return strtolower($valor);
     }
 
-    private static function normalizarParcelamento(?string $valor): string
+    public static function parcelamentoNormalizado(?string $valor): string
     {
         $valor = strtolower(trim((string) $valor));
 
@@ -231,6 +231,24 @@ class ConciliacaoDimensao
             '13 a 18', '13-18' => '13 a 18',
             default => $valor,
         };
+    }
+
+    /**
+     * Meio + parcelas + bandeira do mesmo cliente, sem escrow nem solução.
+     * Serve para emparelhar restos com o mesmo TPV classificados diferente.
+     */
+    public static function chaveGrupoBasico(
+        string $idCliente,
+        ?string $meio,
+        ?string $parcelamento,
+        ?string $bandeira,
+    ): string {
+        return implode('|', [
+            self::idClienteNormalizado($idCliente),
+            self::meioNormalizado($meio),
+            self::parcelamentoNormalizado($parcelamento),
+            self::bandeiraNormalizada($bandeira),
+        ]);
     }
 
     public static function idClienteNormalizado(?string $id): string

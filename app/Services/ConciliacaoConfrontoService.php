@@ -41,21 +41,17 @@ class ConciliacaoConfrontoService
         $semEdi = 0;
 
         $linhas = $conciliacao->linhas()->orderBy('id')->get();
-        $totaisPorChave = [];
+        $planilha = [];
 
         foreach ($linhas as $linha) {
             if ($linha->sem_estabelecimento) {
                 continue;
             }
 
-            $chave = $this->chaveDaLinha($linha);
-
-            if (! isset($totaisPorChave[$chave])) {
-                $totaisPorChave[$chave] = 0.0;
-            }
-
-            $totaisPorChave[$chave] += (float) $linha->tpv;
+            $this->acrescentarGrupoPlanilha($planilha, $linha);
         }
+
+        $mapaPareamento = $this->mapaPareamento($planilha, $agregados);
 
         foreach ($linhas->chunk(500) as $loteLinhas) {
             $lote = [];
@@ -77,10 +73,12 @@ class ConciliacaoConfrontoService
                 }
 
                 $chave = $this->chaveDaLinha($linha);
-                $edi = $agregados->get($chave);
-                $grupoTpv = (float) ($totaisPorChave[$chave] ?? 0.0);
+                $ediChave = $mapaPareamento[$chave] ?? null;
+                $edi = $ediChave !== null ? $agregados->get($ediChave) : null;
+                $grupoTpv = (float) ($planilha[$chave]['tpv'] ?? 0.0);
                 $tpvLinha = (float) $linha->tpv;
                 $comissaoPlanilha = (float) $linha->ms_comissao;
+                $exato = $ediChave === $chave;
 
                 $ediTpv = $edi !== null ? (float) $edi['tpv'] : 0.0;
 
@@ -102,7 +100,7 @@ class ConciliacaoConfrontoService
                 $ratioTpv = $grupoTpv > 0 ? $tpvLinha / $grupoTpv : 0.0;
                 $ediTpvLinha = round($ediTpv * $ratioTpv, 2);
                 $ediComissaoLinha = self::comissaoPlanilhaNoTpvEdi($comissaoPlanilha, $tpvLinha, $ediTpvLinha);
-                $mesmoVolume = self::tpvCompativel($grupoTpv, $ediTpv);
+                $mesmoVolume = $exato && self::tpvCompativel($grupoTpv, $ediTpv);
 
                 if ($mesmoVolume) {
                     $ok++;
@@ -926,12 +924,11 @@ class ConciliacaoConfrontoService
      */
     private function iterarRelatorioCompleto(Conciliacao $conciliacao, array $filtros): \Generator
     {
-        $tpvPlanilha = [];
+        $planilha = [];
         $query = $this->queryLinhasExcel($conciliacao, $filtros);
 
         foreach ($query->orderBy('conciliacao_linhas.id')->cursor() as $linha) {
-            $chave = $this->chaveDaLinha($linha);
-            $tpvPlanilha[$chave] = ($tpvPlanilha[$chave] ?? 0.0) + (float) $linha->tpv;
+            $this->acrescentarGrupoPlanilha($planilha, $linha);
 
             yield $this->linhaExcelCompleto(
                 status: (string) $linha->status,
@@ -965,11 +962,11 @@ class ConciliacaoConfrontoService
         $inicio = $conciliacao->referencia_mes->copy()->startOfMonth()->toDateString();
         $fim = $conciliacao->referencia_mes->copy()->endOfMonth()->toDateString();
         $agregados = $this->agregarEdi($inicio, $fim, $this->escopoEdiDosFiltros($filtros));
-        $pareadas = $this->chavesPareadas($tpvPlanilha, $agregados);
+        $ediPareados = array_fill_keys(array_values($this->mapaPareamento($planilha, $agregados)), true);
 
         $idsEdi = [];
         foreach ($agregados as $chave => $edi) {
-            if (isset($pareadas[$chave])) {
+            if (isset($ediPareados[$chave])) {
                 continue;
             }
             if (filled($edi['estabelecimento_id'] ?? null)) {
@@ -986,7 +983,7 @@ class ConciliacaoConfrontoService
                 ->keyBy('id');
 
         foreach ($agregados as $chave => $edi) {
-            if (isset($pareadas[$chave])) {
+            if (isset($ediPareados[$chave])) {
                 continue;
             }
 
@@ -1354,15 +1351,14 @@ class ConciliacaoConfrontoService
         unset($filtrosPlanilha['status']);
 
         foreach ($this->queryLinhas($conciliacao, $filtrosPlanilha)->orderBy('conciliacao_linhas.id')->cursor() as $linha) {
-            $chave = $this->chaveDaLinha($linha);
-            $planilha[$chave] = ($planilha[$chave] ?? 0.0) + (float) $linha->tpv;
+            $this->acrescentarGrupoPlanilha($planilha, $linha);
         }
 
-        $pareadas = $this->chavesPareadas($planilha, $agregados);
+        $ediPareados = array_fill_keys(array_values($this->mapaPareamento($planilha, $agregados)), true);
         $naoPareadas = [];
 
         foreach ($agregados as $chave => $edi) {
-            if (! isset($pareadas[$chave])) {
+            if (! isset($ediPareados[$chave])) {
                 $naoPareadas[$chave] = true;
             }
         }
@@ -1442,27 +1438,29 @@ class ConciliacaoConfrontoService
             ->orderByDesc('tpv')
             ->get();
 
-        $tpvPorChave = [];
+        $planilha = [];
         foreach ($linhasPs as $linha) {
-            $chave = $this->chaveDaLinha($linha);
-            $tpvPorChave[$chave] = ($tpvPorChave[$chave] ?? 0.0) + (float) $linha->tpv;
+            $this->acrescentarGrupoPlanilha($planilha, $linha);
         }
 
         $inicio = $conciliacao->referencia_mes?->copy()->startOfMonth()->toDateString();
         $fim = $conciliacao->referencia_mes?->copy()->endOfMonth()->toDateString();
         $ediGrupos = ($inicio && $fim) ? $this->agregarEdi($inicio, $fim, $tokens) : collect();
-        $chavesPareadas = $this->chavesPareadas($tpvPorChave, $ediGrupos);
+        $mapaPareamento = $this->mapaPareamento($planilha, $ediGrupos);
+        $ediPareados = array_fill_keys(array_values($mapaPareamento), true);
 
         $linhas = collect();
 
         foreach ($linhasPs as $linha) {
             $chave = $this->chaveDaLinha($linha);
-            $pareada = isset($chavesPareadas[$chave]);
+            $ediChave = $mapaPareamento[$chave] ?? null;
+            $pareada = $ediChave !== null;
             $detalhe = $this->linhaDetalheDaPlanilha(
                 $linha,
                 $pareada,
-                $pareada ? $ediGrupos->get($chave) : null,
-                (float) ($tpvPorChave[$chave] ?? 0.0),
+                $pareada ? $ediGrupos->get($ediChave) : null,
+                (float) ($planilha[$chave]['tpv'] ?? 0.0),
+                $pareada && $ediChave === $chave,
             );
             $linhas->push($detalhe);
             $this->acumularTotaisDetalhe(
@@ -1476,7 +1474,7 @@ class ConciliacaoConfrontoService
         }
 
         foreach ($ediGrupos as $chave => $edi) {
-            if (isset($chavesPareadas[$chave])) {
+            if (isset($ediPareados[$chave])) {
                 continue;
             }
 
@@ -1565,28 +1563,111 @@ class ConciliacaoConfrontoService
     }
 
     /**
-     * @param  array<string, float>  $tpvPlanilha
-     * @param  Collection<string, array{tpv: float}>  $agregados
-     * @return array<string, true>
+     * @param  array<string, array{tpv: float, id_cliente: string, meio: string, parcelamento: string, bandeira: string}>  $planilha
      */
-    private function chavesPareadas(array $tpvPlanilha, Collection $agregados): array
+    private function acrescentarGrupoPlanilha(array &$planilha, ConciliacaoLinha $linha): void
     {
-        $pareadas = [];
+        $chave = $this->chaveDaLinha($linha);
 
-        foreach ($agregados as $chave => $edi) {
-            if (isset($tpvPlanilha[$chave])) {
-                $pareadas[$chave] = true;
-            }
+        if (! isset($planilha[$chave])) {
+            $planilha[$chave] = [
+                'tpv' => 0.0,
+                'id_cliente' => (string) $linha->id_cliente,
+                'meio' => (string) $linha->meio_pagamento,
+                'parcelamento' => (string) $linha->parcelamento_agrupado,
+                'bandeira' => (string) $linha->bandeira,
+            ];
         }
 
-        return $pareadas;
+        $planilha[$chave]['tpv'] += (float) $linha->tpv;
     }
 
     /**
-     * @param  array{tpv: float, qtd: int, comissao: float}|null  $edi
+     * Emparelha planilha e EDI: primeiro a chave completa; depois restos com o
+     * mesmo cliente, meio, parcelas, bandeira e TPV (escrow/solução podem diferir).
+     *
+     * @param  array<string, array{tpv: float, id_cliente: string, meio: string, parcelamento: string, bandeira: string}>  $planilha
+     * @param  Collection<string, array{tpv: float, id_cliente: string, meio: string, parcelamento: string, bandeira: string}>  $agregados
+     * @return array<string, string>  chave da planilha => chave do EDI
      */
-    private function linhaDetalheDaPlanilha(ConciliacaoLinha $linha, bool $pareada, ?array $edi = null, float $grupoTpv = 0.0): object
+    private function mapaPareamento(array $planilha, Collection $agregados): array
     {
+        $mapa = [];
+        $ediUsados = [];
+
+        foreach ($planilha as $chave => $ps) {
+            if ($agregados->has($chave)) {
+                $mapa[$chave] = $chave;
+                $ediUsados[$chave] = true;
+            }
+        }
+
+        foreach ($planilha as $chave => $ps) {
+            if (isset($mapa[$chave])) {
+                continue;
+            }
+
+            $candidato = null;
+
+            foreach ($agregados as $ediChave => $edi) {
+                if (isset($ediUsados[$ediChave])) {
+                    continue;
+                }
+
+                if (! $this->mesmoGrupoBasico($ps, $edi)) {
+                    continue;
+                }
+
+                if (! self::tpvCompativel((float) $ps['tpv'], (float) $edi['tpv'])) {
+                    continue;
+                }
+
+                if ($candidato !== null) {
+                    $candidato = null;
+                    break;
+                }
+
+                $candidato = (string) $ediChave;
+            }
+
+            if ($candidato !== null) {
+                $mapa[$chave] = $candidato;
+                $ediUsados[$candidato] = true;
+            }
+        }
+
+        return $mapa;
+    }
+
+    /**
+     * @param  array{id_cliente?: string, meio?: string, parcelamento?: string, bandeira?: string}  $ps
+     * @param  array{id_cliente?: string, meio?: string, parcelamento?: string, bandeira?: string}  $edi
+     */
+    private function mesmoGrupoBasico(array $ps, array $edi): bool
+    {
+        return ConciliacaoDimensao::chaveGrupoBasico(
+            (string) ($ps['id_cliente'] ?? ''),
+            $ps['meio'] ?? null,
+            $ps['parcelamento'] ?? null,
+            $ps['bandeira'] ?? null,
+        ) === ConciliacaoDimensao::chaveGrupoBasico(
+            (string) ($edi['id_cliente'] ?? ''),
+            $edi['meio'] ?? null,
+            $edi['parcelamento'] ?? null,
+            $edi['bandeira'] ?? null,
+        );
+    }
+
+    /**
+     * @param  array{tpv: float, qtd: int, comissao: float, bandeira?: string, escrow?: string, solucao?: string}|null  $edi
+     */
+    private function linhaDetalheDaPlanilha(
+        ConciliacaoLinha $linha,
+        bool $pareada,
+        ?array $edi = null,
+        float $grupoTpv = 0.0,
+        bool $exato = true,
+    ): object {
         $status = $linha->status;
         $tpvLinha = (float) $linha->tpv;
         $comissaoPlanilha = (float) $linha->ms_comissao;
@@ -1607,7 +1688,7 @@ class ConciliacaoConfrontoService
             $ediQtd = (int) round(((int) ($edi['qtd'] ?? 0)) * $ratioTpv);
             $diffTpv = round($tpvLinha - $ediTpv, 2);
             $diffComissao = round($comissaoPlanilha - $ediComissao, 4);
-            $status = self::tpvCompativel($grupoTpv, (float) $edi['tpv']) ? 'ok' : 'divergente';
+            $status = ($exato && self::tpvCompativel($grupoTpv, (float) $edi['tpv'])) ? 'ok' : 'divergente';
         }
 
         return (object) [
@@ -1615,10 +1696,10 @@ class ConciliacaoConfrontoService
             'id_cliente' => $linha->id_cliente,
             'estabelecimento_id' => $linha->estabelecimento_id,
             'meio_pagamento' => $linha->meio_pagamento,
-            'bandeira' => $linha->bandeira,
+            'bandeira' => $this->combinarDimensao((string) $linha->bandeira, (string) ($edi['bandeira'] ?? ''), $exato && $pareada),
             'parcelamento_agrupado' => $linha->parcelamento_agrupado,
-            'escrow' => $linha->escrow,
-            'solucao' => $linha->solucao,
+            'escrow' => $this->combinarDimensao((string) $linha->escrow, (string) ($edi['escrow'] ?? ''), $exato && $pareada),
+            'solucao' => $this->combinarDimensao((string) $linha->solucao, (string) ($edi['solucao'] ?? ''), $exato && $pareada),
             'tpv' => $tpvLinha,
             'edi_tpv' => $ediTpv,
             'ms_comissao' => $comissaoPlanilha,
@@ -1628,6 +1709,22 @@ class ConciliacaoConfrontoService
             'edi_qtd' => $ediQtd,
             'estabelecimento' => $linha->estabelecimento,
         ];
+    }
+
+    private function combinarDimensao(string $planilha, string $edi, bool $exato): string
+    {
+        $planilha = trim($planilha);
+        $edi = trim($edi);
+
+        if ($exato || $edi === '' || $planilha === $edi) {
+            return $planilha;
+        }
+
+        if ($planilha === '') {
+            return $edi;
+        }
+
+        return $planilha.' → '.$edi;
     }
 
     /**
@@ -1670,24 +1767,18 @@ class ConciliacaoConfrontoService
         unset($filtrosPlanilha['status']);
 
         foreach ($this->queryLinhas($conciliacao, $filtrosPlanilha)->orderBy('conciliacao_linhas.id')->cursor() as $linha) {
-            $chave = $this->chaveDaLinha($linha);
-
-            if (! isset($planilha[$chave])) {
-                $planilha[$chave] = 0.0;
-            }
-
-            $planilha[$chave] += (float) $linha->tpv;
+            $this->acrescentarGrupoPlanilha($planilha, $linha);
         }
 
         $soEdi = [];
         $extraEdi = [];
 
-        $chavesPareadas = $this->chavesPareadas($planilha, $agregados);
+        $ediPareados = array_fill_keys(array_values($this->mapaPareamento($planilha, $agregados)), true);
 
         foreach ($agregados as $chave => $edi) {
             $grupoChave = (string) ($edi['estabelecimento_id'] ?: $edi['id_cliente']);
 
-            if (isset($chavesPareadas[$chave])) {
+            if (isset($ediPareados[$chave])) {
                 continue;
             }
 

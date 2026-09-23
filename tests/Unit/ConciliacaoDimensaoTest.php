@@ -91,6 +91,23 @@ class ConciliacaoDimensaoTest extends TestCase
         $this->assertSame($primeira, $segunda);
     }
 
+    public function test_maestro_normaliza_para_master(): void
+    {
+        $this->assertSame('master', ConciliacaoDimensao::bandeiraNormalizada('maestro'));
+        $this->assertSame(
+            ConciliacaoDimensao::chaveConfrontoDaLinha('806172719', 'debito', 'a vista', 'master', '0', 'mobile'),
+            ConciliacaoDimensao::chaveConfrontoDaLinha('806172719', 'debito', 'a vista', 'maestro', '0', 'mobile'),
+        );
+    }
+
+    public function test_grupo_basico_ignora_escrow_e_solucao(): void
+    {
+        $this->assertSame(
+            ConciliacaoDimensao::chaveGrupoBasico('806172719', 'credito', '2 a 6', 'visa'),
+            ConciliacaoDimensao::chaveGrupoBasico('806172719', 'CREDITO', '2-6', 'Visa'),
+        );
+    }
+
     public function test_chave_unica_venda_separa_estorno_com_valor_diferente(): void
     {
         $venda = ConciliacaoDimensao::chaveUnicaVenda(10, 25745.55, 'ABC123', null, null, 107, '2026-08-07');
