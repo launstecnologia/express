@@ -624,16 +624,14 @@ class ConciliacaoConfrontoService
             $planilhas[] = [
                 'nome' => 'Resumo',
                 'autoFiltro' => true,
+                'congelar' => 1,
+                'larguras' => [36, 18, 16, 12, 16, 16, 10],
                 'linhas' => $this->linhasResumoMarketplace($grupos, $comissao),
             ];
         }
 
         foreach ($grupos as $grupo) {
-            $planilhas[] = [
-                'nome' => $grupo['nome_aba'],
-                'autoFiltro' => false,
-                'linhas' => $this->linhasAbaMarketplace($grupo, $comissao),
-            ];
+            $planilhas[] = $comissao->planilhaAbaDspay($grupo);
         }
 
         return [
@@ -835,39 +833,6 @@ class ConciliacaoConfrontoService
                 $calc['royalty'],
                 $calc['liquida'],
                 count($grupo['ecs']),
-            ];
-        }
-
-        return $linhas;
-    }
-
-    /**
-     * @param  array<string, mixed>  $grupo
-     * @return list<list<string|int|float|null>>
-     */
-    private function linhasAbaMarketplace(array $grupo, ComissaoPagService $comissao): array
-    {
-        $calc = $comissao->comissaoLiquidaParceiro((float) $grupo['markup'], $grupo['marketplace']);
-
-        $linhas = [
-            [], [], [], [], [], [],
-            ['', '', '', '', '', '', 'PAGSEGURO'],
-            [], [],
-            ['', '', '', '', '', '', 'FATURAMENTO', 'MARKUP', $calc['percentual'] > 0 ? round($calc['percentual']).'%' : '0%', 'COMISSÃO'],
-            ['', '', '', '', '', '', round((float) $grupo['faturamento'], 2), round((float) $grupo['markup'], 2), $calc['royalty'], $calc['liquida']],
-            ['', 'ID', 'MARKETPLACE', 'REPRESENTANTE', 'CPF/CNPJ-EC', 'NOME EC', 'FATURAMENTO', 'MARKUP'],
-        ];
-
-        foreach ($grupo['ecs'] as $ec) {
-            $linhas[] = [
-                '',
-                $ec['id'],
-                $ec['marketplace'] !== '' ? $ec['marketplace'] : $grupo['nome'],
-                $ec['representante'],
-                $ec['documento'],
-                $ec['nome'],
-                $ec['faturamento'] ?: '',
-                $ec['markup'] ?: '',
             ];
         }
 

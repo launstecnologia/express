@@ -561,16 +561,14 @@ class ComissaoPagService
             $planilhas[] = [
                 'nome' => 'Resumo',
                 'autoFiltro' => true,
+                'congelar' => 1,
+                'larguras' => [36, 18, 16, 12, 16, 16, 10],
                 'linhas' => $this->linhasResumoExcel($grupos),
             ];
         }
 
         foreach ($grupos as $grupo) {
-            $planilhas[] = [
-                'nome' => $grupo['nome_aba'],
-                'autoFiltro' => false,
-                'linhas' => $this->linhasAbaExcel($grupo),
-            ];
+            $planilhas[] = $this->planilhaAbaDspay($grupo);
         }
 
         return [
@@ -747,20 +745,46 @@ class ComissaoPagService
 
     /**
      * @param  array<string, mixed>  $grupo
-     * @return list<list<string|int|float|null>>
+     * @return array<string, mixed>
+     */
+    public function planilhaAbaDspay(array $grupo): array
+    {
+        return [
+            'nome' => $grupo['nome_aba'],
+            'autoFiltro' => true,
+            'autoFiltroInicio' => 'B12',
+            'autoFiltroColunaFim' => 'H',
+            'congelar' => 12,
+            'mesclar' => ['G7:J7'],
+            'larguras' => [4, 16, 40, 30, 22, 48, 18, 16, 12, 16],
+            'linhas' => $this->linhasAbaExcel($grupo),
+        ];
+    }
+
+    private function celulaExcel(mixed $valor, string $estilo): array
+    {
+        return ['v' => $valor, 'estilo' => $estilo];
+    }
+
+    /**
+     * @param  array<string, mixed>  $grupo
+     * @return list<list<mixed>>
      */
     private function linhasAbaExcel(array $grupo): array
     {
         $calc = $this->comissaoLiquidaParceiro((float) $grupo['markup'], $grupo['marketplace']);
         $pct = $calc['percentual'] > 0 ? round($calc['percentual']).'%' : '0%';
+        $titulo = $this->celulaExcel('PAGSEGURO', 'titulo');
+        $rotulo = fn (string $texto) => $this->celulaExcel($texto, 'cabecalho');
+        $total = fn (float $valor) => $this->celulaExcel($valor, 'numero_negrito');
 
         $linhas = [
             [], [], [], [], [], [],
-            ['', '', '', '', '', '', 'PAGSEGURO'],
+            ['', '', '', '', '', '', $titulo],
             [], [],
-            ['', '', '', '', '', '', 'FATURAMENTO', 'MARKUP', $pct, 'COMISSÃO'],
-            ['', '', '', '', '', '', (float) $grupo['faturamento'], (float) $grupo['markup'], $calc['royalty'], $calc['liquida']],
-            ['', 'ID', 'MARKETPLACE', 'REPRESENTANTE', 'CPF/CNPJ-EC', 'NOME EC', 'FATURAMENTO', 'MARKUP'],
+            ['', '', '', '', '', '', $rotulo('FATURAMENTO'), $rotulo('MARKUP'), $rotulo($pct), $rotulo('COMISSÃO')],
+            ['', '', '', '', '', '', $total((float) $grupo['faturamento']), $total((float) $grupo['markup']), $total((float) $calc['royalty']), $total((float) $calc['liquida'])],
+            ['', $rotulo('ID'), $rotulo('MARKETPLACE'), $rotulo('REPRESENTANTE'), $rotulo('CPF/CNPJ-EC'), $rotulo('NOME EC'), $rotulo('FATURAMENTO'), $rotulo('MARKUP')],
         ];
 
         foreach ($grupo['ecs'] as $ec) {
@@ -771,8 +795,8 @@ class ComissaoPagService
                 $ec['representante'],
                 $ec['documento'],
                 $ec['nome'],
-                $ec['faturamento'] > 0 ? $ec['faturamento'] : '',
-                $ec['markup'] > 0 ? $ec['markup'] : '',
+                $ec['faturamento'] > 0 ? $this->celulaExcel((float) $ec['faturamento'], 'numero') : '',
+                $ec['markup'] > 0 ? $this->celulaExcel((float) $ec['markup'], 'numero') : '',
             ];
         }
 

@@ -44,7 +44,17 @@ class SimpleXlsxWriter
     }
 
     /**
-     * @param  list<array{nome: string, linhas: iterable<int, list<string|int|float|null>>, cabecalhos?: list<string>, autoFiltro?: bool}>  $planilhas
+     * @param  list<array{
+     *     nome: string,
+     *     linhas: iterable<int, list<mixed>>,
+     *     cabecalhos?: list<string>,
+     *     autoFiltro?: bool,
+     *     autoFiltroInicio?: string,
+     *     autoFiltroColunaFim?: string,
+     *     larguras?: list<float|int>,
+     *     congelar?: int,
+     *     mesclar?: list<string>
+     * }>  $planilhas
      */
     public static function fileSheets(array $planilhas): string
     {
@@ -76,7 +86,14 @@ class SimpleXlsxWriter
 
                 $cabecalhos = array_values($planilha['cabecalhos'] ?? []);
                 $autoFiltro = (bool) ($planilha['autoFiltro'] ?? $cabecalhos !== []);
-                self::escreverSheet($sheetTmp, $cabecalhos, $planilha['linhas'] ?? [], $autoFiltro);
+                self::escreverSheet($sheetTmp, $cabecalhos, $planilha['linhas'] ?? [], [
+                    'autoFiltro' => $autoFiltro,
+                    'autoFiltroInicio' => $planilha['autoFiltroInicio'] ?? null,
+                    'autoFiltroColunaFim' => $planilha['autoFiltroColunaFim'] ?? null,
+                    'larguras' => $planilha['larguras'] ?? [],
+                    'congelar' => (int) ($planilha['congelar'] ?? 0),
+                    'mesclar' => $planilha['mesclar'] ?? [],
+                ]);
 
                 $numero = $indice + 1;
                 $nomes[] = self::nomeUnico((string) ($planilha['nome'] ?? 'Planilha '.$numero), $nomes);
@@ -85,6 +102,7 @@ class SimpleXlsxWriter
 
             $zip->addFromString('[Content_Types].xml', self::contentTypes(count($nomes)));
             $zip->addFromString('_rels/.rels', self::rels());
+            $zip->addFromString('xl/styles.xml', self::styles());
             $zip->addFromString('xl/workbook.xml', self::workbookSheets($nomes));
             $zip->addFromString('xl/_rels/workbook.xml.rels', self::workbookRelsSheets(count($nomes)));
             $zip->close();
@@ -106,23 +124,44 @@ class SimpleXlsxWriter
 
     /**
      * @param  list<string>  $cabecalhos
-     * @param  iterable<int, list<string|int|float|null>>  $linhas
+     * @param  iterable<int, list<mixed>>  $linhas
+     * @param  array{
+     *     autoFiltro?: bool,
+     *     autoFiltroInicio?: ?string,
+     *     autoFiltroColunaFim?: ?string,
+     *     larguras?: list<float|int>,
+     *     congelar?: int,
+     *     mesclar?: list<string>
+     * }  $opcoes
      */
-    private static function escreverSheet(string $caminho, array $cabecalhos, iterable $linhas, bool $autoFiltro = true): void
+    private static function escreverSheet(string $caminho, array $cabecalhos, iterable $linhas, array $opcoes = []): void
     {
         $handle = fopen($caminho, 'wb');
         if ($handle === false) {
             throw new RuntimeException('Não foi possível gravar a planilha Excel.');
         }
 
+        $autoFiltro = (bool) ($opcoes['autoFiltro'] ?? true);
+        $larguras = array_values($opcoes['larguras'] ?? []);
+        $congelar = (int) ($opcoes['congelar'] ?? 0);
+        $mesclar = array_values($opcoes['mesclar'] ?? []);
+
         fwrite($handle, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
-        fwrite($handle, '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>');
+        fwrite($handle, '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">');
+        fwrite($handle, self::xmlSheetViews($congelar));
+        fwrite($handle, '<sheetFormatPr defaultRowHeight="22" customHeight="1"/>');
+        fwrite($handle, self::xmlCols($larguras));
+        fwrite($handle, '<sheetData>');
 
         $numero = 0;
-        $largura = max(1, count($cabecalhos));
+        $largura = max(1, count($cabecalhos), count($larguras));
         if ($cabecalhos !== []) {
             $numero = 1;
-            fwrite($handle, self::xmlLinha(1, $cabecalhos));
+            $celulas = [];
+            foreach ($cabecalhos as $valor) {
+                $celulas[] = is_array($valor) ? $valor : ['v' => $valor, 'estilo' => 'cabecalho'];
+            }
+            fwrite($handle, self::xmlLinha(1, $celulas));
         }
 
         foreach ($linhas as $linha) {
@@ -134,15 +173,73 @@ class SimpleXlsxWriter
 
         $numero = max(1, $numero);
         fwrite($handle, '</sheetData>');
+
         if ($autoFiltro) {
-            fwrite($handle, '<autoFilter ref="A1:'.self::coluna($largura).$numero.'"/>');
+            fwrite($handle, '<autoFilter ref="'.self::refFiltro($opcoes, $largura, $numero).'"/>');
+        }
+        if ($mesclar !== []) {
+            fwrite($handle, '<mergeCells count="'.count($mesclar).'">');
+            foreach ($mesclar as $ref) {
+                fwrite($handle, '<mergeCell ref="'.htmlspecialchars((string) $ref, ENT_XML1 | ENT_QUOTES, 'UTF-8').'"/>');
+            }
+            fwrite($handle, '</mergeCells>');
         }
         fwrite($handle, '</worksheet>');
         fclose($handle);
     }
 
     /**
-     * @param  list<string|int|float|null>  $valores
+     * @param  array<string, mixed>  $opcoes
+     */
+    private static function refFiltro(array $opcoes, int $largura, int $ultimaLinha): string
+    {
+        $inicio = trim((string) ($opcoes['autoFiltroInicio'] ?? ''));
+        if ($inicio === '') {
+            return 'A1:'.self::coluna($largura).$ultimaLinha;
+        }
+
+        $colunaFim = strtoupper(trim((string) ($opcoes['autoFiltroColunaFim'] ?? '')));
+        if ($colunaFim === '') {
+            $colunaFim = self::coluna($largura);
+        }
+
+        return $inicio.':'.$colunaFim.$ultimaLinha;
+    }
+
+    /**
+     * @param  list<float|int>  $larguras
+     */
+    private static function xmlCols(array $larguras): string
+    {
+        if ($larguras === []) {
+            return '';
+        }
+
+        $cols = [];
+        foreach ($larguras as $indice => $largura) {
+            $n = $indice + 1;
+            $cols[] = '<col min="'.$n.'" max="'.$n.'" width="'.htmlspecialchars((string) $largura, ENT_XML1 | ENT_QUOTES, 'UTF-8').'" customWidth="1"/>';
+        }
+
+        return '<cols>'.implode('', $cols).'</cols>';
+    }
+
+    private static function xmlSheetViews(int $congelar): string
+    {
+        if ($congelar < 1) {
+            return '<sheetViews><sheetView workbookViewId="0"/></sheetViews>';
+        }
+
+        $abaixo = $congelar + 1;
+
+        return '<sheetViews><sheetView workbookViewId="0">'
+            .'<pane ySplit="'.$congelar.'" topLeftCell="A'.$abaixo.'" activePane="bottomLeft" state="frozen"/>'
+            .'<selection pane="bottomLeft" activeCell="A'.$abaixo.'" sqref="A'.$abaixo.'"/>'
+            .'</sheetView></sheetViews>';
+    }
+
+    /**
+     * @param  list<mixed>  $valores
      */
     private static function xmlLinha(int $numero, array $valores): string
     {
@@ -152,22 +249,79 @@ class SimpleXlsxWriter
             $celulas[] = self::xmlCelula($ref, $valor);
         }
 
-        return '<row r="'.$numero.'">'.implode('', $celulas).'</row>';
+        return '<row r="'.$numero.'" ht="22" customHeight="1">'.implode('', $celulas).'</row>';
     }
 
     private static function xmlCelula(string $ref, mixed $valor): string
     {
+        $estilo = null;
+        if (is_array($valor) && array_key_exists('v', $valor)) {
+            $estilo = isset($valor['estilo']) ? (string) $valor['estilo'] : null;
+            $valor = $valor['v'];
+        }
+
+        $estiloId = self::idEstilo($estilo, $valor);
+        $attrEstilo = ' s="'.$estiloId.'"';
+
         if ($valor === null || $valor === '') {
-            return '<c r="'.$ref.'"/>';
+            return '<c r="'.$ref.'"'.$attrEstilo.'/>';
         }
 
         if (is_int($valor) || is_float($valor)) {
-            return '<c r="'.$ref.'"><v>'.$valor.'</v></c>';
+            $numero = is_float($valor) ? sprintf('%.2f', $valor) : (string) $valor;
+
+            return '<c r="'.$ref.'"'.$attrEstilo.'><v>'.$numero.'</v></c>';
         }
 
         $texto = htmlspecialchars((string) $valor, ENT_XML1 | ENT_QUOTES, 'UTF-8');
 
-        return '<c r="'.$ref.'" t="inlineStr"><is><t xml:space="preserve">'.$texto.'</t></is></c>';
+        return '<c r="'.$ref.'"'.$attrEstilo.' t="inlineStr"><is><t xml:space="preserve">'.$texto.'</t></is></c>';
+    }
+
+    private static function idEstilo(?string $nome, mixed $valor): int
+    {
+        return match ($nome) {
+            'cabecalho' => 1,
+            'numero' => 2,
+            'numero_negrito' => 3,
+            'titulo' => 4,
+            default => is_float($valor) ? 2 : 0,
+        };
+    }
+
+    private static function styles(): string
+    {
+        return <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <numFmts count="1">
+    <numFmt numFmtId="164" formatCode="#,##0.00"/>
+  </numFmts>
+  <fonts count="3">
+    <font><sz val="11"/><name val="Calibri"/><family val="2"/></font>
+    <font><b/><sz val="11"/><name val="Calibri"/><family val="2"/></font>
+    <font><b/><sz val="16"/><name val="Calibri"/><family val="2"/></font>
+  </fonts>
+  <fills count="3">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFD6E3F0"/><bgColor rgb="FFD6E3F0"/></patternFill></fill>
+  </fills>
+  <borders count="1">
+    <border><left/><right/><top/><bottom/><diagonal/></border>
+  </borders>
+  <cellStyleXfs count="1">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
+  </cellStyleXfs>
+  <cellXfs count="5">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="false"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="false"/></xf>
+    <xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="right" vertical="center" wrapText="false"/></xf>
+    <xf numFmtId="164" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1"><alignment horizontal="right" vertical="center" wrapText="false"/></xf>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="false"/></xf>
+  </cellXfs>
+</styleSheet>
+XML;
     }
 
     private static function coluna(int $indice): string
@@ -186,6 +340,7 @@ class SimpleXlsxWriter
     {
         $overrides = [
             '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
+            '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>',
         ];
         for ($i = 1; $i <= $qtdPlanilhas; $i++) {
             $overrides[] = '<Override PartName="/xl/worksheets/sheet'.$i.'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
@@ -228,7 +383,9 @@ XML;
 
     private static function workbookRelsSheets(int $qtdPlanilhas): string
     {
-        $rels = [];
+        $rels = [
+            '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>',
+        ];
         for ($i = 1; $i <= $qtdPlanilhas; $i++) {
             $rels[] = '<Relationship Id="rId'.$i.'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'.$i.'.xml"/>';
         }
