@@ -42,7 +42,9 @@ class ComissaoPagService
 
         return Conciliacao::query()
             ->whereDate('referencia_mes', $referenciaMes->copy()->startOfMonth()->toDateString())
-            ->latest('id')
+            ->withCount('linhas')
+            ->orderByDesc('linhas_count')
+            ->orderByDesc('id')
             ->first();
     }
 

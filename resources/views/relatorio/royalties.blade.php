@@ -47,6 +47,12 @@
     @endif
 </form>
 
+@if ($errors->has('excel'))
+    <div class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        {{ $errors->first('excel') }}
+    </div>
+@endif
+
 <div class="mb-6 grid grid-cols-1 gap-3 {{ ($ehAdmin || $mostrarReferencia) ? 'md:grid-cols-3' : 'md:grid-cols-2' }}">
     <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <p class="mb-1 text-xs font-medium text-gray-500">Faturamento{{ $periodoRotulo ? " · {$periodoRotulo}" : '' }}</p>
@@ -111,7 +117,7 @@
             </p>
         </div>
         @if ($conciliacao)
-            <a href="{{ url('/comissoes/excel') }}?{{ http_build_query(array_filter(['mes' => $mesSelecionado, 'visao' => $visao])) }}" class="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm hover:bg-gray-50">
+            <a href="{{ url('/comissoes') }}?{{ http_build_query(array_filter(['mes' => $mesSelecionado, 'visao' => $visao, 'export' => 1])) }}" class="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm hover:bg-gray-50">
                 Exportar todos
             </a>
         @endif
@@ -198,10 +204,11 @@
                                     $excelParams = array_filter([
                                         'mes' => $mesSelecionado,
                                         'visao' => $visao,
+                                        'export' => 1,
                                         ($visaoRevenda ? 'revenda_id' : 'marketplace_id') => $linha->parceiro_id,
                                     ]);
                                 @endphp
-                                <a href="{{ url('/comissoes/excel') }}?{{ http_build_query($excelParams) }}" class="inline-flex items-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700">
+                                <a href="{{ url('/comissoes') }}?{{ http_build_query($excelParams) }}" class="inline-flex items-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-700">
                                     <i class="fa-solid fa-file-excel mr-1.5"></i> Excel
                                 </a>
                             @else

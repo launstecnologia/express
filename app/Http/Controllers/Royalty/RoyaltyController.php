@@ -21,6 +21,10 @@ class RoyaltyController extends Controller
 
     public function index(Request $request)
     {
+        if ($request->boolean('export')) {
+            return $this->excel($request, app(ConciliacaoConfrontoService::class));
+        }
+
         $ctx = $this->contexto($request);
         $visao = $ctx['visao'];
         $referenciaMes = $ctx['referenciaMes'];
@@ -71,14 +75,28 @@ class RoyaltyController extends Controller
 
         $ctx = $this->contexto($request);
         $referenciaMes = $ctx['referenciaMes'];
-        abort_if($referenciaMes === null, 404, 'Nenhuma planilha PagSeguro neste mês.');
+        $paramsLista = array_filter([
+            'mes' => $referenciaMes?->format('Y-m'),
+            'visao' => $ctx['visao'],
+        ]);
+
+        if ($referenciaMes === null) {
+            return redirect()->route('comissoes.index', $paramsLista)
+                ->withErrors(['excel' => 'Nenhuma planilha PagSeguro neste mês.']);
+        }
 
         $conciliacao = $this->comissaoPag->conciliacaoDoMes($referenciaMes);
-        abort_if($conciliacao === null, 404, 'Nenhuma planilha PagSeguro importada para o mês.');
+        if ($conciliacao === null) {
+            return redirect()->route('comissoes.index', $paramsLista)
+                ->withErrors(['excel' => 'Nenhuma planilha PagSeguro importada para o mês.']);
+        }
 
         $filtros = $this->filtrosExcel($request, $ctx);
         $planilha = $confronto->planilhaPorMarketplace($conciliacao, $filtros);
-        abort_if($planilha['planilhas'] === [], 404, 'Nenhum estabelecimento com volume neste mês.');
+        if ($planilha['planilhas'] === []) {
+            return redirect()->route('comissoes.index', $paramsLista)
+                ->withErrors(['excel' => 'Não foi possível montar a planilha deste marketplace.']);
+        }
 
         $caminho = SimpleXlsxWriter::fileSheets($planilha['planilhas']);
 
