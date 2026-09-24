@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Conciliacao;
 use App\Models\Estabelecimento;
 use App\Models\Usuario;
+use App\Support\DocumentoBrasil;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -534,5 +535,273 @@ class ComissaoPagService
         }
 
         return Carbon::createFromFormat('Y-m', $valor)->startOfMonth();
+    }
+
+    /**
+     * Excel no formato DSPAY a partir da planilha PagSeguro importada
+     * (TPV = faturamento, MS Comissão = markup).
+     *
+     * @param  array{marketplace_id?: int, revenda_id?: int}  $filtros
+     * @return array{nome_arquivo: string, planilhas: list<array{nome: string, linhas: list<list<string|int|float|null>>, autoFiltro: bool}>}
+     */
+    public function planilhaExcel(Carbon $referenciaMes, array $filtros = []): array
+    {
+        $grupos = $this->agruparEcsParaExcel($referenciaMes, $filtros);
+
+        if ($grupos === []) {
+            return [
+                'nome_arquivo' => 'comissoes.xlsx',
+                'planilhas' => [],
+            ];
+        }
+
+        $planilhas = [];
+
+        if (count($grupos) > 1) {
+            $planilhas[] = [
+                'nome' => 'Resumo',
+                'autoFiltro' => true,
+                'linhas' => $this->linhasResumoExcel($grupos),
+            ];
+        }
+
+        foreach ($grupos as $grupo) {
+            $planilhas[] = [
+                'nome' => $grupo['nome_aba'],
+                'autoFiltro' => false,
+                'linhas' => $this->linhasAbaExcel($grupo),
+            ];
+        }
+
+        return [
+            'nome_arquivo' => $this->nomeArquivoExcel($referenciaMes, $grupos),
+            'planilhas' => $planilhas,
+        ];
+    }
+
+    /**
+     * @param  array{marketplace_id?: int, revenda_id?: int}  $filtros
+     * @return list<array{
+     *     marketplace_id: int,
+     *     marketplace: ?Usuario,
+     *     nome: string,
+     *     nome_aba: string,
+     *     faturamento: float,
+     *     markup: float,
+     *     ecs: list<array{id: string, marketplace: string, representante: string, documento: string, nome: string, faturamento: float, markup: float}>
+     * }>
+     */
+    private function agruparEcsParaExcel(Carbon $referenciaMes, array $filtros): array
+    {
+        $marketplaceId = filled($filtros['marketplace_id'] ?? null) ? (int) $filtros['marketplace_id'] : null;
+        $revendaId = filled($filtros['revenda_id'] ?? null) ? (int) $filtros['revenda_id'] : null;
+
+        $estabelecimentoIds = Estabelecimento::query()
+            ->when($marketplaceId, fn ($q) => $q->where('marketplace_id', $marketplaceId))
+            ->when($revendaId, fn ($q) => $q->where('revenda_id', $revendaId))
+            ->pluck('id');
+
+        if ($estabelecimentoIds->isEmpty()) {
+            return [];
+        }
+
+        $volumes = DB::table('conciliacao_linhas as cl')
+            ->join('conciliacoes as c', 'c.id', '=', 'cl.conciliacao_id')
+            ->join('estabelecimentos as e', 'e.id', '=', 'cl.estabelecimento_id')
+            ->where('cl.sem_estabelecimento', false)
+            ->whereNotNull('e.marketplace_id')
+            ->whereIn('e.id', $estabelecimentoIds)
+            ->when($marketplaceId, fn ($q) => $q->where('e.marketplace_id', $marketplaceId))
+            ->when($revendaId, fn ($q) => $q->where('e.revenda_id', $revendaId))
+            ->whereDate('c.referencia_mes', $referenciaMes->copy()->startOfMonth()->toDateString())
+            ->groupBy('cl.estabelecimento_id', 'e.marketplace_id')
+            ->selectRaw('cl.estabelecimento_id, e.marketplace_id, SUM(cl.tpv) as faturamento, SUM(cl.ms_comissao) as markup')
+            ->get();
+
+        if ($volumes->isEmpty()) {
+            return [];
+        }
+
+        $ecIds = $volumes->pluck('estabelecimento_id')->unique()->all();
+        $mktIds = $volumes->pluck('marketplace_id')->unique()->filter()->all();
+
+        $cadastrados = Estabelecimento::query()
+            ->with(['marketplace', 'revenda'])
+            ->whereIn('marketplace_id', $mktIds)
+            ->when($revendaId, fn ($q) => $q->where('revenda_id', $revendaId))
+            ->get([
+                'id', 'marketplace_id', 'revenda_id', 'token_pagseguro',
+                'nome_fantasia', 'razao_social', 'nome_completo', 'cnpj', 'cpf',
+            ])
+            ->keyBy('id');
+
+        $porEc = $volumes->keyBy('estabelecimento_id');
+        $grupos = [];
+
+        foreach ($cadastrados as $estab) {
+            $mktId = (int) $estab->marketplace_id;
+            $vol = $porEc->get($estab->id);
+            $faturamento = round((float) ($vol->faturamento ?? 0), 2);
+            $markup = round((float) ($vol->markup ?? 0), 2);
+
+            if (! isset($grupos[$mktId])) {
+                $marketplace = $estab->marketplace;
+                $nome = $marketplace?->nomeExibicao() ?: 'Marketplace';
+                $grupos[$mktId] = [
+                    'marketplace_id' => $mktId,
+                    'marketplace' => $marketplace,
+                    'nome' => $nome,
+                    'nome_aba' => $this->nomeAbaExcel($nome),
+                    'faturamento' => 0.0,
+                    'markup' => 0.0,
+                    'ecs' => [],
+                ];
+            }
+
+            $grupos[$mktId]['faturamento'] += $faturamento;
+            $grupos[$mktId]['markup'] += $markup;
+            $grupos[$mktId]['ecs'][] = [
+                'id' => (string) ($estab->token_pagseguro ?: $estab->id),
+                'marketplace' => $grupos[$mktId]['nome'],
+                'representante' => $estab->revenda?->nomeExibicao() ?: '',
+                'documento' => DocumentoBrasil::formatarCpfOuCnpj((string) ($estab->cnpj ?: $estab->cpf ?: '')),
+                'nome' => (string) ($estab->nome_fantasia ?: $estab->razao_social ?: $estab->nome_completo ?: 'Estabelecimento #'.$estab->id),
+                'faturamento' => $faturamento,
+                'markup' => $markup,
+            ];
+        }
+
+        foreach ($ecIds as $ecId) {
+            if ($cadastrados->has($ecId)) {
+                continue;
+            }
+
+            $vol = $porEc->get($ecId);
+            if (! $vol) {
+                continue;
+            }
+
+            $mktId = (int) $vol->marketplace_id;
+            if (! isset($grupos[$mktId])) {
+                continue;
+            }
+
+            $faturamento = round((float) $vol->faturamento, 2);
+            $markup = round((float) $vol->markup, 2);
+            $grupos[$mktId]['faturamento'] += $faturamento;
+            $grupos[$mktId]['markup'] += $markup;
+            $grupos[$mktId]['ecs'][] = [
+                'id' => (string) $ecId,
+                'marketplace' => $grupos[$mktId]['nome'],
+                'representante' => '',
+                'documento' => '',
+                'nome' => 'Estabelecimento #'.$ecId,
+                'faturamento' => $faturamento,
+                'markup' => $markup,
+            ];
+        }
+
+        foreach ($grupos as &$grupo) {
+            $grupo['faturamento'] = round($grupo['faturamento'], 2);
+            $grupo['markup'] = round($grupo['markup'], 2);
+            usort($grupo['ecs'], fn ($a, $b) => strcasecmp($a['nome'], $b['nome']));
+        }
+        unset($grupo);
+
+        uasort($grupos, fn (array $a, array $b) => $b['faturamento'] <=> $a['faturamento']);
+
+        return array_values($grupos);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $grupos
+     * @return list<list<string|int|float|null>>
+     */
+    private function linhasResumoExcel(array $grupos): array
+    {
+        $linhas = [[
+            'Marketplace',
+            'Faturamento',
+            'Markup',
+            'Retenção',
+            'Royalty',
+            'Comissão',
+            'ECs',
+        ]];
+
+        foreach ($grupos as $grupo) {
+            $calc = $this->comissaoLiquidaParceiro((float) $grupo['markup'], $grupo['marketplace']);
+            $linhas[] = [
+                $grupo['nome'],
+                (float) $grupo['faturamento'],
+                (float) $grupo['markup'],
+                $calc['percentual'] > 0 ? round($calc['percentual'] / 100, 4) : 0,
+                $calc['royalty'],
+                $calc['liquida'],
+                count($grupo['ecs']),
+            ];
+        }
+
+        return $linhas;
+    }
+
+    /**
+     * @param  array<string, mixed>  $grupo
+     * @return list<list<string|int|float|null>>
+     */
+    private function linhasAbaExcel(array $grupo): array
+    {
+        $calc = $this->comissaoLiquidaParceiro((float) $grupo['markup'], $grupo['marketplace']);
+        $pct = $calc['percentual'] > 0 ? round($calc['percentual']).'%' : '0%';
+
+        $linhas = [
+            [], [], [], [], [], [],
+            ['', '', '', '', '', '', 'PAGSEGURO'],
+            [], [],
+            ['', '', '', '', '', '', 'FATURAMENTO', 'MARKUP', $pct, 'COMISSÃO'],
+            ['', '', '', '', '', '', (float) $grupo['faturamento'], (float) $grupo['markup'], $calc['royalty'], $calc['liquida']],
+            ['', 'ID', 'MARKETPLACE', 'REPRESENTANTE', 'CPF/CNPJ-EC', 'NOME EC', 'FATURAMENTO', 'MARKUP'],
+        ];
+
+        foreach ($grupo['ecs'] as $ec) {
+            $linhas[] = [
+                '',
+                $ec['id'],
+                $ec['marketplace'] !== '' ? $ec['marketplace'] : $grupo['nome'],
+                $ec['representante'],
+                $ec['documento'],
+                $ec['nome'],
+                $ec['faturamento'] > 0 ? $ec['faturamento'] : '',
+                $ec['markup'] > 0 ? $ec['markup'] : '',
+            ];
+        }
+
+        return $linhas;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $grupos
+     */
+    private function nomeArquivoExcel(Carbon $referenciaMes, array $grupos): string
+    {
+        $mes = $referenciaMes->format('Y-m');
+
+        if (count($grupos) !== 1) {
+            return "comissoes-marketplaces-{$mes}.xlsx";
+        }
+
+        $grupo = $grupos[0];
+        $calc = $this->comissaoLiquidaParceiro((float) $grupo['markup'], $grupo['marketplace']);
+        $nome = preg_replace('/[^\pL\pN\s\-\.]+/u', '', (string) $grupo['nome']) ?: 'marketplace';
+        $valor = number_format((float) $calc['liquida'], 2, ',', '.');
+
+        return trim($nome).' R$ '.$valor.'.xlsx';
+    }
+
+    private function nomeAbaExcel(string $nome): string
+    {
+        $limpo = trim(preg_replace('/[:\\\\\\/\\?\\*\\[\\]]+/', ' ', $nome) ?? $nome);
+
+        return mb_substr($limpo !== '' ? $limpo : 'Marketplace', 0, 31);
     }
 }

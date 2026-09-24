@@ -851,10 +851,10 @@ class ConciliacaoConfrontoService
 
         $linhas = [
             [], [], [], [], [], [],
-            ['', '', '', 'PAGSEGURO'],
+            ['', '', '', '', '', '', 'PAGSEGURO'],
             [], [],
-            ['', '', 'FATURAMENTO', 'MARKUP', $calc['percentual'] > 0 ? round($calc['percentual']).'%' : '0%', 'COMISSÃO'],
-            ['', '', (float) $grupo['faturamento'], (float) $grupo['markup'], $calc['royalty'], $calc['liquida']],
+            ['', '', '', '', '', '', 'FATURAMENTO', 'MARKUP', $calc['percentual'] > 0 ? round($calc['percentual']).'%' : '0%', 'COMISSÃO'],
+            ['', '', '', '', '', '', round((float) $grupo['faturamento'], 2), round((float) $grupo['markup'], 2), $calc['royalty'], $calc['liquida']],
             ['', 'ID', 'MARKETPLACE', 'REPRESENTANTE', 'CPF/CNPJ-EC', 'NOME EC', 'FATURAMENTO', 'MARKUP'],
         ];
 

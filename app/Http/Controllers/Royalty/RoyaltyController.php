@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\SubUsuario;
 use App\Models\Usuario;
 use App\Services\ComissaoPagService;
-use App\Services\ConciliacaoConfrontoService;
 use App\Support\SimpleXlsxWriter;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -22,7 +21,7 @@ class RoyaltyController extends Controller
     public function index(Request $request)
     {
         if ($request->boolean('export')) {
-            return $this->excel($request, app(ConciliacaoConfrontoService::class));
+            return $this->excel($request);
         }
 
         $ctx = $this->contexto($request);
@@ -69,7 +68,7 @@ class RoyaltyController extends Controller
         ]);
     }
 
-    public function excel(Request $request, ConciliacaoConfrontoService $confronto): Response
+    public function excel(Request $request): Response
     {
         @set_time_limit(900);
 
@@ -85,14 +84,8 @@ class RoyaltyController extends Controller
                 ->withErrors(['excel' => 'Nenhuma planilha PagSeguro neste mês.']);
         }
 
-        $conciliacao = $this->comissaoPag->conciliacaoDoMes($referenciaMes);
-        if ($conciliacao === null) {
-            return redirect()->route('comissoes.index', $paramsLista)
-                ->withErrors(['excel' => 'Nenhuma planilha PagSeguro importada para o mês.']);
-        }
-
         $filtros = $this->filtrosExcel($request, $ctx);
-        $planilha = $confronto->planilhaPorMarketplace($conciliacao, $filtros);
+        $planilha = $this->comissaoPag->planilhaExcel($referenciaMes, $filtros);
         if ($planilha['planilhas'] === []) {
             return redirect()->route('comissoes.index', $paramsLista)
                 ->withErrors(['excel' => 'Não foi possível montar a planilha deste marketplace.']);
