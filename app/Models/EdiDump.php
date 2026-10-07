@@ -19,6 +19,8 @@ class EdiDump extends Model
         'total_paginas',
         'total_itens_api',
         'total_linhas',
+        'total_valor',
+        'linhas_unicas',
         'iniciado_por_id',
         'iniciado_por_nome',
         'erro',
@@ -30,6 +32,7 @@ class EdiDump extends Model
     {
         return [
             'competencia' => 'date',
+            'total_valor' => 'decimal:2',
             'iniciado_em' => 'datetime',
             'finalizado_em' => 'datetime',
         ];

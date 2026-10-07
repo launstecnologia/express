@@ -53,6 +53,7 @@
 <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
     <div class="border-b border-gray-100 px-5 py-3 dark:border-gray-800">
         <h2 class="text-sm font-semibold text-gray-800 dark:text-gray-100">Execuções</h2>
+        <p class="mt-1 text-xs text-gray-500">Valor EDI soma cada venda uma vez. Parcela da mesma compra não entra de novo.</p>
     </div>
     <div class="overflow-x-auto">
         <table class="w-full text-sm">
@@ -65,6 +66,7 @@
                     <th class="px-4 py-3 text-right">Páginas</th>
                     <th class="px-4 py-3 text-right">Itens API</th>
                     <th class="px-4 py-3 text-right">Linhas</th>
+                    <th class="px-4 py-3 text-right" title="Soma das vendas únicas. Parcelas da mesma compra entram uma vez.">Valor EDI</th>
                     <th class="px-4 py-3"></th>
                 </tr>
             </thead>
@@ -80,13 +82,20 @@
                         <td class="px-4 py-3 text-right tabular-nums font-semibold">{{ number_format($item->total_paginas, 0, ',', '.') }}</td>
                         <td class="px-4 py-3 text-right tabular-nums">{{ number_format($item->total_itens_api, 0, ',', '.') }}</td>
                         <td class="px-4 py-3 text-right tabular-nums">{{ number_format($item->total_linhas, 0, ',', '.') }}</td>
+                        <td class="px-4 py-3 text-right tabular-nums font-semibold text-gray-800 dark:text-gray-100">
+                            @if ($item->total_valor !== null)
+                                R$ {{ number_format((float) $item->total_valor, 2, ',', '.') }}
+                            @else
+                                —
+                            @endif
+                        </td>
                         <td class="px-4 py-3 text-right">
                             <a href="{{ route('admin.edi-dump.show', $item) }}" class="text-xs font-semibold text-blue-600 hover:underline">Abrir</a>
                         </td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="8" class="px-4 py-10 text-center text-gray-500">Nenhum dump ainda.</td>
+                        <td colspan="9" class="px-4 py-10 text-center text-gray-500">Nenhum dump ainda.</td>
                     </tr>
                 @endforelse
             </tbody>

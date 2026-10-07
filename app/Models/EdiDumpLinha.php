@@ -17,6 +17,8 @@ class EdiDumpLinha extends Model
         'estabelecimento',
         'estabelecimento_id',
         'movimento_api_codigo',
+        'codigo_transacao',
+        'tx_id',
         'data_inicial_transacao',
         'tipo_transacao',
         'status_pagamento',

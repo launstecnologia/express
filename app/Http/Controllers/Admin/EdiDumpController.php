@@ -12,12 +12,16 @@ use Illuminate\Http\Request;
 
 class EdiDumpController extends Controller
 {
-    public function index()
+    public function index(EdiDumpService $service)
     {
         $dumps = EdiDump::query()
             ->latest('id')
             ->limit(30)
             ->get();
+
+        foreach ($dumps as $dump) {
+            $service->garantirValorUnico($dump);
+        }
 
         return view('admin.edi-dump.index', [
             'dumps' => $dumps,
@@ -66,6 +70,7 @@ class EdiDumpController extends Controller
 
     public function show(Request $request, EdiDump $dump, EdiDumpService $service)
     {
+        $service->garantirValorUnico($dump);
         $dump->load(['dias' => fn ($q) => $q->orderBy('data')]);
 
         $id = trim((string) $request->input('id'));

@@ -11,6 +11,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -56,7 +57,20 @@ class EdiDumpService
     }
 
     /**
-     * @return array{quantidade: int, valor_total: float, valor_liquido: float, estabelecimento_id: ?int, estabelecimento: ?string, nome: ?string}
+     * Preenche a chave da venda nos dumps antigos e grava o total sem repetir a mesma compra.
+     */
+    public function garantirValorUnico(EdiDump $dump): void
+    {
+        if ($dump->total_valor !== null || $dump->emAndamento() || (int) $dump->total_linhas === 0) {
+            return;
+        }
+
+        $this->preencherChavesDeVenda($dump);
+        $this->atualizarTotais($dump);
+    }
+
+    /**
+     * @return array{quantidade: int, linhas: int, valor_total: float, valor_liquido: float, estabelecimento_id: ?int, estabelecimento: ?string, nome: ?string}
      */
     public function somarPorId(EdiDump $dump, string $id): array
     {
@@ -72,11 +86,17 @@ class EdiDumpService
             $query->where('estabelecimento', $id);
         }
 
-        $totais = (clone $query)->selectRaw('
-            COUNT(*) as quantidade,
-            COALESCE(SUM(valor_total_transacao), 0) as valor_total,
-            COALESCE(SUM(valor_liquido_transacao), 0) as valor_liquido
-        ')->first();
+        $linhas = (clone $query)->count();
+        $chave = $this->sqlChaveVenda();
+        $totais = DB::query()
+            ->fromSub(
+                (clone $query)
+                    ->selectRaw('MIN(ROUND(COALESCE(valor_total_transacao, 0), 2)) as valor_total, MIN(ROUND(COALESCE(valor_liquido_transacao, 0), 2)) as valor_liquido')
+                    ->groupByRaw($chave),
+                'unicos'
+            )
+            ->selectRaw('COUNT(*) as quantidade, COALESCE(SUM(valor_total), 0) as valor_total, COALESCE(SUM(valor_liquido), 0) as valor_liquido')
+            ->first();
 
         $estabelecimento = null;
         if (ctype_digit($id)) {
@@ -90,6 +110,7 @@ class EdiDumpService
 
         return [
             'quantidade' => (int) ($totais->quantidade ?? 0),
+            'linhas' => $linhas,
             'valor_total' => (float) ($totais->valor_total ?? 0),
             'valor_liquido' => (float) ($totais->valor_liquido ?? 0),
             'estabelecimento_id' => $estabelecimento?->id,
@@ -216,6 +237,8 @@ class EdiDumpService
                 'estabelecimento' => $codigoPagbank !== '' ? $codigoPagbank : null,
                 'estabelecimento_id' => $codigoPagbank !== '' ? ($tokens[$codigoPagbank] ?? null) : null,
                 'movimento_api_codigo' => Arr::get($registro, 'movimento_api_codigo') ?: null,
+                'codigo_transacao' => $this->texto(Arr::get($registro, 'codigo_transacao'), 64),
+                'tx_id' => $this->texto(Arr::get($registro, 'tx_id'), 128),
                 'data_inicial_transacao' => filled($dataTx) ? $dataTx : null,
                 'tipo_transacao' => Arr::get($registro, 'tipo_transacao') ?: null,
                 'status_pagamento' => Arr::get($registro, 'status_pagamento') ?: null,
@@ -249,6 +272,8 @@ class EdiDumpService
             ")
             ->first();
 
+        $valorUnico = $this->valorUnico($dump);
+
         $dump->update([
             'total_dias' => (int) ($resumo->total_dias ?? 0),
             'dias_ok' => (int) ($resumo->dias_ok ?? 0),
@@ -257,8 +282,82 @@ class EdiDumpService
             'total_paginas' => (int) ($resumo->total_paginas ?? 0),
             'total_itens_api' => (int) ($resumo->total_itens_api ?? 0),
             'total_linhas' => (int) ($resumo->total_linhas ?? 0),
+            'total_valor' => $valorUnico['total_valor'],
+            'linhas_unicas' => $valorUnico['linhas_unicas'],
         ]);
         $dump->refresh();
+    }
+
+    /**
+     * @return array{total_valor: float, linhas_unicas: int}
+     */
+    private function valorUnico(EdiDump $dump): array
+    {
+        $resumo = DB::query()
+            ->fromSub(
+                EdiDumpLinha::query()
+                    ->where('dump_id', $dump->id)
+                    ->selectRaw('MIN(ROUND(COALESCE(valor_total_transacao, 0), 2)) as valor')
+                    ->groupByRaw($this->sqlChaveVenda()),
+                'unicos'
+            )
+            ->selectRaw('COUNT(*) as linhas_unicas, COALESCE(SUM(valor), 0) as total_valor')
+            ->first();
+
+        return [
+            'total_valor' => round((float) ($resumo->total_valor ?? 0), 2),
+            'linhas_unicas' => (int) ($resumo->linhas_unicas ?? 0),
+        ];
+    }
+
+    private function preencherChavesDeVenda(EdiDump $dump): void
+    {
+        DB::update('
+            UPDATE edi_dump_linhas AS d
+            INNER JOIN edi_movimentos AS m ON m.movimento_api_codigo = d.movimento_api_codigo
+            SET d.codigo_transacao = NULLIF(TRIM(m.codigo_transacao), \'\'),
+                d.tx_id = NULLIF(TRIM(m.tx_id), \'\')
+            WHERE d.dump_id = ?
+              AND d.movimento_api_codigo IS NOT NULL
+              AND d.movimento_api_codigo <> \'\'
+              AND (d.codigo_transacao IS NULL OR d.codigo_transacao = \'\')
+        ', [$dump->id]);
+    }
+
+    /**
+     * Mesma regra da conciliação: código da transação, PIX ou NSU contam uma vez.
+     * Parcelas da mesma compra repetem o código e o valor total.
+     */
+    private function sqlChaveVenda(string $tabela = 'edi_dump_linhas'): string
+    {
+        $valor = "CAST(ROUND(COALESCE({$tabela}.valor_total_transacao, 0), 2) AS CHAR)";
+        $dia = "IFNULL(DATE_FORMAT({$tabela}.data_inicial_transacao, '%Y-%m-%d'), '')";
+
+        return "CASE
+            WHEN NULLIF(TRIM({$tabela}.codigo_transacao), '') IS NOT NULL
+                THEN CONCAT('tx:', TRIM({$tabela}.codigo_transacao), '|', {$valor})
+            WHEN NULLIF(TRIM({$tabela}.tx_id), '') IS NOT NULL
+                THEN CONCAT('pix:', TRIM({$tabela}.tx_id), '|', {$valor})
+            WHEN NULLIF(TRIM({$tabela}.nsu), '') IS NOT NULL
+                AND ({$tabela}.estabelecimento_id IS NOT NULL OR NULLIF(TRIM({$tabela}.estabelecimento), '') IS NOT NULL)
+                THEN CONCAT(
+                    'nsu:',
+                    COALESCE(CAST({$tabela}.estabelecimento_id AS CHAR), TRIM({$tabela}.estabelecimento)),
+                    '|', {$dia}, '|', TRIM({$tabela}.nsu), '|', {$valor}
+                )
+            ELSE CONCAT('id:', {$tabela}.id)
+        END";
+    }
+
+    private function texto(mixed $valor, int $limite): ?string
+    {
+        $valor = trim((string) $valor);
+
+        if ($valor === '') {
+            return null;
+        }
+
+        return mb_substr($valor, 0, $limite);
     }
 
     /**
