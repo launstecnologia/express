@@ -19,12 +19,17 @@ class EdiDumpController extends Controller
             ->limit(30)
             ->get();
 
+        $movimentosPorMes = [];
+
         foreach ($dumps as $dump) {
             $service->garantirValorUnico($dump);
+            $mes = $dump->competencia->toDateString();
+            $movimentosPorMes[$mes] ??= $service->totalMovimentosDoMes($dump->competencia);
         }
 
         return view('admin.edi-dump.index', [
             'dumps' => $dumps,
+            'movimentosPorMes' => $movimentosPorMes,
             'ediConfigurado' => PlatformSettings::ediConfigurado(),
             'mesNumero' => (int) now()->format('n'),
             'ano' => (int) now()->format('Y'),
@@ -82,6 +87,7 @@ class EdiDumpController extends Controller
 
         return view('admin.edi-dump.show', [
             'dump' => $dump,
+            'movimentos' => $service->totalMovimentosDoMes($dump->competencia),
             'idBusca' => $id,
             'soma' => $soma,
         ]);

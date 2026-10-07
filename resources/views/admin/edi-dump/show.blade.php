@@ -34,24 +34,35 @@
     <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ $dump->erro }}</div>
 @endif
 
-<div class="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-    <p class="text-xs font-medium text-gray-500">Valor EDI</p>
-    <p class="mt-1 text-3xl font-bold tabular-nums text-gray-800 dark:text-gray-100">
-        @if ($dump->total_valor !== null)
-            R$ {{ number_format((float) $dump->total_valor, 2, ',', '.') }}
-        @else
-            —
-        @endif
-    </p>
-    <p class="mt-1 text-xs text-gray-500">
-        @if ($dump->linhas_unicas !== null)
-            {{ number_format($dump->linhas_unicas, 0, ',', '.') }} vendas únicas
-            de {{ number_format($dump->total_linhas, 0, ',', '.') }} linhas gravadas.
-        @elseif ($dump->emAndamento())
-            O total entra conforme os dias terminam.
-        @endif
-        A mesma compra entra uma vez: parcela repetida não soma de novo.
-    </p>
+<div class="mb-6 grid gap-3 md:grid-cols-2">
+    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+        <p class="text-xs font-medium text-gray-500">edi_dump_linhas</p>
+        <p class="mt-1 text-3xl font-bold tabular-nums text-gray-800 dark:text-gray-100">
+            @if ($dump->total_valor !== null)
+                R$ {{ number_format((float) $dump->total_valor, 2, ',', '.') }}
+            @else
+                —
+            @endif
+        </p>
+        <p class="mt-1 text-xs text-gray-500">
+            @if ($dump->linhas_unicas !== null)
+                {{ number_format($dump->linhas_unicas, 0, ',', '.') }} vendas únicas
+                · {{ number_format($dump->total_linhas, 0, ',', '.') }} linhas nesta puxada
+            @elseif ($dump->emAndamento())
+                O total entra conforme os dias terminam.
+            @endif
+        </p>
+    </div>
+    <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+        <p class="text-xs font-medium text-gray-500">edi_movimentos</p>
+        <p class="mt-1 text-3xl font-bold tabular-nums text-gray-800 dark:text-gray-100">
+            R$ {{ number_format($movimentos['total_valor'], 2, ',', '.') }}
+        </p>
+        <p class="mt-1 text-xs text-gray-500">
+            {{ number_format($movimentos['linhas_unicas'], 0, ',', '.') }} vendas únicas
+            · {{ number_format($movimentos['linhas'], 0, ',', '.') }} linhas com data da transação neste mês
+        </p>
+    </div>
 </div>
 
 <div class="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">

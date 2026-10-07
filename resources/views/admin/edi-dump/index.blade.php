@@ -53,7 +53,7 @@
 <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
     <div class="border-b border-gray-100 px-5 py-3 dark:border-gray-800">
         <h2 class="text-sm font-semibold text-gray-800 dark:text-gray-100">Execuções</h2>
-        <p class="mt-1 text-xs text-gray-500">Valor EDI soma cada venda uma vez. Parcela da mesma compra não entra de novo.</p>
+        <p class="mt-1 text-xs text-gray-500">Os dois valores contam cada venda uma vez. O dump é a puxada. O banco é a tabela edi_movimentos do mesmo mês.</p>
     </div>
     <div class="overflow-x-auto">
         <table class="w-full text-sm">
@@ -65,8 +65,10 @@
                     <th class="px-4 py-3 text-right">Dias</th>
                     <th class="px-4 py-3 text-right">Páginas</th>
                     <th class="px-4 py-3 text-right">Itens API</th>
-                    <th class="px-4 py-3 text-right">Linhas</th>
-                    <th class="px-4 py-3 text-right" title="Soma das vendas únicas. Parcelas da mesma compra entram uma vez.">Valor EDI</th>
+                    <th class="px-4 py-3 text-right">Linhas dump</th>
+                    <th class="px-4 py-3 text-right" title="edi_dump_linhas. Cada venda uma vez.">Valor dump</th>
+                    <th class="px-4 py-3 text-right" title="edi_movimentos com data da transação neste mês.">Linhas banco</th>
+                    <th class="px-4 py-3 text-right" title="edi_movimentos. Cada venda uma vez.">Valor banco</th>
                     <th class="px-4 py-3"></th>
                 </tr>
             </thead>
@@ -81,10 +83,23 @@
                         <td class="px-4 py-3 text-right tabular-nums">{{ $item->dias_ok }}/{{ $item->total_dias }}</td>
                         <td class="px-4 py-3 text-right tabular-nums font-semibold">{{ number_format($item->total_paginas, 0, ',', '.') }}</td>
                         <td class="px-4 py-3 text-right tabular-nums">{{ number_format($item->total_itens_api, 0, ',', '.') }}</td>
+                        @php
+                            $banco = $movimentosPorMes[$item->competencia->toDateString()] ?? null;
+                        @endphp
                         <td class="px-4 py-3 text-right tabular-nums">{{ number_format($item->total_linhas, 0, ',', '.') }}</td>
                         <td class="px-4 py-3 text-right tabular-nums font-semibold text-gray-800 dark:text-gray-100">
                             @if ($item->total_valor !== null)
                                 R$ {{ number_format((float) $item->total_valor, 2, ',', '.') }}
+                                <p class="text-[11px] font-normal text-gray-500">{{ number_format((int) $item->linhas_unicas, 0, ',', '.') }} vendas</p>
+                            @else
+                                —
+                            @endif
+                        </td>
+                        <td class="px-4 py-3 text-right tabular-nums">{{ $banco ? number_format($banco['linhas'], 0, ',', '.') : '—' }}</td>
+                        <td class="px-4 py-3 text-right tabular-nums font-semibold text-gray-800 dark:text-gray-100">
+                            @if ($banco)
+                                R$ {{ number_format($banco['total_valor'], 2, ',', '.') }}
+                                <p class="text-[11px] font-normal text-gray-500">{{ number_format($banco['linhas_unicas'], 0, ',', '.') }} vendas</p>
                             @else
                                 —
                             @endif
@@ -95,7 +110,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="9" class="px-4 py-10 text-center text-gray-500">Nenhum dump ainda.</td>
+                        <td colspan="11" class="px-4 py-10 text-center text-gray-500">Nenhum dump ainda.</td>
                     </tr>
                 @endforelse
             </tbody>

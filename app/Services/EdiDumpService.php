@@ -57,6 +57,39 @@ class EdiDumpService
     }
 
     /**
+     * Total do mês em edi_movimentos, com a mesma regra de não repetir a venda.
+     *
+     * @return array{linhas: int, linhas_unicas: int, total_valor: float}
+     */
+    public function totalMovimentosDoMes(CarbonInterface $competencia): array
+    {
+        $inicio = $competencia->copy()->startOfMonth()->toDateString();
+        $fim = $competencia->copy()->endOfMonth()->toDateString();
+        $chave = $this->sqlChaveVenda('edi_movimentos');
+
+        $linhas = (int) DB::table('edi_movimentos')
+            ->whereBetween('data_inicial_transacao', [$inicio, $fim])
+            ->count();
+
+        $resumo = DB::query()
+            ->fromSub(
+                DB::table('edi_movimentos')
+                    ->whereBetween('data_inicial_transacao', [$inicio, $fim])
+                    ->selectRaw('MIN(ROUND(COALESCE(valor_total_transacao, 0), 2)) as valor')
+                    ->groupByRaw($chave),
+                'unicos'
+            )
+            ->selectRaw('COUNT(*) as linhas_unicas, COALESCE(SUM(valor), 0) as total_valor')
+            ->first();
+
+        return [
+            'linhas' => $linhas,
+            'linhas_unicas' => (int) ($resumo->linhas_unicas ?? 0),
+            'total_valor' => round((float) ($resumo->total_valor ?? 0), 2),
+        ];
+    }
+
+    /**
      * Preenche a chave da venda nos dumps antigos e grava o total sem repetir a mesma compra.
      */
     public function garantirValorUnico(EdiDump $dump): void
