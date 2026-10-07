@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\Conciliacao;
+use App\Models\ConciliacaoLinha;
 use App\Models\EdiDump;
 use App\Models\EdiDumpDia;
 use App\Models\EdiDumpLinha;
@@ -86,6 +88,152 @@ class EdiDumpService
             'linhas' => $linhas,
             'linhas_unicas' => (int) ($resumo->linhas_unicas ?? 0),
             'total_valor' => round((float) ($resumo->total_valor ?? 0), 2),
+        ];
+    }
+
+    public function dumpConcluidoDoMes(CarbonInterface $competencia): ?EdiDump
+    {
+        return EdiDump::query()
+            ->whereDate('competencia', $competencia->copy()->startOfMonth()->toDateString())
+            ->where('status', 'concluido')
+            ->latest('id')
+            ->first();
+    }
+
+    /**
+     * Clientes da planilha cujo TPV passa o EDI da puxada. É o que falta confirmar com a PagSeguro.
+     *
+     * @return array{dump: ?EdiDump, linhas: \Illuminate\Support\Collection<int, object>}
+     */
+    public function planilhaAusenteNoDump(Conciliacao $conciliacao): array
+    {
+        $vazio = ['dump' => null, 'linhas' => collect()];
+
+        if (! $conciliacao->referencia_mes) {
+            return $vazio;
+        }
+
+        $dump = $this->dumpConcluidoDoMes($conciliacao->referencia_mes);
+
+        if (! $dump) {
+            return $vazio;
+        }
+
+        $vendas = DB::query()
+            ->fromSub(
+                EdiDumpLinha::query()
+                    ->where('dump_id', $dump->id)
+                    ->selectRaw('MAX(estabelecimento_id) as estabelecimento_id, MAX(estabelecimento) as estabelecimento, MIN(ROUND(COALESCE(valor_total_transacao, 0), 2)) as valor')
+                    ->groupByRaw($this->sqlChaveVenda()),
+                'unicos'
+            )
+            ->get();
+
+        $porId = [];
+        $porToken = [];
+        $tokenParaId = [];
+        $tokenDoId = [];
+
+        foreach ($vendas as $venda) {
+            $valor = (float) $venda->valor;
+            $id = $venda->estabelecimento_id ? (int) $venda->estabelecimento_id : null;
+            $token = strtolower(trim((string) $venda->estabelecimento));
+
+            if ($id) {
+                $porId[$id] = ($porId[$id] ?? 0) + $valor;
+                if ($token !== '') {
+                    $tokenParaId[$token] = $id;
+                    $tokenDoId[$id] = $token;
+                }
+            } elseif ($token !== '') {
+                $porToken[$token] = ($porToken[$token] ?? 0) + $valor;
+            }
+        }
+
+        $planilha = ConciliacaoLinha::query()
+            ->where('conciliacao_id', $conciliacao->id)
+            ->get(['id_cliente', 'estabelecimento_id', 'tpv', 'ms_comissao']);
+
+        $idsPlanilha = $planilha->pluck('estabelecimento_id')->filter()->unique()->all();
+        $cadastros = Estabelecimento::withoutGlobalScopes()
+            ->whereIn('id', $idsPlanilha)
+            ->get(['id', 'token_pagseguro', 'nome_fantasia', 'razao_social', 'nome_completo'])
+            ->keyBy('id');
+
+        foreach ($cadastros as $cadastro) {
+            $token = strtolower(trim((string) $cadastro->token_pagseguro));
+            if ($token !== '') {
+                $tokenParaId[$token] = (int) $cadastro->id;
+                $tokenDoId[(int) $cadastro->id] = $token;
+            }
+        }
+
+        $grupos = [];
+
+        foreach ($planilha as $linha) {
+            $idCliente = trim((string) $linha->id_cliente);
+            $token = strtolower($idCliente);
+            $estabelecimentoId = $linha->estabelecimento_id ? (int) $linha->estabelecimento_id : null;
+
+            if (! $estabelecimentoId && isset($tokenParaId[$token])) {
+                $estabelecimentoId = $tokenParaId[$token];
+            }
+
+            $chave = $estabelecimentoId ? 'id:'.$estabelecimentoId : 'cli:'.$token;
+
+            if (! isset($grupos[$chave])) {
+                $grupos[$chave] = [
+                    'id_cliente' => $idCliente,
+                    'estabelecimento_id' => $estabelecimentoId,
+                    'linhas' => 0,
+                    'tpv' => 0.0,
+                    'comissao' => 0.0,
+                ];
+            }
+
+            $grupos[$chave]['linhas']++;
+            $grupos[$chave]['tpv'] += (float) $linha->tpv;
+            $grupos[$chave]['comissao'] += (float) $linha->ms_comissao;
+            if ($idCliente !== '') {
+                $grupos[$chave]['id_cliente'] = $idCliente;
+            }
+        }
+
+        $ausentes = collect();
+
+        foreach ($grupos as $chave => $grupo) {
+            if (str_starts_with($chave, 'id:')) {
+                $id = (int) $grupo['estabelecimento_id'];
+                $tpvDump = (float) ($porId[$id] ?? 0);
+                $token = $tokenDoId[$id] ?? '';
+                if ($token !== '' && isset($porToken[$token])) {
+                    $tpvDump += $porToken[$token];
+                }
+            } else {
+                $tpvDump = (float) ($porToken[substr($chave, 4)] ?? 0);
+            }
+            $faltando = round($grupo['tpv'] - $tpvDump, 2);
+
+            if ($faltando <= 0.05) {
+                continue;
+            }
+
+            $cadastro = $grupo['estabelecimento_id'] ? $cadastros->get($grupo['estabelecimento_id']) : null;
+            $ausentes->push((object) [
+                'id_cliente' => $grupo['id_cliente'],
+                'estabelecimento_id' => $grupo['estabelecimento_id'],
+                'nome' => $cadastro?->nome_fantasia ?: $cadastro?->razao_social ?: $cadastro?->nome_completo,
+                'linhas' => $grupo['linhas'],
+                'tpv_planilha' => round($grupo['tpv'], 2),
+                'tpv_dump' => round($tpvDump, 2),
+                'faltando' => $faltando,
+                'comissao' => round($grupo['comissao'], 2),
+            ]);
+        }
+
+        return [
+            'dump' => $dump,
+            'linhas' => $ausentes->sortByDesc('faltando')->values(),
         ];
     }
 

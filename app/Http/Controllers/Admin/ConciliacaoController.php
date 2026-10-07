@@ -9,6 +9,7 @@ use App\Models\ConciliacaoLinha;
 use App\Models\Usuario;
 use App\Services\ConciliacaoConfrontoService;
 use App\Services\ConciliacaoImportService;
+use App\Services\EdiDumpService;
 use App\Support\SimpleXlsxWriter;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -132,7 +133,7 @@ class ConciliacaoController extends Controller
         ));
     }
 
-    public function diferenca(Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto)
+    public function diferenca(Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto, EdiDumpService $dumpService)
     {
         $resumo = $confronto->resumoMensal($conciliacao);
         $semCadastro = $confronto->clientesSemEstabelecimento($conciliacao);
@@ -140,6 +141,7 @@ class ConciliacaoController extends Controller
         $inversoEdi = $confronto->recorteInversoEdi($conciliacao);
         $soEdi = $inversoEdi['so_edi'];
         $extraEdi = $inversoEdi['extra_edi'];
+        $ausenteNoDump = $dumpService->planilhaAusenteNoDump($conciliacao);
 
         return view('admin.conciliacoes.diferenca', compact(
             'conciliacao',
@@ -148,7 +150,37 @@ class ConciliacaoController extends Controller
             'semEdi',
             'soEdi',
             'extraEdi',
+            'ausenteNoDump',
         ));
+    }
+
+    public function relatorioPlanilhaAusenteDump(Conciliacao $conciliacao, EdiDumpService $dumpService): StreamedResponse
+    {
+        $ausente = $dumpService->planilhaAusenteNoDump($conciliacao);
+        $mes = $conciliacao->referencia_mes?->format('Y-m') ?? 'conciliacao';
+        $nomeArquivo = "planilha-ausente-no-edi-{$mes}.csv";
+
+        return response()->streamDownload(function () use ($ausente) {
+            $handle = fopen('php://output', 'w');
+            fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
+            fputcsv($handle, ['id_cliente', 'estabelecimento', 'linhas_planilha', 'tpv_planilha', 'tpv_edi', 'faltando', 'comissao'], ';');
+
+            foreach ($ausente['linhas'] as $linha) {
+                fputcsv($handle, [
+                    $linha->id_cliente,
+                    $linha->nome,
+                    $linha->linhas,
+                    number_format($linha->tpv_planilha, 2, '.', ''),
+                    number_format($linha->tpv_dump, 2, '.', ''),
+                    number_format($linha->faltando, 2, '.', ''),
+                    number_format($linha->comissao, 2, '.', ''),
+                ], ';');
+            }
+
+            fclose($handle);
+        }, $nomeArquivo, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
     }
 
     public function relatorioSemEstabelecimento(Conciliacao $conciliacao, ConciliacaoConfrontoService $confronto): StreamedResponse

@@ -242,6 +242,7 @@ Route::middleware(['auth', 'usuario.ativo', 'trocar.senha', 'tenant.access'])->g
             Route::get('/{conciliacao}/diferenca', [ConciliacaoController::class, 'diferenca'])->name('diferenca');
             Route::get('/{conciliacao}/relatorio-sem-estabelecimento', [ConciliacaoController::class, 'relatorioSemEstabelecimento'])->name('relatorio-sem-estabelecimento');
             Route::get('/{conciliacao}/relatorio-sem-edi', [ConciliacaoController::class, 'relatorioSemEdi'])->name('relatorio-sem-edi');
+            Route::get('/{conciliacao}/relatorio-planilha-ausente-dump', [ConciliacaoController::class, 'relatorioPlanilhaAusenteDump'])->name('relatorio-planilha-ausente-dump');
             Route::get('/{conciliacao}/relatorio-so-edi', [ConciliacaoController::class, 'relatorioSoEdi'])->name('relatorio-so-edi');
             Route::get('/{conciliacao}/relatorio-so-edi-excel', [ConciliacaoController::class, 'relatorioSoEdiExcel'])->name('relatorio-so-edi-excel');
             Route::get('/{conciliacao}/so-edi-transacoes', [ConciliacaoController::class, 'soEdiTransacoes'])->name('so-edi-transacoes');

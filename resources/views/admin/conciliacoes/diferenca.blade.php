@@ -35,6 +35,68 @@
 
 <div class="mb-8">
     <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 class="text-base font-bold text-gray-800">Na planilha e não na puxada do EDI</h3>
+        @if ($ausenteNoDump['linhas']->isNotEmpty())
+            <a href="{{ route('admin.conciliacoes.relatorio-planilha-ausente-dump', $conciliacao) }}"
+               class="inline-flex items-center gap-1 rounded-lg border border-orange-300 bg-white px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-100">
+                <i class="fa-solid fa-download"></i> CSV para a PagSeguro
+            </a>
+        @endif
+    </div>
+    @if (! $ausenteNoDump['dump'])
+        <p class="mb-3 text-sm text-gray-500">Ainda não há um dump concluído deste mês. Rode o Dump EDI do mês para cruzar com a planilha.</p>
+    @else
+        <p class="mb-3 text-sm text-gray-500">
+            Cruzamento com o dump #{{ $ausenteNoDump['dump']->id }}.
+            O valor que falta é planilha menos o EDI dessa puxada, por cliente.
+            {{ number_format($ausenteNoDump['linhas']->count(), 0, ',', '.') }} clientes
+            · R$ {{ number_format($ausenteNoDump['linhas']->sum('faltando'), 2, ',', '.') }} a verificar.
+        </p>
+        <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    <tr>
+                        <th class="px-4 py-3">Estabelecimento</th>
+                        <th class="px-4 py-3">ID cliente</th>
+                        <th class="px-4 py-3 text-right">Linhas</th>
+                        <th class="px-4 py-3 text-right">Planilha</th>
+                        <th class="px-4 py-3 text-right">EDI</th>
+                        <th class="px-4 py-3 text-right">Faltando</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    @forelse ($ausenteNoDump['linhas'] as $linha)
+                        <tr>
+                            <td class="px-4 py-3 font-semibold text-gray-800">{{ $linha->nome ?: '—' }}</td>
+                            <td class="px-4 py-3 font-mono text-xs">{{ $linha->id_cliente }}</td>
+                            <td class="px-4 py-3 text-right tabular-nums">{{ number_format($linha->linhas, 0, ',', '.') }}</td>
+                            <td class="px-4 py-3 text-right tabular-nums">R$ {{ number_format($linha->tpv_planilha, 2, ',', '.') }}</td>
+                            <td class="px-4 py-3 text-right tabular-nums">R$ {{ number_format($linha->tpv_dump, 2, ',', '.') }}</td>
+                            <td class="px-4 py-3 text-right tabular-nums font-semibold text-orange-800">R$ {{ number_format($linha->faltando, 2, ',', '.') }}</td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="6" class="px-4 py-8 text-center text-gray-500">Nenhum valor da planilha ficou de fora dessa puxada.</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+                @if ($ausenteNoDump['linhas']->isNotEmpty())
+                    <tfoot class="bg-gray-50 font-semibold">
+                        <tr>
+                            <td class="px-4 py-3" colspan="3">Total</td>
+                            <td class="px-4 py-3 text-right">R$ {{ number_format($ausenteNoDump['linhas']->sum('tpv_planilha'), 2, ',', '.') }}</td>
+                            <td class="px-4 py-3 text-right">R$ {{ number_format($ausenteNoDump['linhas']->sum('tpv_dump'), 2, ',', '.') }}</td>
+                            <td class="px-4 py-3 text-right text-orange-800">R$ {{ number_format($ausenteNoDump['linhas']->sum('faltando'), 2, ',', '.') }}</td>
+                        </tr>
+                    </tfoot>
+                @endif
+            </table>
+        </div>
+    @endif
+</div>
+
+<div class="mb-8">
+    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 class="text-base font-bold text-gray-800">Não cadastrados na plataforma</h3>
         @if ($semCadastro->isNotEmpty())
             <a href="{{ route('admin.conciliacoes.relatorio-sem-estabelecimento', $conciliacao) }}"
