@@ -19,7 +19,7 @@
 
 <div class="mb-5">
     <h1 class="text-lg font-semibold text-gray-800 dark:text-gray-100">Consulta de transações por CNPJ</h1>
-    <p class="mt-1 text-sm text-gray-500">Busca estabelecimento, marketplace ou revenda pelo documento. Marque a opção para incluir as vendas de todos os ECs da rede.</p>
+    <p class="mt-1 text-sm text-gray-500">Busca estabelecimento, marketplace ou revenda pelo documento e traz todos os cadastros encontrados. No Excel, cada CNPJ/CPF vira uma aba com o total de transações e o faturamento no topo.</p>
 </div>
 
 @if ($errors->any())

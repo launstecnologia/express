@@ -5,9 +5,10 @@ namespace App\Services;
 use App\Models\EdiMovimento;
 use App\Models\Estabelecimento;
 use App\Models\Usuario;
+use App\Support\ConciliacaoDimensao;
 use App\Support\DocumentoBrasil;
 use App\Support\EdiStatusPagamento;
-use App\Support\InstituicaoFinanceira;
+use App\Support\EdiTransacaoCategoria;
 use App\Support\SimpleXlsxWriter;
 use App\Support\UsuarioComercial;
 use Carbon\Carbon;
@@ -187,9 +188,49 @@ class ConsultaCnpjTransacoesService
     {
         @set_time_limit(900);
 
-        $linhas = $this->iterarLinhasExcel($estabelecimentos, $inicio, $fim);
+        $grupos = $this->agruparPorDocumento($estabelecimentos);
+        $planilhas = [];
+        $resumoLinhas = [];
 
-        return SimpleXlsxWriter::file($this->cabecalhosExcel(), $linhas, 'Transacoes');
+        foreach ($grupos as $grupo) {
+            $aba = $this->montarAbaDocumento($grupo['estabelecimentos'], $grupo['documento'], $inicio, $fim);
+            $planilhas[] = $aba['planilha'];
+            $resumoLinhas[] = [
+                $grupo['documento_formatado'],
+                $grupo['estabelecimentos']->count(),
+                $aba['transacoes'],
+                ['v' => $aba['faturamento'], 'estilo' => 'numero'],
+                ['v' => $aba['liquido'], 'estilo' => 'numero'],
+                $grupo['nomes'],
+            ];
+        }
+
+        if (count($planilhas) > 1) {
+            array_unshift($planilhas, [
+                'nome' => 'Resumo',
+                'autoFiltro' => true,
+                'autoFiltroInicio' => 'A5',
+                'congelar' => 5,
+                'larguras' => [22, 14, 14, 16, 16, 48],
+                'mesclar' => ['A1:F1'],
+                'linhas' => array_merge([
+                    [['v' => 'Consulta por CNPJ — Resumo', 'estilo' => 'titulo']],
+                    [['v' => 'Período', 'estilo' => 'cabecalho'], $this->periodoLabel($inicio, $fim)],
+                    [['v' => 'CNPJs / CPFs', 'estilo' => 'cabecalho'], count($grupos)],
+                    [],
+                    [
+                        ['v' => 'Documento', 'estilo' => 'cabecalho'],
+                        ['v' => 'ECs', 'estilo' => 'cabecalho'],
+                        ['v' => 'Transações', 'estilo' => 'cabecalho'],
+                        ['v' => 'Faturamento', 'estilo' => 'cabecalho'],
+                        ['v' => 'Valor líquido', 'estilo' => 'cabecalho'],
+                        ['v' => 'Estabelecimentos', 'estilo' => 'cabecalho'],
+                    ],
+                ], $resumoLinhas),
+            ]);
+        }
+
+        return SimpleXlsxWriter::fileSheets($planilhas);
     }
 
     public function nomeArquivo(Collection $estabelecimentos, Carbon $mes, ?string $documento = null, bool $rede = false): string
@@ -219,79 +260,178 @@ class ConsultaCnpjTransacoesService
     }
 
     /**
-     * @return list<string>
+     * @return list<array{documento: string, documento_formatado: string, nomes: string, estabelecimentos: Collection<int, Estabelecimento>}>
      */
-    private function cabecalhosExcel(): array
+    private function agruparPorDocumento(Collection $estabelecimentos): array
     {
-        return [
-            'Data',
-            'Hora',
-            'Tipo',
-            'Status',
-            'Instituição',
-            'Meio pagamento',
-            'NSU',
-            'TX ID',
-            'Código autorização',
-            'Código transação',
-            'Código venda',
-            'Parcela',
-            'Quantidade parcelas',
-            'Valor total',
-            'Valor líquido',
-            'Valor original',
-            'Taxa intermediação',
-            'Tarifa intermediação',
-            'Token EDI',
-            'Estabelecimento ID',
-            'Estabelecimento',
-            'Documento',
-            'Marketplace',
-            'Revenda',
-        ];
+        $grupos = [];
+
+        foreach ($estabelecimentos as $ec) {
+            $digitos = DocumentoBrasil::apenasDigitos((string) ($ec->cnpj ?: $ec->cpf ?: ''));
+            $chave = $digitos !== '' ? $digitos : 'sem-documento-'.$ec->id;
+
+            if (! isset($grupos[$chave])) {
+                $grupos[$chave] = [
+                    'documento' => $digitos,
+                    'documento_formatado' => $digitos !== ''
+                        ? DocumentoBrasil::formatarCpfOuCnpj($digitos)
+                        : 'Sem documento',
+                    'nomes' => [],
+                    'estabelecimentos' => collect(),
+                ];
+            }
+
+            $grupos[$chave]['estabelecimentos']->push($ec);
+            $grupos[$chave]['nomes'][] = $this->nomeEstabelecimento($ec);
+        }
+
+        return array_map(function (array $grupo) {
+            $grupo['nomes'] = implode(' · ', array_values(array_unique($grupo['nomes'])));
+
+            return $grupo;
+        }, array_values($grupos));
     }
 
     /**
-     * @return \Generator<int, list<string|int|float|null>>
+     * @param  Collection<int, Estabelecimento>  $estabelecimentos
+     * @return array{planilha: array<string, mixed>, transacoes: int, faturamento: float, liquido: float}
      */
-    private function iterarLinhasExcel(Collection $estabelecimentos, string $inicio, string $fim): \Generator
+    private function montarAbaDocumento(Collection $estabelecimentos, string $documento, string $inicio, string $fim): array
     {
         $porId = $estabelecimentos->keyBy('id');
         $porToken = $estabelecimentos
             ->filter(fn (Estabelecimento $ec) => filled($ec->token_pagseguro))
             ->keyBy(fn (Estabelecimento $ec) => (string) $ec->token_pagseguro);
 
-        foreach ($this->movimentosQuery($estabelecimentos, $inicio, $fim)->orderBy('id')->cursor() as $tx) {
+        $linhasTx = [];
+        $transacoes = 0;
+        $faturamento = 0.0;
+        $liquido = 0.0;
+
+        foreach (
+            $this->movimentosQuery($estabelecimentos, $inicio, $fim)
+                ->orderBy('data_inicial_transacao')
+                ->orderBy('hora_inicial_transacao')
+                ->orderBy('id')
+                ->cursor() as $tx
+        ) {
             $ec = $porId->get($tx->estabelecimento_id)
                 ?? $porToken->get((string) $tx->estabelecimento);
 
-            yield [
-                $tx->data_inicial_transacao?->format('d/m/Y') ?: '',
-                (string) ($tx->hora_inicial_transacao ?: ''),
-                (string) ($tx->tipo_transacao ?: ''),
-                $this->statusLabel($tx->status_pagamento),
-                InstituicaoFinanceira::nome($tx->instituicao_financeira),
-                (string) ($tx->meio_pagamento ?: ''),
-                (string) ($tx->nsu ?: ''),
-                (string) ($tx->tx_id ?: ''),
-                (string) ($tx->codigo_autorizacao ?: ''),
-                (string) ($tx->codigo_transacao ?: ''),
-                (string) ($tx->codigo_venda ?: ''),
-                $tx->parcela,
-                $tx->quantidade_parcela,
-                (float) $tx->valor_total_transacao,
-                (float) $tx->valor_liquido_transacao,
-                (float) $tx->valor_original_transacao,
-                (float) $tx->taxa_intermediacao,
-                (float) $tx->tarifa_intermediacao,
-                (string) ($tx->estabelecimento ?: $ec?->token_pagseguro ?: ''),
-                $ec?->id ?: $tx->estabelecimento_id,
-                $this->nomeEstabelecimento($ec),
-                $ec?->cnpj ?: $ec?->cpf ?: '',
-                $ec?->marketplace?->nomeExibicao() ?: '',
-                $ec?->revenda?->nomeExibicao() ?: '',
-            ];
+            $transacoes++;
+            $faturamento += (float) ($tx->valor_total_transacao ?? 0);
+            $liquido += (float) ($tx->valor_liquido_transacao ?? 0);
+            $linhasTx[] = $this->linhaExcelFormatada($tx, $ec);
         }
+
+        $docFormatado = $documento !== ''
+            ? DocumentoBrasil::formatarCpfOuCnpj($documento)
+            : 'Sem documento';
+        $nomeAba = $documento !== '' ? $docFormatado : 'Sem documento';
+        $nomesEc = $estabelecimentos
+            ->map(fn (Estabelecimento $ec) => $this->nomeEstabelecimento($ec))
+            ->unique()
+            ->values()
+            ->implode(' · ');
+
+        $cabecalhoTabela = [
+            ['v' => 'Data', 'estilo' => 'cabecalho'],
+            ['v' => 'Horário', 'estilo' => 'cabecalho'],
+            ['v' => 'Crédito / Débito', 'estilo' => 'cabecalho'],
+            ['v' => 'Bandeira', 'estilo' => 'cabecalho'],
+            ['v' => 'Código da transação', 'estilo' => 'cabecalho'],
+            ['v' => 'Faturamento', 'estilo' => 'cabecalho'],
+            ['v' => 'CNPJ', 'estilo' => 'cabecalho'],
+            ['v' => 'Razão social', 'estilo' => 'cabecalho'],
+        ];
+
+        $linhas = [
+            [['v' => 'Consulta por CNPJ', 'estilo' => 'titulo']],
+            [['v' => 'CNPJ / CPF', 'estilo' => 'cabecalho'], $docFormatado],
+            [['v' => 'Período', 'estilo' => 'cabecalho'], $this->periodoLabel($inicio, $fim)],
+            [['v' => 'Estabelecimentos', 'estilo' => 'cabecalho'], $estabelecimentos->count().' · '.$nomesEc],
+            [],
+            [['v' => 'Transações', 'estilo' => 'cabecalho'], $transacoes],
+            [['v' => 'Faturamento', 'estilo' => 'cabecalho'], ['v' => round($faturamento, 2), 'estilo' => 'numero_negrito']],
+            [['v' => 'Valor líquido', 'estilo' => 'cabecalho'], ['v' => round($liquido, 2), 'estilo' => 'numero_negrito']],
+            [],
+            $cabecalhoTabela,
+            ...$linhasTx,
+        ];
+
+        return [
+            'planilha' => [
+                'nome' => $nomeAba,
+                'autoFiltro' => true,
+                'autoFiltroInicio' => 'A10',
+                'autoFiltroColunaFim' => 'H',
+                'congelar' => 10,
+                'mesclar' => ['A1:H1', 'B4:H4'],
+                'larguras' => [12, 12, 16, 18, 28, 14, 20, 40],
+                'linhas' => $linhas,
+            ],
+            'transacoes' => $transacoes,
+            'faturamento' => round($faturamento, 2),
+            'liquido' => round($liquido, 2),
+        ];
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    private function linhaExcelFormatada(object $tx, ?Estabelecimento $ec): array
+    {
+        $tipo = EdiTransacaoCategoria::resolver(
+            $tx->tipo_transacao ?? null,
+            $tx->meio_pagamento ?? null,
+            $tx->arranjo_ur ?? null,
+            isset($tx->quantidade_parcela) ? (string) $tx->quantidade_parcela : null,
+        );
+
+        $documento = DocumentoBrasil::apenasDigitos((string) ($ec?->cnpj ?: $ec?->cpf ?: ''));
+        $codigo = trim((string) ($tx->codigo_transacao ?: $tx->nsu ?: $tx->tx_id ?: ''));
+
+        return [
+            $tx->data_inicial_transacao?->format('d/m/Y') ?: '',
+            (string) ($tx->hora_inicial_transacao ?: ''),
+            $this->labelCreditoDebito($tipo),
+            ConciliacaoDimensao::bandeiraDoEdi(
+                $tx->instituicao_financeira ?? null,
+                $tx->tipo_transacao ?? null,
+                $tx->arranjo_ur ?? null,
+            ),
+            $codigo,
+            ['v' => (float) ($tx->valor_total_transacao ?? 0), 'estilo' => 'numero'],
+            $documento !== '' ? DocumentoBrasil::formatarCpfOuCnpj($documento) : '',
+            $this->razaoSocial($ec),
+        ];
+    }
+
+    private function labelCreditoDebito(string $tipo): string
+    {
+        return match ($tipo) {
+            'credito', 'parcelado' => 'Crédito',
+            'debito' => 'Débito',
+            'pix' => 'PIX',
+            default => 'Outros',
+        };
+    }
+
+    private function razaoSocial(?Estabelecimento $estabelecimento): string
+    {
+        if (! $estabelecimento) {
+            return '—';
+        }
+
+        return $estabelecimento->razao_social
+            ?: $estabelecimento->nome_fantasia
+            ?: $estabelecimento->nome_completo
+            ?: 'Estabelecimento #'.$estabelecimento->id;
+    }
+
+    private function periodoLabel(string $inicio, string $fim): string
+    {
+        return Carbon::parse($inicio)->format('d/m/Y').' a '.Carbon::parse($fim)->format('d/m/Y');
     }
 
     public function nomeEstabelecimento(?Estabelecimento $estabelecimento): string
