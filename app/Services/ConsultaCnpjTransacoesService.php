@@ -200,6 +200,7 @@ class ConsultaCnpjTransacoesService
             $planilhas[] = $aba['planilha'];
             $resumoLinhas[] = [
                 $ec->id,
+                $this->idPagBank($ec),
                 $this->razaoSocial($ec),
                 $this->documentoFormatado($ec),
                 $aba['transacoes_edi'],
@@ -215,8 +216,8 @@ class ConsultaCnpjTransacoesService
                 'autoFiltro' => true,
                 'autoFiltroInicio' => 'A5',
                 'congelar' => 5,
-                'larguras' => [10, 36, 20, 14, 16, 14, 16],
-                'mesclar' => ['A1:G1'],
+                'larguras' => [10, 18, 36, 20, 14, 16, 14, 16],
+                'mesclar' => ['A1:H1'],
                 'linhas' => array_merge([
                     [['v' => 'Consulta por CNPJ — Resumo por estabelecimento', 'estilo' => 'titulo']],
                     [['v' => 'Período', 'estilo' => 'cabecalho'], $this->periodoLabel($inicio, $fim)],
@@ -224,6 +225,7 @@ class ConsultaCnpjTransacoesService
                     [],
                     [
                         ['v' => 'ID', 'estilo' => 'cabecalho'],
+                        ['v' => 'ID PagBank', 'estilo' => 'cabecalho'],
                         ['v' => 'Razão social', 'estilo' => 'cabecalho'],
                         ['v' => 'CNPJ', 'estilo' => 'cabecalho'],
                         ['v' => 'Transações EDI', 'estilo' => 'cabecalho'],
@@ -366,8 +368,10 @@ class ConsultaCnpjTransacoesService
 
         $doc = $this->documentoFormatado($ec);
         $razao = $this->razaoSocial($ec);
+        $idPagBank = $this->idPagBank($ec);
         $cabecalhoDetalhe = [
             ['v' => 'Origem', 'estilo' => 'cabecalho'],
+            ['v' => 'ID PagBank', 'estilo' => 'cabecalho'],
             ['v' => 'Data', 'estilo' => 'cabecalho'],
             ['v' => 'Horário', 'estilo' => 'cabecalho'],
             ['v' => 'Crédito / Débito', 'estilo' => 'cabecalho'],
@@ -382,6 +386,7 @@ class ConsultaCnpjTransacoesService
         $linhas = [
             [['v' => 'Consulta por CNPJ', 'estilo' => 'titulo']],
             [['v' => 'ID do estabelecimento', 'estilo' => 'cabecalho'], $ec->id],
+            [['v' => 'ID PagBank', 'estilo' => 'cabecalho'], $idPagBank],
             [['v' => 'Razão social', 'estilo' => 'cabecalho'], $razao],
             [['v' => 'CNPJ / CPF', 'estilo' => 'cabecalho'], $doc],
             [['v' => 'Período', 'estilo' => 'cabecalho'], $this->periodoLabel($inicio, $fim)],
@@ -403,26 +408,26 @@ class ConsultaCnpjTransacoesService
             [['v' => 'Detalhe — Planilha PagSeguro', 'estilo' => 'titulo']],
             $cabecalhoDetalhe,
             ...($linhasPlanilhaExcel !== [] ? $linhasPlanilhaExcel : [[
-                'Planilha', '—', '—', '—', '—', 'Sem linhas na conciliação deste mês', '', $doc, $razao,
+                'Planilha', $idPagBank, '—', '—', '—', '—', 'Sem linhas na conciliação deste mês', '', $doc, $razao,
             ]]),
             [],
             [['v' => 'Detalhe — EDI', 'estilo' => 'titulo']],
             $cabecalhoDetalhe,
             ...($linhasEdi !== [] ? $linhasEdi : [[
-                'EDI', '—', '—', '—', '—', 'Sem transações no EDI deste mês', '', $doc, $razao,
+                'EDI', $idPagBank, '—', '—', '—', '—', 'Sem transações no EDI deste mês', '', $doc, $razao,
             ]]),
         ];
 
-        // Linhas 1–12 fixas; dados da planilha a partir da 13; título EDI = 14 + N
-        $linhaTituloEdi = 14 + max(1, count($linhasPlanilhaExcel));
+        // Linhas 1–13 fixas; dados da planilha a partir da 14; título EDI = 15 + N
+        $linhaTituloEdi = 15 + max(1, count($linhasPlanilhaExcel));
 
         return [
             'planilha' => [
                 'nome' => 'ID '.$ec->id,
                 'autoFiltro' => false,
-                'congelar' => 9,
-                'mesclar' => ['A1:I1', 'A7:I7', 'A11:I11', 'A'.$linhaTituloEdi.':I'.$linhaTituloEdi],
-                'larguras' => [18, 14, 12, 16, 18, 28, 14, 20, 40],
+                'congelar' => 10,
+                'mesclar' => ['A1:J1', 'A8:J8', 'A12:J12', 'A'.$linhaTituloEdi.':J'.$linhaTituloEdi],
+                'larguras' => [12, 18, 12, 12, 16, 18, 28, 14, 20, 40],
                 'linhas' => $linhas,
             ],
             'transacoes_edi' => $transacoesEdi,
@@ -445,8 +450,11 @@ class ConsultaCnpjTransacoesService
         );
         $codigo = trim((string) ($tx->codigo_transacao ?: $tx->nsu ?: $tx->tx_id ?: ''));
 
+        $idPagBank = trim((string) ($tx->estabelecimento ?: $tx->id_cliente ?: $this->idPagBank($ec)));
+
         return [
             'EDI',
+            $idPagBank !== '' ? $idPagBank : '—',
             $tx->data_inicial_transacao?->format('d/m/Y') ?: '',
             (string) ($tx->hora_inicial_transacao ?: ''),
             $this->labelCreditoDebito($tipo),
@@ -468,9 +476,11 @@ class ConsultaCnpjTransacoesService
     private function linhaExcelPlanilha(ConciliacaoLinha $linha, Estabelecimento $ec): array
     {
         $meio = ConciliacaoDimensao::meioNormalizado($linha->meio_pagamento);
+        $idPagBank = trim((string) ($linha->id_cliente ?: $this->idPagBank($ec)));
 
         return [
             'Planilha',
+            $idPagBank !== '' ? $idPagBank : '—',
             '—',
             '—',
             $this->labelCreditoDebito($meio === 'parcelado' ? 'credito' : $meio),
@@ -480,6 +490,13 @@ class ConsultaCnpjTransacoesService
             $this->documentoFormatado($ec),
             $this->razaoSocial($ec),
         ];
+    }
+
+    private function idPagBank(?Estabelecimento $ec): string
+    {
+        $token = trim((string) ($ec?->token_pagseguro ?: ''));
+
+        return $token !== '' ? $token : '—';
     }
 
     private function documentoFormatado(?Estabelecimento $ec): string
