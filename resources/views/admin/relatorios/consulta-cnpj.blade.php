@@ -19,7 +19,7 @@
 
 <div class="mb-5">
     <h1 class="text-lg font-semibold text-gray-800 dark:text-gray-100">Consulta de transações por CNPJ</h1>
-    <p class="mt-1 text-sm text-gray-500">Busca estabelecimento, marketplace ou revenda pelo documento e traz todos os cadastros encontrados. No Excel, cada CNPJ/CPF vira uma aba com o total de transações e o faturamento no topo.</p>
+    <p class="mt-1 text-sm text-gray-500">Busca estabelecimento, marketplace ou revenda pelo documento e traz todos os cadastros. No Excel, cada ID vira uma aba com totais do EDI e da planilha PagSeguro.</p>
 </div>
 
 @if ($errors->any())
@@ -68,7 +68,7 @@
             <i class="fa-solid fa-magnifying-glass"></i>
             Consultar
         </button>
-        @if ($consultou && $estabelecimentos->isNotEmpty() && $qtdTransacoes > 0)
+        @if ($consultou && $estabelecimentos->isNotEmpty())
             <button
                 type="submit"
                 form="form-excel"
@@ -87,7 +87,7 @@
     </div>
 </form>
 
-@if ($consultou && $estabelecimentos->isNotEmpty() && $qtdTransacoes > 0)
+@if ($consultou && $estabelecimentos->isNotEmpty())
     <form id="form-excel" method="GET" action="{{ route('admin.relatorios.consulta-cnpj.excel') }}" class="hidden">
         <input type="hidden" name="cnpj" value="{{ $filtros['cnpj'] }}">
         <input type="hidden" name="mes_numero" value="{{ $filtros['mes_numero'] }}">
