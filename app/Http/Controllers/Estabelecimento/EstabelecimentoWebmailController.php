@@ -117,25 +117,18 @@ class EstabelecimentoWebmailController extends Controller
         $da = app(DirectAdminService::class);
         $username = Str::before($estabelecimento->webmail_email, '@');
 
-        // Deleta forwarder existente (ignora erro se não existir)
         try {
-            $da->excluirForwarderPlataforma($username);
-        } catch (\Throwable) {
-        }
-
-        // Recria com cópia local
-        $ok = $da->redirecionarEmailPlataforma($username, $destino);
-
-        if (! $ok) {
+            $da->configurarForwarderPlataforma($username, $destino);
+        } catch (\Throwable $e) {
             return redirect()->route('estabelecimentos.show', $estabelecimento)
-                ->withErrors(['destino' => 'Não foi possível reconfigurar o forwarder no servidor.'])
+                ->withErrors(['destino' => $e->getMessage()])
                 ->withInput();
         }
 
         $estabelecimento->update(['email' => $destino]);
 
         return redirect()->route('estabelecimentos.show', $estabelecimento)
-            ->with('status', "Redirecionamento reconfigurado. Os e-mails ficam com cópia no Roundcube e são encaminhados para {$destino}.");
+            ->with('status', "Redirecionamento configurado. Cópia fica no Roundcube e o encaminhamento vai para {$destino}.");
     }
 
     /**

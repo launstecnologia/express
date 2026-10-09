@@ -1344,7 +1344,7 @@
                         >
                     </label>
                     <p class="text-xs text-gray-500">
-                        O forwarder será recriado com cópia local no Roundcube e os e-mails serão encaminhados para o endereço informado.
+                        A caixa da plataforma continua recebendo cópia no Roundcube. O encaminhamento vai só para o e-mail informado.
                     </p>
                     @error('destino')
                         <p class="text-xs font-medium text-red-600">{{ $message }}</p>

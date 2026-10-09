@@ -56,14 +56,33 @@ class EmailPlataformaService
         }
 
         if (filled($estabelecimento->email)) {
-            // Forwarder com cópia local: encaminha para o e-mail original E mantém cópia no Roundcube
-            $this->da->redirecionarEmailPlataforma($username, $estabelecimento->email);
+            // Caixa POP mantém cópia no Roundcube; o forwarder aponta só para o e-mail externo.
+            try {
+                $this->da->configurarForwarderPlataforma($username, $estabelecimento->email);
+            } catch (\Throwable $e) {
+                throw new \RuntimeException(
+                    "Conta {$emailPlataforma} criada, mas o redirecionamento falhou: {$e->getMessage()}"
+                );
+            }
         }
 
         $estabelecimento->update([
             'webmail_email' => $emailPlataforma,
             'webmail_senha' => $senha,
         ]);
+    }
+
+    /**
+     * Garante o forwarder da caixa da plataforma para o e-mail do estabelecimento.
+     */
+    public function ativarForwarder(Estabelecimento $estabelecimento): void
+    {
+        if (blank($estabelecimento->webmail_email) || blank($estabelecimento->email)) {
+            return;
+        }
+
+        $username = strtolower(Str::before($estabelecimento->webmail_email, '@'));
+        $this->da->configurarForwarderPlataforma($username, $estabelecimento->email);
     }
 
     /**

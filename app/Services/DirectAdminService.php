@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class DirectAdminService
 {
@@ -183,23 +185,78 @@ class DirectAdminService
         return ($dados['error'] ?? '1') === '0';
     }
 
+    /**
+     * Configura o forwarder do e-mail da plataforma.
+     *
+     * Com caixa POP do mesmo nome, o DirectAdmin já mantém cópia local no Roundcube.
+     * O forwarder deve apontar só para o destino externo — incluir o e-mail local
+     * no destino pode gerar loop ou falha silenciosa na API.
+     */
     public function redirecionarEmailPlataforma(string $user, string $destino): bool
     {
-        $dominio       = config('directadmin.dominio');
-        $emailLocal    = "{$user}@{$dominio}";
+        $this->configurarForwarderPlataforma($user, $destino);
 
-        // Inclui o próprio e-mail local para manter cópia na caixa do Roundcube
-        // e ao mesmo tempo encaminhar para o e-mail original do estabelecimento
-        $destinosStr = "{$emailLocal},{$destino}";
+        return true;
+    }
 
-        $response = $this->client()->post('/CMD_API_EMAIL_FORWARDERS', [
-            'action' => 'create',
+    /**
+     * @throws \RuntimeException quando a API do DirectAdmin recusa o forwarder
+     */
+    public function configurarForwarderPlataforma(string $user, string $destino): void
+    {
+        $user = strtolower(trim($user));
+        $destino = strtolower(trim($destino));
+        $dominio = (string) config('directadmin.dominio');
+
+        if ($user === '' || $destino === '' || $dominio === '') {
+            throw new \RuntimeException('Usuário, destino ou domínio de e-mail inválido.');
+        }
+
+        $payload = [
             'domain' => $dominio,
-            'user'   => $user,
-            'email'  => $destinosStr,
+            'user' => $user,
+            'email' => $destino,
+        ];
+
+        // Preferir modify: evita apagar o forwarder antes de saber se a criação vai funcionar.
+        $modify = $this->client()->post('/CMD_API_EMAIL_FORWARDERS', array_merge($payload, [
+            'action' => 'modify',
+        ]));
+
+        if ($this->apiSucesso($modify)) {
+            return;
+        }
+
+        $create = $this->client()->post('/CMD_API_EMAIL_FORWARDERS', array_merge($payload, [
+            'action' => 'create',
+        ]));
+
+        if ($this->apiSucesso($create)) {
+            return;
+        }
+
+        // Último recurso: delete + create (quando modify falha e create diz que já existe).
+        $this->excluirForwarderPlataforma($user);
+
+        $recreate = $this->client()->post('/CMD_API_EMAIL_FORWARDERS', array_merge($payload, [
+            'action' => 'create',
+        ]));
+
+        if ($this->apiSucesso($recreate)) {
+            return;
+        }
+
+        $mensagem = $this->apiMensagem($recreate) ?: $this->apiMensagem($create) ?: $this->apiMensagem($modify);
+
+        Log::warning('DirectAdmin: falha ao configurar forwarder', [
+            'user' => $user,
+            'destino' => $destino,
+            'modify' => $modify->body(),
+            'create' => $create->body(),
+            'recreate' => $recreate->body(),
         ]);
 
-        return $response->successful();
+        throw new \RuntimeException($mensagem ?: 'Não foi possível configurar o redirecionamento no DirectAdmin.');
     }
 
     public function excluirForwarderPlataforma(string $user): bool
@@ -210,7 +267,37 @@ class DirectAdminService
             'select0' => $user,
         ]);
 
+        if ($this->apiSucesso($response)) {
+            return true;
+        }
+
+        // Alguns painéis ainda respondem HTTP 200 sem error=0 quando o forwarder não existe.
         return $response->successful();
+    }
+
+    private function apiSucesso(Response $response): bool
+    {
+        if (! $response->successful()) {
+            return false;
+        }
+
+        parse_str($response->body(), $dados);
+
+        return ($dados['error'] ?? null) === '0';
+    }
+
+    private function apiMensagem(Response $response): string
+    {
+        parse_str($response->body(), $dados);
+
+        $texto = trim(urldecode((string) ($dados['text'] ?? '')));
+        $detalhes = trim(urldecode((string) ($dados['details'] ?? '')));
+
+        if ($texto === '' && $detalhes === '') {
+            return '';
+        }
+
+        return $detalhes !== '' ? "{$texto}: {$detalhes}" : $texto;
     }
 
     public function excluirEmailPlataforma(string $user): bool
