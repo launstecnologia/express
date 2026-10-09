@@ -759,14 +759,10 @@
                         <button type="button" data-modal-open="webmail-senha" class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 shadow-sm hover:bg-gray-50">
                             <i class="fa-solid fa-key"></i> Trocar Senha
                         </button>
-                        @if (auth()->user()?->tipo === 'admin' && filled($estabelecimento->email))
-                            <form action="{{ route('estabelecimentos.webmail.reconfigurar-forwarder', $estabelecimento) }}" method="POST"
-                                  onsubmit="return confirm('Reconfigurar o redirecionamento de e-mail?\n\nO forwarder será deletado e recriado para manter cópia local no Roundcube.')">
-                                @csrf
-                                <button type="submit" class="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 shadow-sm hover:bg-amber-100">
-                                    <i class="fa-solid fa-arrows-rotate"></i> Reconfigurar Redirecionamento
-                                </button>
-                            </form>
+                        @if (auth()->user()?->tipo === 'admin')
+                            <button type="button" data-modal-open="webmail-forwarder" class="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 shadow-sm hover:bg-amber-100">
+                                <i class="fa-solid fa-arrows-rotate"></i> Reconfigurar Redirecionamento
+                            </button>
                         @endif
                         @if (in_array(auth()->user()?->tipo, ['admin', 'marketplace'], true))
                             <button type="button" data-modal-open="webmail-recriar" class="inline-flex items-center gap-2 rounded-lg border border-purple-300 bg-purple-50 px-4 py-2 text-sm font-semibold text-purple-700 shadow-sm hover:bg-purple-100">
@@ -1320,6 +1316,51 @@
     </div>
     @endif
 
+    {{-- ── Modal: Reconfigurar Redirecionamento ── --}}
+    @if ($estabelecimento->webmail_email && auth()->user()?->tipo === 'admin')
+    <div data-modal="webmail-forwarder" class="modal-overlay fixed inset-0 z-[100] items-center justify-center bg-black/40 px-4">
+        <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div class="mb-5 flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-800">Redirecionamento de e-mail</h3>
+                    <p class="mt-0.5 text-xs text-gray-500">{{ $estabelecimento->webmail_email }}</p>
+                </div>
+                <button type="button" data-modal-close="webmail-forwarder" class="text-2xl text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <form method="POST" action="{{ route('estabelecimentos.webmail.reconfigurar-forwarder', $estabelecimento) }}">
+                @csrf
+                <div class="space-y-3">
+                    <label class="block space-y-1">
+                        <span class="text-sm font-bold text-gray-700">Encaminhar para</span>
+                        <input
+                            type="email"
+                            name="destino"
+                            value="{{ old('destino', $estabelecimento->email) }}"
+                            class="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                            placeholder="cliente@email.com"
+                            required
+                            maxlength="200"
+                            autocomplete="email"
+                        >
+                    </label>
+                    <p class="text-xs text-gray-500">
+                        O forwarder será recriado com cópia local no Roundcube e os e-mails serão encaminhados para o endereço informado.
+                    </p>
+                    @error('destino')
+                        <p class="text-xs font-medium text-red-600">{{ $message }}</p>
+                    @enderror
+                </div>
+                <div class="mt-5 flex justify-end gap-3">
+                    <button type="button" data-modal-close="webmail-forwarder" class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100">Cancelar</button>
+                    <button type="submit" class="rounded-lg bg-amber-600 px-5 py-2 text-sm font-bold text-white hover:bg-amber-700">
+                        <i class="fa-solid fa-arrows-rotate mr-1"></i> Salvar redirecionamento
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    @endif
+
     {{-- ── Modal: Trocar Senha do E-mail Plataforma ── --}}
     @if ($estabelecimento->webmail_email)
     <div data-modal="webmail-senha" class="modal-overlay fixed inset-0 z-[100] items-center justify-center bg-black/40 px-4">
@@ -1530,6 +1571,10 @@
         @endif
         @if ($errors->has('senha_webmail') || $errors->has('senha'))
             document.querySelector('[data-modal="webmail-senha"]')?.classList.add('is-open');
+            showTab('email-plataforma');
+        @endif
+        @if ($errors->has('destino'))
+            document.querySelector('[data-modal="webmail-forwarder"]')?.classList.add('is-open');
             showTab('email-plataforma');
         @endif
         @if ($errors->has('senha_admin') || $errors->has('confirmacao') || session('abrir_modal_inativar'))

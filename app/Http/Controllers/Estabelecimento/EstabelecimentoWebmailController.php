@@ -93,32 +93,49 @@ class EstabelecimentoWebmailController extends Controller
 
     /**
      * Reconfigura o forwarder do e-mail da plataforma:
-     * deleta o forwarder antigo e recria com cópia local.
+     * deleta o forwarder antigo e recria com cópia local para o destino informado.
      */
     public function reconfigurarForwarder(Request $request, Estabelecimento $estabelecimento)
     {
         abort_unless($request->user()?->tipo === 'admin', 403);
         abort_unless(filled($estabelecimento->webmail_email), 422, 'Nenhum e-mail da plataforma configurado.');
-        abort_unless(filled($estabelecimento->email), 422, 'E-mail original do estabelecimento não informado.');
 
-        $da       = app(DirectAdminService::class);
+        $dados = $request->validate([
+            'destino' => ['required', 'email', 'max:200'],
+        ], [], [
+            'destino' => 'e-mail de destino',
+        ]);
+
+        $destino = strtolower(trim($dados['destino']));
+
+        if (strcasecmp($destino, (string) $estabelecimento->webmail_email) === 0) {
+            return back()
+                ->withErrors(['destino' => 'O destino não pode ser o próprio e-mail da plataforma.'])
+                ->withInput();
+        }
+
+        $da = app(DirectAdminService::class);
         $username = Str::before($estabelecimento->webmail_email, '@');
 
         // Deleta forwarder existente (ignora erro se não existir)
         try {
             $da->excluirForwarderPlataforma($username);
-        } catch (\Throwable) {}
+        } catch (\Throwable) {
+        }
 
         // Recria com cópia local
-        $ok = $da->redirecionarEmailPlataforma($username, $estabelecimento->email);
+        $ok = $da->redirecionarEmailPlataforma($username, $destino);
 
         if (! $ok) {
             return redirect()->route('estabelecimentos.show', $estabelecimento)
-                ->withErrors(['webmail' => 'Não foi possível reconfigurar o forwarder no servidor.']);
+                ->withErrors(['destino' => 'Não foi possível reconfigurar o forwarder no servidor.'])
+                ->withInput();
         }
 
+        $estabelecimento->update(['email' => $destino]);
+
         return redirect()->route('estabelecimentos.show', $estabelecimento)
-            ->with('status', 'Forwarder reconfigurado com sucesso. Agora e-mails ficam com cópia no Roundcube e são encaminhados para ' . $estabelecimento->email);
+            ->with('status', "Redirecionamento reconfigurado. Os e-mails ficam com cópia no Roundcube e são encaminhados para {$destino}.");
     }
 
     /**
