@@ -11,6 +11,7 @@ import time
 import logging
 import argparse
 import os
+from urllib.parse import urlsplit
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -314,8 +315,36 @@ class ValidadorEmail:
                 continue
         return False
 
+    def _url_sem_segredo(self) -> str:
+        partes = urlsplit(self.driver.current_url or '')
+        if not partes.netloc:
+            return self.driver.current_url or ''
+        return f'{partes.scheme}://{partes.netloc}{partes.path}'
+
+    def _verificar_bloqueio_pagbank(self) -> None:
+        html = (self.driver.page_source or '').lower()
+        titulo = (self.driver.title or '').lower()
+        bloqueado = (
+            'you have been blocked' in html
+            or 'sorry, you have been blocked' in html
+            or 'attention required' in titulo
+            or 'cf-error-details' in html
+        )
+        if not bloqueado:
+            return
+
+        destino = self._url_sem_segredo()
+        raise Exception(
+            'O PagBank bloqueou o acesso à página de criação de senha '
+            f'({destino}). O Cloudflare recusou este servidor '
+            '(Sorry, you have been blocked). O cadastro no portal foi concluído, '
+            'mas a senha não pôde ser criada daqui.'
+        )
+
     def _criar_senha_acesso(self):
         log.info('--- CRIANDO SENHA DE ACESSO ---')
+        log.info(f'Página atual: {self._url_sem_segredo()}')
+        self._verificar_bloqueio_pagbank()
 
         if len(self.senha_6) != 6 or not self.senha_6.isdigit():
             raise ValueError(f'senha_6 deve ter exatamente 6 digitos numericos. Atual: "{self.senha_6}"')

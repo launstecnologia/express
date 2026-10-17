@@ -199,7 +199,7 @@ class AutomacaoErroInterpretador
 
         if (preg_match('/Message:\s*(.+?)(?:\nStacktrace:|\n#0|\z)/s', $erro, $matches)) {
             $mensagem = trim($matches[1]);
-            if ($mensagem !== '') {
+            if ($mensagem !== '' && ! str_starts_with($mensagem, 'Stacktrace')) {
                 return Str::limit($mensagem, 400);
             }
         }
