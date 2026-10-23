@@ -178,6 +178,11 @@ class PlatformSettings
             && filled(self::ppidSenha());
     }
 
+    public static function diditConfigurado(): bool
+    {
+        return filled(config('services.didit.key'));
+    }
+
     public static function pagbankAmbiente(): string
     {
         $ambiente = self::get()->pagbank_ambiente;

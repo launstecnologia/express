@@ -31,8 +31,8 @@
 
         @if (! $kycAtivo)
             <p class="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">Módulo KYC desativado pelo administrador.</p>
-        @elseif (! $ppidConfigurado)
-            <p class="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">PPID não configurada — documentos irão para revisão manual do Admin.</p>
+        @elseif (! $diditConfigurado)
+            <p class="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">DIDIT_API_KEY não configurada — documentos irão para revisão manual do Admin.</p>
         @endif
 
         @if ($kyc->receita_consultado)

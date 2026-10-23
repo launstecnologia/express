@@ -397,7 +397,7 @@ class EstabelecimentoController extends Controller
             'automacaoErro',
         ) + [
             'kycAtivo'           => PlatformSettings::kycAtivo(),
-            'ppidConfigurado'  => PlatformSettings::ppidConfigurado(),
+            'diditConfigurado' => PlatformSettings::diditConfigurado(),
         ]);
     }
 

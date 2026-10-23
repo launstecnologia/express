@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Estabelecimento;
 use App\Services\KycDocumentoSyncService;
 use App\Services\KycInicializacaoService;
-use App\Support\KycDocumentosObrigatorios;
 use App\Support\KycTipoDocumentoMapper;
 use App\Support\PlatformSettings;
 use Illuminate\Http\Request;
@@ -47,7 +46,7 @@ class KycController extends Controller
             'kyc' => $kyc,
             'itens' => $itens,
             'kycAtivo' => PlatformSettings::kycAtivo(),
-            'ppidConfigurado' => PlatformSettings::ppidConfigurado(),
+            'diditConfigurado' => PlatformSettings::diditConfigurado(),
         ]);
     }
 

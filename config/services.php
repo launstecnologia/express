@@ -13,6 +13,11 @@ return [
         'limite_mensal' => (int) env('PPID_LIMITE_MENSAL', 490),
     ],
 
+    'didit' => [
+        'key' => env('DIDIT_API_KEY'),
+        'base_url' => env('DIDIT_API_URL', 'https://verification.didit.me'),
+    ],
+
     'brasilapi' => [
         'url' => env('BRASILAPI_URL', 'https://brasilapi.com.br/api'),
     ],

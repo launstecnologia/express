@@ -174,10 +174,10 @@ class KycDocumentoSyncService
 
     public function dispararAnalise(KycDocumento $documento): void
     {
-        if (! PlatformSettings::ppidConfigurado()) {
+        if (! PlatformSettings::diditConfigurado()) {
             $documento->update([
                 'openai_status' => 'revisao_manual',
-                'openai_motivo_reprovacao' => 'PPID não configurada — análise manual necessária.',
+                'openai_motivo_reprovacao' => 'DIDIT_API_KEY não configurada — análise manual necessária.',
             ]);
             $this->finalizacao->verificar($documento->kyc_analise_id);
 
@@ -188,20 +188,20 @@ class KycDocumentoSyncService
             return;
         }
 
-        if (! $this->tipoElegivelPpid($documento->tipo)) {
+        if (! $this->tipoElegivelDidit($documento->tipo)) {
             $documento->update([
                 'openai_status' => 'revisao_manual',
-                'openai_motivo_reprovacao' => 'Tipo de documento não analisado automaticamente pela PPID — revisão manual necessária.',
+                'openai_motivo_reprovacao' => 'Tipo de documento não analisado automaticamente pela Didit — revisão manual necessária.',
             ]);
             $this->finalizacao->verificar($documento->kyc_analise_id);
 
             return;
         }
 
-        if (! $this->mimeSuportadoPpid($documento->mime_type)) {
+        if (! $this->mimeSuportadoDidit($documento->mime_type)) {
             $documento->update([
                 'openai_status' => 'revisao_manual',
-                'openai_motivo_reprovacao' => 'Formato não suportado pela PPID (use JPG, PNG, WEBP ou PDF).',
+                'openai_motivo_reprovacao' => 'Formato não suportado pela Didit (use JPG, PNG, WEBP ou PDF).',
             ]);
             $this->finalizacao->verificar($documento->kyc_analise_id);
 
@@ -212,7 +212,7 @@ class KycDocumentoSyncService
         AnalisarDocumentoKycJob::dispatch($documento->fresh());
     }
 
-    private function tipoElegivelPpid(string $tipo): bool
+    private function tipoElegivelDidit(string $tipo): bool
     {
         return in_array($tipo, [
             'rg_frente',
@@ -223,7 +223,7 @@ class KycDocumentoSyncService
         ], true);
     }
 
-    private function mimeSuportadoPpid(?string $mime): bool
+    private function mimeSuportadoDidit(?string $mime): bool
     {
         if (! $mime) {
             return false;

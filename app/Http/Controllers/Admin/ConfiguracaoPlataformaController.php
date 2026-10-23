@@ -24,6 +24,7 @@ class ConfiguracaoPlataformaController extends Controller
             'logoWhiteUrl' => PlatformSettings::logoUrl('white'),
             'faviconUrl' => PlatformSettings::logoUrl('favicon'),
             'ppidConfigurado' => PlatformSettings::ppidConfigurado(),
+            'diditConfigurado' => PlatformSettings::diditConfigurado(),
             'pagbankConfigurado' => PlatformSettings::pagbankConfigurado(),
             'ediReprocessamentos' => EdiReprocessamento::query()
                 ->latest()

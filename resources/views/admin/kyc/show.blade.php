@@ -80,7 +80,7 @@
                     </div>
                     <div>
                         <p class="font-semibold text-gray-800">{{ \App\Support\KycDocumentosObrigatorios::labelTipo($doc->tipo) }}</p>
-                        <p class="mt-1 text-sm {{ $statusClass }}">PPID: {{ strtoupper(str_replace('_', ' ', $status)) }}</p>
+                        <p class="mt-1 text-sm {{ $statusClass }}">Didit: {{ strtoupper(str_replace('_', ' ', $status)) }}</p>
                         <p class="text-sm text-gray-500">Cruzamento: {{ str_replace('_', ' ', $doc->cruzamento_status) }}</p>
                         @if ($doc->cruzamento_status === 'divergencia')
                             @include('partials.kyc-divergencia-alerta', [
@@ -116,7 +116,7 @@
                             </form>
                             <form method="POST" action="{{ route('admin.kyc.documentos.reanalise', $doc) }}">
                                 @csrf
-                                <button type="submit" class="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700">Reanalisar (PPID)</button>
+                                <button type="submit" class="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700">Reanalisar (Didit)</button>
                             </form>
                         </div>
                     </div>

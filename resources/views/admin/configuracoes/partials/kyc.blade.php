@@ -1,6 +1,6 @@
 <div x-show="aba === 'kyc'" x-cloak class="space-y-5">
     <p class="text-sm text-gray-500 dark:text-gray-400">
-        Configurações do módulo KYC (Know Your Customer) e integração com a <strong>PPID</strong> para OCR e validação de documentos.
+        A validação automática de RG, CNH e comprovante de endereço usa a <strong>Didit</strong>. A chave fica na variável <code class="text-xs">DIDIT_API_KEY</code> do servidor.
     </p>
 
     <label class="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
@@ -59,13 +59,13 @@
         <span class="text-xs text-gray-400">Padrão: 490 (margem abaixo dos 500 do plano gratuito PPID).</span>
     </label>
 
-    @if ($ppidConfigurado)
+    @if ($diditConfigurado)
         <span class="inline-flex items-center gap-1 text-xs font-semibold text-green-600">
-            <i class="fa-solid fa-circle-check"></i> PPID configurada
+            <i class="fa-solid fa-circle-check"></i> Didit configurada
         </span>
     @else
         <span class="inline-flex items-center gap-1 text-xs font-semibold text-amber-600">
-            <i class="fa-solid fa-triangle-exclamation"></i> PPID não configurada — documentos irão para revisão manual
+            <i class="fa-solid fa-triangle-exclamation"></i> DIDIT_API_KEY ausente — documentos irão para revisão manual
         </span>
     @endif
 

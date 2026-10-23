@@ -21,7 +21,7 @@
                 'seo' => ['SEO', 'fa-magnifying-glass'],
                 'empresa' => ['Empresa / PDF', 'fa-building'],
                 'email' => ['E-mail', 'fa-envelope'],
-                'kyc' => ['KYC / PPID', 'fa-shield-halved'],
+                'kyc' => ['KYC / Didit', 'fa-shield-halved'],
                 'pagbank' => ['PagBank', 'fa-building-columns'],
                 'edi' => ['EDI', 'fa-arrows-rotate'],
             ] as $key => [$label, $icon])
@@ -285,7 +285,7 @@
 
             @include('admin.configuracoes.partials.email', ['config' => $config])
 
-            @include('admin.configuracoes.partials.kyc', ['config' => $config, 'ppidConfigurado' => $ppidConfigurado])
+            @include('admin.configuracoes.partials.kyc', ['config' => $config, 'ppidConfigurado' => $ppidConfigurado, 'diditConfigurado' => $diditConfigurado])
 
             @include('admin.configuracoes.partials.pagbank', ['config' => $config, 'pagbankConfigurado' => $pagbankConfigurado])
 

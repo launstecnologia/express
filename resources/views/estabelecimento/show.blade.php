@@ -28,6 +28,12 @@
         $estabelecimento->cep ? 'CEP '.$estabelecimento->cep : null,
     ]);
     $enderecoCompleto = $partesEndereco !== [] ? implode(' · ', $partesEndereco) : '-';
+    $linkDocumentos = filled($estabelecimento->documento_token_publico)
+        ? route('documentos.public.create', $estabelecimento->documento_token_publico)
+        : null;
+    $whatsAppDocumentos = $linkDocumentos
+        ? 'https://wa.me/?text='.rawurlencode('Olá! Para concluir o cadastro, envie os documentos e assine o aceite das taxas neste link: '.$linkDocumentos)
+        : null;
 @endphp
 
 <div class="mb-4 flex items-center justify-between">
@@ -99,6 +105,19 @@
         <h3 class="text-lg font-bold text-gray-900">{{ $nome }}</h3>
         <p class="mt-0.5 text-sm text-gray-500">{{ $estabelecimento->pessoa_tipo === 'fisica' ? 'CPF' : 'CNPJ' }} {{ $documento }}</p>
     </div>
+
+    @if ($linkDocumentos)
+        <div class="border-b border-gray-100 px-6 py-4">
+            <p class="text-xs font-bold uppercase tracking-wide text-gray-400">Link de documentos e aceite</p>
+            <p class="mt-1 text-xs text-gray-500">Envie este endereço para o estabelecimento enviar os documentos e assinar as taxas.</p>
+            <div class="mt-3 flex flex-col gap-2 sm:flex-row">
+                <input data-public-link readonly value="{{ $linkDocumentos }}" class="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-700">
+                <button type="button" data-copy-text="{{ $linkDocumentos }}" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-800">
+                    <i class="fa-regular fa-copy"></i> Copiar
+                </button>
+            </div>
+        </div>
+    @endif
 
     <div class="grid gap-6 p-6 lg:grid-cols-3">
         <div class="space-y-4 lg:col-span-2">
@@ -866,8 +885,8 @@
         {{-- Avisos de configuração --}}
         @if (! $kycAtivo)
             <p class="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">Módulo KYC desativado pelo administrador.</p>
-        @elseif (! $ppidConfigurado)
-            <p class="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">PPID não configurada — documentos irão para revisão manual do Admin.</p>
+        @elseif (! $diditConfigurado)
+            <p class="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">DIDIT_API_KEY não configurada — documentos irão para revisão manual do Admin.</p>
         @endif
 
         {{-- Receita Federal --}}
@@ -931,7 +950,7 @@
                             @if ($kycEhAdmin && $kycDoc)
                                 @if ($kycDoc->openai_dados_extraidos)
                                     <details class="mt-2">
-                                        <summary class="cursor-pointer text-xs font-semibold text-gray-400 hover:text-gray-700">Dados extraídos (PPID OCR)</summary>
+                                        <summary class="cursor-pointer text-xs font-semibold text-gray-400 hover:text-gray-700">Dados extraídos (Didit)</summary>
                                         <pre class="mt-1 overflow-x-auto rounded bg-gray-50 p-2 text-xs">{{ json_encode($kycDoc->openai_dados_extraidos, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
                                     </details>
                                 @endif
@@ -1026,14 +1045,12 @@
         $enviadosExigidos = collect($documentosExigidos)->filter(fn ($doc) => $documentosPorTipo->has($doc['tipo']))->count();
         $aceite = $estabelecimento->relationLoaded('aceite') ? $estabelecimento->getRelation('aceite') : null;
         $snapshotDocumentos = collect(is_array($aceite?->payload_hash) ? ($aceite->payload_hash['documentos'] ?? []) : []);
-        $linkDocumentos = route('documentos.public.create', $estabelecimento->documento_token_publico);
-        $whatsAppDocumentos = 'https://wa.me/?text='.rawurlencode('Olá! Para concluir o cadastro, envie os documentos e assine o aceite das taxas neste link: '.$linkDocumentos);
     @endphp
 
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
         <div>
             <h3 class="text-base font-bold text-gray-800">Documentos</h3>
-            <p class="text-xs text-gray-400">{{ $totalDocumentos }} documento(s) anexado(s). A análise KYC (PPID) inicia automaticamente ao enviar aqui.</p>
+            <p class="text-xs text-gray-400">{{ $totalDocumentos }} documento(s) anexado(s). A análise KYC (Didit) inicia automaticamente ao enviar aqui.</p>
         </div>
         <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
             {{ $enviadosExigidos }}/{{ count($documentosExigidos) }} tipos enviados
