@@ -204,6 +204,12 @@
     </div>
 
     <script>
+        window.addEventListener('pageshow', (event) => {
+            if (event.persisted) {
+                window.location.reload();
+            }
+        });
+
         document.getElementById('toggle-password')?.addEventListener('click', () => {
             const input = document.getElementById('password');
             const icon = document.getElementById('toggle-password-icon');

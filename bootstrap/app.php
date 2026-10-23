@@ -19,6 +19,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Session\TokenMismatchException;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -68,20 +69,36 @@ return Application::configure(basePath: dirname(__DIR__))
         });
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        $exceptions->render(function (TokenMismatchException $e, Request $request) {
-            if ($request->expectsJson()) {
+        $exceptions->render(function (HttpException|TokenMismatchException $e, Request $request) {
+            $sessaoExpirada = $e instanceof TokenMismatchException
+                || ($e instanceof HttpException && ($e->getStatusCode() === 419 || $e->getPrevious() instanceof TokenMismatchException));
+
+            if (! $sessaoExpirada) {
+                return null;
+            }
+
+            if ($request->expectsJson() || $request->ajax()) {
                 return response()->json(['message' => 'Sessão expirada. Atualize a página e tente novamente.'], 419);
             }
 
-            $loginUrl = TenantUrl::aplicarTenant(route('login'), TenantUrl::slugAtual($request));
+            try {
+                $loginUrl = TenantUrl::aplicarTenant(route('login'), TenantUrl::slugAtual($request));
+            } catch (\Throwable) {
+                $loginUrl = url('/login');
+            }
 
             if ($request->is('logout') || $request->routeIs('logout')) {
                 return redirect()->to($loginUrl);
             }
 
-            return redirect()
-                ->to($loginUrl)
-                ->withErrors(['email' => 'Sua sessão expirou. Atualize a página e faça login novamente.']);
+            try {
+                return redirect()
+                    ->to($loginUrl)
+                    ->withInput($request->except(['password', '_token']))
+                    ->withErrors(['email' => 'Sua sessão expirou. Entre novamente.']);
+            } catch (\Throwable) {
+                return redirect()->to($loginUrl);
+            }
         });
     })
     ->create();
