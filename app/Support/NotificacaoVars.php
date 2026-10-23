@@ -26,6 +26,9 @@ class NotificacaoVars
             'documento' => $documento ?: '-',
             'email' => (string) ($estab->email ?? ''),
             'link' => route('estabelecimentos.show', $estab),
+            'link_documentos' => filled($estab->documento_token_publico)
+                ? route('documentos.public.create', $estab->documento_token_publico)
+                : '',
         ];
     }
 

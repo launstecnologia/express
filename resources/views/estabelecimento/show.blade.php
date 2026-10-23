@@ -1020,16 +1020,14 @@
 
 <section id="documentos" data-tab-panel="documentos" class="mt-8 hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
     @php
-        $tiposDocumento = [
-            'RG/CNH - Frente',
-            'RG/CNH - Verso',
-            'Selfie Segurando Documento',
-            'Comprovante da Atividade',
-            'Comprovante de Endereço',
-            'Contrato Social (Se for MEI - CCMEI)',
-        ];
-        $documentosPorTipo = $estabelecimento->documentos->keyBy('tipo_documento');
+        $documentosExigidos = \App\Support\AceiteContratacao::documentosExigidos($estabelecimento->pessoa_tipo);
+        $documentosPorTipo = $estabelecimento->documentos->sortByDesc('id')->unique('tipo_documento')->keyBy('tipo_documento');
         $totalDocumentos = $estabelecimento->documentos->count();
+        $enviadosExigidos = collect($documentosExigidos)->filter(fn ($doc) => $documentosPorTipo->has($doc['tipo']))->count();
+        $aceite = $estabelecimento->relationLoaded('aceite') ? $estabelecimento->getRelation('aceite') : null;
+        $snapshotDocumentos = collect(is_array($aceite?->payload_hash) ? ($aceite->payload_hash['documentos'] ?? []) : []);
+        $linkDocumentos = route('documentos.public.create', $estabelecimento->documento_token_publico);
+        $whatsAppDocumentos = 'https://wa.me/?text='.rawurlencode('Olá! Para concluir o cadastro, envie os documentos e assine o aceite das taxas neste link: '.$linkDocumentos);
     @endphp
 
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
@@ -1038,16 +1036,21 @@
             <p class="text-xs text-gray-400">{{ $totalDocumentos }} documento(s) anexado(s). A análise KYC (PPID) inicia automaticamente ao enviar aqui.</p>
         </div>
         <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
-            {{ $documentosPorTipo->count() }}/{{ count($tiposDocumento) }} tipos enviados
+            {{ $enviadosExigidos }}/{{ count($documentosExigidos) }} tipos enviados
         </span>
     </div>
 
     <div class="grid gap-6 p-5 xl:grid-cols-[1fr_420px]">
         <div class="space-y-4">
             <div class="grid gap-3 md:grid-cols-2">
-                @foreach ($tiposDocumento as $tipo)
+                @foreach ($documentosExigidos as $docExigido)
                     @php
+                        $tipo = $docExigido['tipo'];
                         $documentoTipo = $documentosPorTipo->get($tipo);
+                        $snapDocumento = $snapshotDocumentos->firstWhere('tipo', $tipo);
+                        $documentoSubstituido = $documentoTipo && $snapDocumento
+                            ? \App\Support\AceiteContratacao::arquivoDiverge($documentoTipo->arquivo_path, $snapDocumento['sha256'] ?? null)
+                            : false;
                     @endphp
                     <div class="rounded-xl border {{ $documentoTipo ? 'border-emerald-100 bg-emerald-50/40' : 'border-gray-100 bg-gray-50' }} p-4">
                         <div class="flex items-start gap-3">
@@ -1055,7 +1058,10 @@
                                 <i class="fa-solid {{ $documentoTipo ? 'fa-check' : 'fa-file-arrow-up' }}"></i>
                             </div>
                             <div class="min-w-0 flex-1">
-                                <p class="font-bold text-gray-800">{{ $tipo }}</p>
+                                <p class="font-bold text-gray-800">{{ $docExigido['titulo'] }}</p>
+                                @if ($documentoSubstituido)
+                                    <p class="mt-1 text-xs font-semibold text-amber-700">Arquivo substituído depois do aceite. O código de confirmação continua valendo para o arquivo assinado.</p>
+                                @endif
                                 @if ($documentoTipo)
                                     <p class="mt-1 truncate text-xs text-gray-500">{{ $documentoTipo->arquivo_nome ?: basename($documentoTipo->arquivo_path) }}</p>
                                     <div class="mt-3 flex flex-wrap items-center gap-2">
@@ -1091,8 +1097,8 @@
                 <span class="text-xs font-bold uppercase tracking-wide text-gray-500">Tipo de Documento</span>
                 <select name="tipo_documento" class="w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-700">
                     <option value="">Selecione</option>
-                    @foreach ($tiposDocumento as $tipo)
-                        <option>{{ $tipo }}</option>
+                    @foreach ($documentosExigidos as $docExigido)
+                        <option value="{{ $docExigido['tipo'] }}">{{ $docExigido['titulo'] }}</option>
                     @endforeach
                 </select>
             </label>
@@ -1112,6 +1118,66 @@
         </form>
     </div>
 
+    @if ($aceite)
+        <div class="border-t border-gray-100 bg-white p-5">
+            <div class="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+                <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <p class="text-sm font-bold text-emerald-800">Aceite assinado</p>
+                        <p class="mt-1 text-xs text-gray-500">{{ $aceite->nome_responsavel }} · {{ $aceite->condicaoLabel() }} · {{ $aceite->aceite_em?->format('d/m/Y H:i:s') }}</p>
+                    </div>
+                    <button type="button" data-copy-text="{{ $aceite->hash_confirmacao }}" class="rounded-lg border border-emerald-700 px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100">Copiar código</button>
+                </div>
+                <p class="break-all font-mono text-xs text-gray-700">{{ $aceite->hash_confirmacao }}</p>
+                <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                    <div>
+                        <dt class="text-xs font-bold uppercase tracking-wide text-gray-400">Aparelho</dt>
+                        <dd>{{ \Carbon\Carbon::parse($aceite->data_hora_cliente)->format('d/m/Y H:i:s') }} · {{ $aceite->fuso_horario }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-bold uppercase tracking-wide text-gray-400">IP</dt>
+                        <dd>{{ $aceite->ip ?: '—' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-bold uppercase tracking-wide text-gray-400">Localização</dt>
+                        <dd>
+                            {{ $aceite->latitude }}, {{ $aceite->longitude }}
+                            @if ($aceite->precisao_metros)
+                                <span class="text-gray-500">(± {{ $aceite->precisao_metros }} m)</span>
+                            @endif
+                            <a href="https://www.google.com/maps?q={{ $aceite->latitude }},{{ $aceite->longitude }}" target="_blank" rel="noopener" class="ml-1 font-semibold text-blue-700">Mapa</a>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-bold uppercase tracking-wide text-gray-400">CPF do signatário</dt>
+                        <dd>{{ \App\Support\DocumentoBrasil::formatarCpf($aceite->cpf_responsavel) }}</dd>
+                    </div>
+                </dl>
+                <img src="{{ route('estabelecimentos.aceite.assinatura', $estabelecimento) }}" alt="Assinatura do aceite" class="mt-4 max-h-36 rounded-lg border border-emerald-100 bg-white">
+                <details class="mt-4 text-sm text-gray-600">
+                    <summary class="cursor-pointer font-semibold text-gray-800">Declaração, taxas aceitas e aparelho</summary>
+                    <p class="mt-2 leading-6">{{ $aceite->declaracao }}</p>
+                    <ul class="mt-3 space-y-1">
+                        @foreach ($aceite->resumo['taxas'] ?? [] as $linha)
+                            <li>
+                                <span class="font-semibold">{{ $linha['modalidade'] }}:</span>
+                                @if ($linha['taxa'])
+                                    {{ number_format((float) $linha['taxa'], 2, ',', '.') }}%
+                                    ({{ implode(', ', $linha['bandeiras']) }})
+                                @else
+                                    @foreach ($linha['detalhes'] as $detalhe)
+                                        {{ number_format((float) $detalhe['taxa'], 2, ',', '.') }}% {{ implode(', ', $detalhe['bandeiras']) }}@if (! $loop->last); @endif
+                                    @endforeach
+                                @endif
+                            </li>
+                        @endforeach
+                    </ul>
+                    <p class="mt-3 break-all text-xs text-gray-400">{{ $aceite->user_agent }}</p>
+                </details>
+            </div>
+        </div>
+    @endif
+
     <div class="border-t border-gray-100 bg-gray-50 p-5">
         <div class="rounded-xl border border-gray-200 bg-white p-4">
             <div class="mb-3 flex items-center gap-3">
@@ -1119,14 +1185,17 @@
                     <i class="fa-solid fa-link"></i>
                 </div>
                 <div>
-                    <p class="text-sm font-bold text-gray-800">Link para envio de documentos</p>
-                    <p class="text-xs text-gray-400">Compartilhe este link para o estabelecimento anexar arquivos.</p>
+                    <p class="text-sm font-bold text-gray-800">Link de documentos, taxas e assinatura</p>
+                    <p class="text-xs text-gray-400">O estabelecimento envia os documentos no celular, confere as taxas e assina o aceite.</p>
                 </div>
             </div>
             <div class="flex">
-                <input data-public-link readonly value="{{ route('documentos.public.create', $estabelecimento->documento_token_publico) }}" class="w-full rounded-l-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-700">
+                <input data-public-link readonly value="{{ $linkDocumentos }}" class="w-full rounded-l-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-700">
                 <button type="button" data-copy-public-link class="rounded-r-lg border border-l-0 border-indigo-900 px-5 text-sm font-bold text-indigo-900 hover:bg-indigo-50">Copiar</button>
             </div>
+            <a href="{{ $whatsAppDocumentos }}" target="_blank" rel="noopener" class="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700">
+                <i class="fa-brands fa-whatsapp"></i> Enviar no WhatsApp
+            </a>
         </div>
     </div>
 </section>
@@ -1135,6 +1204,7 @@
     @php
         $acaoLabel = [
             'documento_inserido' => ['Documento enviado', 'bg-emerald-100 text-emerald-700', 'fa-file-circle-plus'],
+            'aceite_registrado' => ['Aceite assinado', 'bg-emerald-100 text-emerald-700', 'fa-signature'],
             'documento_removido' => ['Documento removido', 'bg-red-100 text-red-700', 'fa-file-circle-minus'],
             'update_status' => ['Status alterado', 'bg-blue-100 text-blue-700', 'fa-rotate'],
             'insert' => ['Cadastro criado', 'bg-emerald-100 text-emerald-700', 'fa-plus'],
@@ -1657,9 +1727,19 @@
             });
         }
 
-        document.querySelector('[data-copy-public-link]')?.addEventListener('click', async () => {
-            const input = document.querySelector('[data-public-link]');
-            await navigator.clipboard.writeText(input.value);
+        document.querySelectorAll('[data-copy-public-link], [data-copy-text]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                const texto = button.dataset.copyText || document.querySelector('[data-public-link]')?.value || '';
+                if (!texto) return;
+                try {
+                    await navigator.clipboard.writeText(texto);
+                } catch (e) {
+                    return;
+                }
+                const original = button.textContent;
+                button.textContent = 'Copiado';
+                setTimeout(() => { button.textContent = original; }, 1500);
+            });
         });
 
         const formBuscarSafepay = document.getElementById('form-buscar-safepay');

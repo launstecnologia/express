@@ -14,14 +14,15 @@ class KycTipoDocumentoMapper
         $tipos = [
             'RG/CNH - Frente',
             'RG/CNH - Verso',
-            'Selfie Segurando Documento',
-            'Comprovante da Atividade',
-            'Comprovante de Endereço',
         ];
 
         if ($pessoaTipo === 'juridica') {
             $tipos[] = 'Contrato Social (Se for MEI - CCMEI)';
         }
+
+        $tipos[] = 'Comprovante de Endereço';
+        $tipos[] = 'Comprovante da Atividade';
+        $tipos[] = 'Selfie Segurando Documento';
 
         return $tipos;
     }

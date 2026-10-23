@@ -6,11 +6,18 @@ use App\Jobs\CriarEmailEstabelecimentoJob;
 use App\Models\Estabelecimento;
 use App\Services\KycInicializacaoService;
 use App\Support\EstabelecimentoEtapaListagem;
+use Illuminate\Support\Str;
 
 class EstabelecimentoObserver
 {
     public function created(Estabelecimento $estabelecimento): void
     {
+        if (blank($estabelecimento->documento_token_publico)) {
+            $estabelecimento->forceFill([
+                'documento_token_publico' => (string) Str::uuid(),
+            ])->saveQuietly();
+        }
+
         app(KycInicializacaoService::class)->iniciar($estabelecimento);
     }
 

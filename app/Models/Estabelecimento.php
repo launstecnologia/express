@@ -163,6 +163,11 @@ class Estabelecimento extends Model
         return $this->hasMany(EstabelecimentoDocumento::class);
     }
 
+    public function aceite()
+    {
+        return $this->hasOne(EstabelecimentoAceite::class);
+    }
+
     public function kycAnalise()
     {
         return $this->hasOne(KycAnalise::class);

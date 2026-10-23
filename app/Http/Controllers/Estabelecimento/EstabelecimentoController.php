@@ -241,10 +241,10 @@ class EstabelecimentoController extends Controller
         $estabelecimento = Estabelecimento::create($dados);
         $royalties->fixarCadeia($estabelecimento->load('plano.taxas.royalties'));
 
-        if ($modoCadastro === 'apenas_dados') {
-            return redirect()
-                ->route('estabelecimentos.show', $estabelecimento)
-                ->with('status', 'Estabelecimento cadastrado. E-mail e automação não foram iniciados — você pode acioná-los depois na aba Automação.');
+        if (blank($estabelecimento->documento_token_publico)) {
+            $estabelecimento->forceFill([
+                'documento_token_publico' => (string) Str::uuid(),
+            ])->save();
         }
 
         if (filled($estabelecimento->email)) {
@@ -252,8 +252,14 @@ class EstabelecimentoController extends Controller
                 'estabelecimento.cadastro',
                 $estabelecimento->email,
                 NotificacaoVars::estabelecimento($estabelecimento),
-                route('estabelecimentos.show', $estabelecimento)
+                route('documentos.public.create', $estabelecimento->documento_token_publico)
             );
+        }
+
+        if ($modoCadastro === 'apenas_dados') {
+            return redirect()
+                ->to(route('estabelecimentos.show', $estabelecimento).'#documentos')
+                ->with('status', 'Estabelecimento cadastrado. O link para enviar documentos e assinar o aceite está na aba Documentos. E-mail da plataforma e automação não foram iniciados — você pode acioná-los depois na aba Automação.');
         }
 
         $avisoEmail = null;
@@ -282,8 +288,11 @@ class EstabelecimentoController extends Controller
         } elseif (blank($estabelecimento->webmail_email)) {
             $mensagem .= ' Configure o e-mail da plataforma para iniciar a automação.';
         }
+        $mensagem .= ' O link de documentos e aceite está na aba Documentos.';
 
-        $redirect = redirect()->route('estabelecimentos.show', $estabelecimento)->with('status', $mensagem);
+        $redirect = redirect()
+            ->to(route('estabelecimentos.show', $estabelecimento).'#documentos')
+            ->with('status', $mensagem);
 
         if ($avisoEmail) {
             $redirect = $redirect->with('aviso', $avisoEmail);
@@ -322,7 +331,11 @@ class EstabelecimentoController extends Controller
             $estabelecimento->forceFill(['documento_token_publico' => (string) Str::uuid()])->save();
         }
 
-        $estabelecimento->load(['master', 'marketplace', 'revenda', 'plano', 'documentos', 'emails', 'kycAnalise']);
+        $relacoes = ['master', 'marketplace', 'revenda', 'plano', 'documentos', 'emails', 'kycAnalise'];
+        if (\Illuminate\Support\Facades\Schema::hasTable('estabelecimento_aceites')) {
+            $relacoes[] = 'aceite';
+        }
+        $estabelecimento->load($relacoes);
 
         // KYC — inicializa e sincroniza para a aba inline
         $kyc = $kycInicializacao->iniciar($estabelecimento);

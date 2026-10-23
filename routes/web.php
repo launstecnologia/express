@@ -29,6 +29,7 @@ use App\Http\Controllers\Estabelecimento\EstabelecimentoController;
 use App\Http\Controllers\Estabelecimento\FvDocumentoConsultaController;
 use App\Http\Controllers\Estabelecimento\EstabelecimentoWebmailController;
 use App\Http\Controllers\Kyc\KycController;
+use App\Http\Controllers\Estabelecimento\EstabelecimentoAceiteController;
 use App\Http\Controllers\Estabelecimento\EstabelecimentoDocumentoController;
 use App\Http\Controllers\Estabelecimento\EstabelecimentoEmailController;
 use App\Http\Controllers\Estabelecimento\EstabelecimentoEmailPainelController;
@@ -44,8 +45,12 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => redirect()->route('login'));
 
-Route::get('/envio-documento/{token}', [EnvioDocumentoController::class, 'create'])->name('documentos.public.create');
-Route::post('/envio-documento/{token}', [EnvioDocumentoController::class, 'store'])->name('documentos.public.store');
+Route::middleware('throttle:40,1')->group(function () {
+    Route::get('/envio-documento/{token}', [EnvioDocumentoController::class, 'create'])->name('documentos.public.create');
+    Route::post('/envio-documento/{token}', [EnvioDocumentoController::class, 'store'])->name('documentos.public.store');
+    Route::post('/envio-documento/{token}/aceite', [EnvioDocumentoController::class, 'aceite'])->name('documentos.public.aceite');
+    Route::get('/envio-documento/{token}/assinatura', [EnvioDocumentoController::class, 'assinatura'])->name('documentos.public.assinatura');
+});
 
 Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
 Route::post('/login', [AuthenticatedSessionController::class, 'store'])->name('login.store');
@@ -108,6 +113,7 @@ Route::middleware(['auth', 'usuario.ativo', 'trocar.senha', 'tenant.access'])->g
     Route::post('estabelecimentos/{estabelecimento}/documentos', [EstabelecimentoDocumentoController::class, 'store'])->name('estabelecimentos.documentos.store');
     Route::get('documentos/{documento}/download', [EstabelecimentoDocumentoController::class, 'download'])->name('documentos.download');
     Route::delete('estabelecimentos/{estabelecimento}/documentos/{documento}', [EstabelecimentoDocumentoController::class, 'destroy'])->name('estabelecimentos.documentos.destroy');
+    Route::get('estabelecimentos/{estabelecimento}/aceite/assinatura', [EstabelecimentoAceiteController::class, 'assinatura'])->name('estabelecimentos.aceite.assinatura');
     Route::prefix('estabelecimentos/{estabelecimento}')->name('estabelecimentos.')->group(function () {
         Route::get('email', [EstabelecimentoEmailPainelController::class, 'index'])->name('email.painel');
         Route::patch('subdominio', [EstabelecimentoEmailController::class, 'updateSubdominio'])->name('subdominio.update');
