@@ -85,6 +85,14 @@ class KycFinalizacaoService
         $this->notificarKyc($kyc->fresh(), 'kyc.aprovado', $motivo);
     }
 
+    public function enfileirarAutomacaoAposAprovacao(Estabelecimento $estab): bool
+    {
+        $estab = $estab->fresh();
+        $this->pagBankCadastro->enfileirar($estab);
+
+        return $this->dispararAutomacaoFv($estab, exigirWebmail: true);
+    }
+
     public function aprovarAutomaticoNoCadastro(Estabelecimento $estab, ?Usuario $usuario = null): bool
     {
         $kyc = KycAnalise::firstOrCreate(

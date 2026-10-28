@@ -212,8 +212,6 @@ class EstabelecimentoController extends Controller
         Request $request,
         RoyaltyCalculadorService $royalties,
         HierarquiaService $hierarquia,
-        EmailPlataformaService $emailPlataforma,
-        KycFinalizacaoService $kycFinalizacao,
     )
     {
         $this->autorizarMutacaoEstabelecimento();
@@ -223,10 +221,6 @@ class EstabelecimentoController extends Controller
                 'modo_cadastro' => ['required', 'in:completo,apenas_dados'],
             ]);
         }
-
-        $modoCadastro = UsuarioComercial::deveEscolherModoCadastro()
-            ? $request->string('modo_cadastro')->toString()
-            : 'completo';
 
         $dados = $this->validar($request);
         $usuario = $request->user();
@@ -256,49 +250,9 @@ class EstabelecimentoController extends Controller
             );
         }
 
-        if ($modoCadastro === 'apenas_dados') {
-            return redirect()
-                ->to(route('estabelecimentos.show', $estabelecimento).'#documentos')
-                ->with('status', 'Estabelecimento cadastrado. O link para enviar documentos e assinar o aceite está na aba Documentos. E-mail da plataforma e automação não foram iniciados — você pode acioná-los depois na aba Automação.');
-        }
-
-        $avisoEmail = null;
-
-        if (config('directadmin.criar_email_ao_habilitar') && filled($estabelecimento->email)) {
-            try {
-                $usernameOcupado = $emailPlataforma->provisionarAutomatico($estabelecimento);
-                if ($usernameOcupado !== null) {
-                    $avisoEmail = "O username \"{$usernameOcupado}\" já existe no servidor de e-mail. Acesse o cadastro para definir manualmente.";
-                }
-            } catch (\Throwable) {
-                $avisoEmail = 'Não foi possível criar o e-mail da plataforma automaticamente. Acesse o cadastro para tentar novamente.';
-            }
-        }
-
-        $estabelecimento = $estabelecimento->fresh();
-        $usuarioComercial = UsuarioComercial::principal() ?? $usuario;
-        $automacaoEnfileirada = $kycFinalizacao->aprovarAutomaticoNoCadastro(
-            $estabelecimento,
-            $usuarioComercial instanceof Usuario ? $usuarioComercial : null,
-        );
-
-        $mensagem = 'Estabelecimento cadastrado e aprovado automaticamente.';
-        if ($automacaoEnfileirada) {
-            $mensagem .= ' Automação PagBank enfileirada.';
-        } elseif (blank($estabelecimento->webmail_email)) {
-            $mensagem .= ' Configure o e-mail da plataforma para iniciar a automação.';
-        }
-        $mensagem .= ' O link de documentos e aceite está na aba Documentos.';
-
-        $redirect = redirect()
+        return redirect()
             ->to(route('estabelecimentos.show', $estabelecimento).'#documentos')
-            ->with('status', $mensagem);
-
-        if ($avisoEmail) {
-            $redirect = $redirect->with('aviso', $avisoEmail);
-        }
-
-        return $redirect;
+            ->with('status', 'Estabelecimento cadastrado e aguardando aprovação. O e-mail da plataforma e o cadastro na PagBank começam somente quando o status for aprovado. O link de documentos e aceite está na aba Documentos.');
     }
 
     public function edit(Request $request, Estabelecimento $estabelecimento)
@@ -426,8 +380,23 @@ class EstabelecimentoController extends Controller
 
         $estabelecimento->update($update);
 
+        $mensagem = 'Status alterado com sucesso.';
+        $avisoEmail = null;
+
+        if (
+            $dados['status'] === EstabelecimentoEtapaListagem::APROVADO
+            && EstabelecimentoEtapaListagem::normalizarStatus($anterior) !== EstabelecimentoEtapaListagem::APROVADO
+        ) {
+            [$mensagemExtra, $avisoEmail] = $this->iniciarEmailEPagBank($estabelecimento->fresh());
+            $mensagem .= $mensagemExtra;
+        }
+
         $redirect = redirect()->route('estabelecimentos.show', $estabelecimento)
-            ->with('status', 'Status alterado com sucesso.');
+            ->with('status', $mensagem);
+
+        if ($avisoEmail) {
+            $redirect->with('aviso', $avisoEmail);
+        }
 
         if (! EstabelecimentoSchema::temPagbankStatusManual() && filled($pagbankManual)) {
             $redirect->with('aviso', 'Status operacional salvo. O override manual do PagBank exige a migration pendente no servidor (php artisan migrate --force).');
@@ -450,6 +419,48 @@ class EstabelecimentoController extends Controller
         );
 
         return $redirect;
+    }
+
+    /**
+     * @return array{0: string, 1: ?string}
+     */
+    private function iniciarEmailEPagBank(Estabelecimento $estabelecimento): array
+    {
+        $aviso = null;
+        $emailOk = filled($estabelecimento->webmail_email);
+        $criouAgora = false;
+
+        if (! $emailOk && config('directadmin.criar_email_ao_habilitar') && filled($estabelecimento->email)) {
+            try {
+                $ocupado = app(EmailPlataformaService::class)->provisionarAutomatico($estabelecimento);
+                if ($ocupado !== null) {
+                    $aviso = "O username \"{$ocupado}\" já existe no servidor de e-mail. Defina o e-mail da plataforma manualmente para seguir com a PagBank.";
+                } else {
+                    $emailOk = true;
+                    $criouAgora = true;
+                    $estabelecimento = $estabelecimento->fresh();
+                }
+            } catch (\Throwable) {
+                $aviso = 'Não foi possível criar o e-mail da plataforma. O cadastro na PagBank não foi iniciado.';
+            }
+        }
+
+        $pagbank = $emailOk
+            && app(KycFinalizacaoService::class)->enfileirarAutomacaoAposAprovacao($estabelecimento);
+
+        if ($pagbank) {
+            $texto = $criouAgora
+                ? ' E-mail da plataforma criado e cadastro na PagBank enfileirado.'
+                : ' Cadastro na PagBank enfileirado.';
+
+            return [$texto, $aviso];
+        }
+
+        if ($emailOk) {
+            return [' O e-mail da plataforma está pronto, mas o cadastro na PagBank não foi enfileirado.', $aviso];
+        }
+
+        return ['', $aviso ?: 'O e-mail da plataforma não foi criado, então a PagBank não foi iniciada.'];
     }
 
     public function inativarSistema(Request $request, Estabelecimento $estabelecimento, LogService $log)

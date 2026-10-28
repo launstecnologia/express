@@ -335,7 +335,7 @@
     <div class="w-full max-w-lg rounded-xl bg-white shadow-2xl">
         <div class="border-b border-gray-100 px-5 py-4">
             <h3 class="text-lg font-semibold text-gray-800">Como deseja salvar?</h3>
-            <p class="mt-1 text-sm text-gray-500">Escolha se o cadastro deve seguir para automação agora ou apenas gravar os dados.</p>
+            <p class="mt-1 text-sm text-gray-500">O e-mail da plataforma e a PagBank não são criados neste momento.</p>
         </div>
         <div class="space-y-3 p-5">
             <button type="button" data-modo-cadastro="completo" class="flex w-full items-start gap-3 rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-left transition hover:border-indigo-400 hover:bg-indigo-100">
@@ -343,8 +343,8 @@
                     <i class="fa-solid fa-robot text-sm"></i>
                 </span>
                 <span>
-                    <span class="block text-sm font-bold text-indigo-900">Cadastro completo com automação</span>
-                    <span class="mt-1 block text-xs text-indigo-800/80">Cria o e-mail da plataforma, envia para a Força de Vendas PagBank e inicia a automação.</span>
+                    <span class="block text-sm font-bold text-indigo-900">Cadastro completo</span>
+                    <span class="mt-1 block text-xs text-indigo-800/80">Grava o estabelecimento. O e-mail da plataforma e o cadastro na PagBank começam somente quando o status for aprovado.</span>
                 </span>
             </button>
             <button type="button" data-modo-cadastro="apenas_dados" class="flex w-full items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-left transition hover:border-gray-300 hover:bg-gray-100">
