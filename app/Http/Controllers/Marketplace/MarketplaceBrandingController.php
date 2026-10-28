@@ -39,6 +39,7 @@ class MarketplaceBrandingController extends Controller
             'slug' => ['required', 'string', 'max:63', 'regex:/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/', Rule::unique('marketplace_brandings', 'slug')->ignore($branding->id)],
             'custom_domain' => ['nullable', 'string', 'max:255', Rule::unique('marketplace_brandings', 'custom_domain')->ignore($branding->id)],
             'whitelabel_ativo' => ['boolean'],
+            'exige_assinatura' => ['boolean'],
             'logo' => ['nullable', 'image', 'max:4096'],
             'logo_white' => ['nullable', 'image', 'max:4096'],
             'favicon' => ['nullable', 'image', 'max:2048'],

@@ -103,6 +103,7 @@ class MarketplaceBrandingService
     public function aplicarAtualizacao(MarketplaceBranding $branding, Usuario $marketplace, array $dados, Request $request): MarketplaceBranding
     {
         $dados['whitelabel_ativo'] = $request->boolean('whitelabel_ativo');
+        $dados['exige_assinatura'] = $request->boolean('exige_assinatura');
         $dados['custom_domain'] = filled($dados['custom_domain'] ?? null)
             ? strtolower((string) $dados['custom_domain'])
             : null;

@@ -5,44 +5,46 @@ namespace App\Http\Controllers\Estabelecimento;
 use App\Http\Controllers\Controller;
 use App\Models\Estabelecimento;
 use App\Models\Log;
-use App\Rules\CelularValido;
-use App\Rules\CpfValido;
-use App\Rules\CnpjValido;
-use App\Services\AutomacaoLogService;
 use App\Models\Plano;
 use App\Models\Segmento;
 use App\Models\Usuario;
-use App\Support\DocumentoBrasil;
-use App\Support\EstabelecimentoEtapaListagem;
-use App\Support\EstabelecimentoSchema;
-use App\Support\UsuarioComercial;
+use App\Rules\CelularValido;
+use App\Rules\CnpjValido;
+use App\Rules\CpfValido;
+use App\Scopes\ExcluirInativoSistemaScope;
+use App\Services\AutomacaoLogService;
 use App\Services\AutomacaoPagBankService;
-use App\Services\EmailPlataformaService;
 use App\Services\HierarquiaService;
 use App\Services\KycDocumentoSyncService;
-use App\Services\KycFinalizacaoService;
 use App\Services\KycInicializacaoService;
+use App\Services\LiberacaoEstabelecimentoService;
 use App\Services\LogService;
 use App\Services\MarketplacePlanoService;
 use App\Services\NotificacaoEmailService;
 use App\Services\RoyaltyCalculadorService;
-use App\Support\KycDocumentosObrigatorios;
-use App\Support\KycTipoDocumentoMapper;
-use App\Support\NotificacaoVars;
 use App\Support\AutomacaoErroInterpretador;
+use App\Support\AutomacaoSchema;
+use App\Support\DocumentoBrasil;
+use App\Support\EstabelecimentoEtapaListagem;
+use App\Support\EstabelecimentoSchema;
+use App\Support\KycTipoDocumentoMapper;
+use App\Support\MarketplaceCadastro;
+use App\Support\NotificacaoVars;
 use App\Support\PlatformSettings;
-use App\Scopes\ExcluirInativoSistemaScope;
+use App\Support\UsuarioComercial;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class EstabelecimentoController extends Controller
 {
     public function __construct(private MarketplacePlanoService $marketplacePlano) {}
+
     public function index(Request $request)
     {
         // Filtro Master/Marketplace (e "sem vínculo") é ferramenta do admin.
@@ -212,8 +214,7 @@ class EstabelecimentoController extends Controller
         Request $request,
         RoyaltyCalculadorService $royalties,
         HierarquiaService $hierarquia,
-    )
-    {
+    ) {
         $this->autorizarMutacaoEstabelecimento();
 
         if (UsuarioComercial::deveEscolherModoCadastro()) {
@@ -250,9 +251,18 @@ class EstabelecimentoController extends Controller
             );
         }
 
+        if (! MarketplaceCadastro::exigeAssinatura($estabelecimento)) {
+            [$extra, $aviso] = app(LiberacaoEstabelecimentoService::class)->liberar($estabelecimento);
+            $redirect = redirect()
+                ->to(route('estabelecimentos.show', $estabelecimento).'#documentos')
+                ->with('status', 'Estabelecimento cadastrado e aprovado. O e-mail da plataforma e o cadastro na PagBank foram iniciados.'.$extra);
+
+            return $aviso ? $redirect->with('aviso', $aviso) : $redirect;
+        }
+
         return redirect()
             ->to(route('estabelecimentos.show', $estabelecimento).'#documentos')
-            ->with('status', 'Estabelecimento cadastrado e aguardando aprovação. O e-mail da plataforma e o cadastro na PagBank começam somente quando o status for aprovado. O link de documentos e aceite está na aba Documentos.');
+            ->with('status', 'Estabelecimento cadastrado. Ele será aprovado e enviado à PagBank quando os documentos forem enviados e a assinatura for concluída.');
     }
 
     public function edit(Request $request, Estabelecimento $estabelecimento)
@@ -286,7 +296,7 @@ class EstabelecimentoController extends Controller
         }
 
         $relacoes = ['master', 'marketplace', 'revenda', 'plano', 'documentos', 'emails', 'kycAnalise'];
-        if (\Illuminate\Support\Facades\Schema::hasTable('estabelecimento_aceites')) {
+        if (Schema::hasTable('estabelecimento_aceites')) {
             $relacoes[] = 'aceite';
         }
         $estabelecimento->load($relacoes);
@@ -298,9 +308,9 @@ class EstabelecimentoController extends Controller
 
         $kycItens = collect(KycTipoDocumentoMapper::tiposEstabelecimento($estabelecimento->pessoa_tipo))
             ->map(function (string $label) use ($estabelecimento, $kyc) {
-                $tipoKyc  = KycTipoDocumentoMapper::tipoKyc($label);
+                $tipoKyc = KycTipoDocumentoMapper::tipoKyc($label);
                 $estabDoc = $estabelecimento->documentos->keyBy('tipo_documento')->get($label);
-                $kycDoc   = $tipoKyc ? $kyc->documentos->keyBy('tipo')->get($tipoKyc) : null;
+                $kycDoc = $tipoKyc ? $kyc->documentos->keyBy('tipo')->get($tipoKyc) : null;
 
                 return compact('label', 'tipoKyc', 'estabDoc', 'kycDoc');
             });
@@ -312,7 +322,7 @@ class EstabelecimentoController extends Controller
             ->get();
 
         $automacaoLogs = $automacaoLogService->listarParaEstabelecimento($estabelecimento->id);
-        $automacaoLogsIndisponivel = ! \App\Support\AutomacaoSchema::temTabelaLogs();
+        $automacaoLogsIndisponivel = ! AutomacaoSchema::temTabelaLogs();
 
         $automacaoPreview = null;
         if (
@@ -350,7 +360,7 @@ class EstabelecimentoController extends Controller
             'automacaoPreview',
             'automacaoErro',
         ) + [
-            'kycAtivo'           => PlatformSettings::kycAtivo(),
+            'kycAtivo' => PlatformSettings::kycAtivo(),
             'diditConfigurado' => PlatformSettings::diditConfigurado(),
         ]);
     }
@@ -387,7 +397,7 @@ class EstabelecimentoController extends Controller
             $dados['status'] === EstabelecimentoEtapaListagem::APROVADO
             && EstabelecimentoEtapaListagem::normalizarStatus($anterior) !== EstabelecimentoEtapaListagem::APROVADO
         ) {
-            [$mensagemExtra, $avisoEmail] = $this->iniciarEmailEPagBank($estabelecimento->fresh());
+            [$mensagemExtra, $avisoEmail] = app(LiberacaoEstabelecimentoService::class)->iniciarEmailEPagBank($estabelecimento->fresh());
             $mensagem .= $mensagemExtra;
         }
 
@@ -421,48 +431,6 @@ class EstabelecimentoController extends Controller
         return $redirect;
     }
 
-    /**
-     * @return array{0: string, 1: ?string}
-     */
-    private function iniciarEmailEPagBank(Estabelecimento $estabelecimento): array
-    {
-        $aviso = null;
-        $emailOk = filled($estabelecimento->webmail_email);
-        $criouAgora = false;
-
-        if (! $emailOk && config('directadmin.criar_email_ao_habilitar') && filled($estabelecimento->email)) {
-            try {
-                $ocupado = app(EmailPlataformaService::class)->provisionarAutomatico($estabelecimento);
-                if ($ocupado !== null) {
-                    $aviso = "O username \"{$ocupado}\" já existe no servidor de e-mail. Defina o e-mail da plataforma manualmente para seguir com a PagBank.";
-                } else {
-                    $emailOk = true;
-                    $criouAgora = true;
-                    $estabelecimento = $estabelecimento->fresh();
-                }
-            } catch (\Throwable) {
-                $aviso = 'Não foi possível criar o e-mail da plataforma. O cadastro na PagBank não foi iniciado.';
-            }
-        }
-
-        $pagbank = $emailOk
-            && app(KycFinalizacaoService::class)->enfileirarAutomacaoAposAprovacao($estabelecimento);
-
-        if ($pagbank) {
-            $texto = $criouAgora
-                ? ' E-mail da plataforma criado e cadastro na PagBank enfileirado.'
-                : ' Cadastro na PagBank enfileirado.';
-
-            return [$texto, $aviso];
-        }
-
-        if ($emailOk) {
-            return [' O e-mail da plataforma está pronto, mas o cadastro na PagBank não foi enfileirado.', $aviso];
-        }
-
-        return ['', $aviso ?: 'O e-mail da plataforma não foi criado, então a PagBank não foi iniciada.'];
-    }
-
     public function inativarSistema(Request $request, Estabelecimento $estabelecimento, LogService $log)
     {
         abort_unless($request->user()?->tipo === 'admin', 403);
@@ -492,7 +460,7 @@ class EstabelecimentoController extends Controller
 
         $estabelecimento->update([
             'status' => EstabelecimentoSchema::statusParaBanco(EstabelecimentoEtapaListagem::NEGADO),
-            'ativo'  => false,
+            'ativo' => false,
         ]);
 
         $log->registrar(

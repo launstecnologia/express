@@ -25,6 +25,7 @@
     $percentual = count($documentosExigidos) > 0 ? (int) round(($enviados / count($documentosExigidos)) * 100) : 0;
     $taxasOk = count($resumo['taxas']) > 0;
     $podeAssinar = $faltando->isEmpty() && $taxasOk && ! $aceite;
+    $exigeAssinatura = \App\Support\MarketplaceCadastro::exigeAssinatura($estabelecimento);
     $primeiroFaltando = $faltando->first();
     $proximoTipo = is_array($primeiroFaltando) ? ($primeiroFaltando['tipo'] ?? null) : null;
     $fmtTaxa = fn ($valor) => number_format((float) $valor, 2, ',', '.').'%';
@@ -56,13 +57,15 @@
     </header>
 
     <nav class="no-print sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div class="mx-auto grid max-w-lg {{ $aceite ? 'grid-cols-2' : 'grid-cols-3' }} text-center text-sm font-semibold">
+        <div class="mx-auto grid max-w-lg {{ ($aceite || ! $exigeAssinatura) ? 'grid-cols-2' : 'grid-cols-3' }} text-center text-sm font-semibold">
             <a href="#documentos" class="px-2 py-3 text-slate-700">Documentos</a>
             @if ($aceite)
                 <a href="#comprovante" class="px-2 py-3 text-emerald-700">Comprovante</a>
             @else
                 <a href="#condicoes" class="px-2 py-3 text-slate-700">Taxas</a>
-                <a href="#assinatura" class="px-2 py-3 text-slate-700">Assinatura</a>
+                @if ($exigeAssinatura)
+                    <a href="#assinatura" class="px-2 py-3 text-slate-700">Assinatura</a>
+                @endif
             @endif
         </div>
     </nav>
@@ -70,6 +73,9 @@
     <main class="mx-auto max-w-lg space-y-4 px-4 py-4">
         @if (session('status'))
             <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{{ session('status') }}</div>
+        @endif
+        @if (session('aviso'))
+            <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{{ session('aviso') }}</div>
         @endif
 
         @if ($errors->any())
@@ -297,6 +303,10 @@
                 </div>
             </section>
 
+            @unless ($exigeAssinatura)
+                <p class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-600 shadow-sm">Este marketplace não pede assinatura. O cadastro segue para a PagBank sem aceite nesta página.</p>
+            @endunless
+            @if ($exigeAssinatura)
             <section id="assinatura" class="scroll-mt-16 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <h2 class="text-lg font-bold">Assinatura do aceite</h2>
                 @if (! $podeAssinar)
@@ -396,6 +406,7 @@
                     </form>
                 @endif
             </section>
+            @endif
         @endunless
     </main>
 

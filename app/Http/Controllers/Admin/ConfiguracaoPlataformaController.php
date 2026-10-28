@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Jobs\ReprocessarEdiEstabelecimentosJob;
 use App\Models\EdiReprocessamento;
 use App\Models\PlatformSetting;
+use App\Support\PlatformMail;
 use App\Support\PlatformSettings;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
 class ConfiguracaoPlataformaController extends Controller
@@ -80,6 +82,9 @@ class ConfiguracaoPlataformaController extends Controller
             'mail_reset_assunto' => ['nullable', 'string', 'max:200'],
             'mail_reset_corpo' => ['nullable', 'string', 'max:5000'],
             'kyc_ativo' => ['boolean'],
+            'didit_ativo' => ['boolean'],
+            'didit_api_key' => ['nullable', 'string', 'max:500'],
+            'didit_api_url' => ['nullable', 'url', 'max:255'],
             'ppid_api_url' => ['nullable', 'url', 'max:255'],
             'ppid_email' => ['nullable', 'email', 'max:150'],
             'ppid_senha' => ['nullable', 'string', 'max:500'],
@@ -139,6 +144,15 @@ class ConfiguracaoPlataformaController extends Controller
             ? $request->boolean('mail_reset_ativo')
             : ($config->mail_reset_ativo ?? true);
         $dados['kyc_ativo'] = $request->boolean('kyc_ativo');
+        $dados['didit_ativo'] = $request->boolean('didit_ativo');
+
+        if (! $request->filled('didit_api_key')) {
+            unset($dados['didit_api_key']);
+        }
+
+        if (! $request->filled('didit_api_url')) {
+            $dados['didit_api_url'] = null;
+        }
 
         if (! $request->filled('mail_reset_expira_minutos')) {
             unset($dados['mail_reset_expira_minutos']);
@@ -194,7 +208,7 @@ class ConfiguracaoPlataformaController extends Controller
 
         $config->update($dados);
         PlatformSettings::forget();
-        \App\Support\PlatformMail::apply();
+        PlatformMail::apply();
 
         return redirect()
             ->route('admin.configuracoes.edit', ['aba' => $request->input('_aba')])
@@ -210,26 +224,26 @@ class ConfiguracaoPlataformaController extends Controller
         ]);
 
         try {
-            \App\Support\PlatformMail::apply();
+            PlatformMail::apply();
 
-            \Illuminate\Support\Facades\Mail::raw(
+            Mail::raw(
                 "Este é um e-mail de teste enviado pela plataforma Express Payments.\n\n".
                 "Se você recebeu esta mensagem, o servidor SMTP está configurado corretamente.\n\n".
-                "Enviado em: " . now()->format('d/m/Y H:i:s'),
+                'Enviado em: '.now()->format('d/m/Y H:i:s'),
                 function ($message) use ($dados) {
                     $message->to($dados['destinatario'])
-                        ->subject('Teste de E-mail — ' . \App\Support\PlatformSettings::appName());
+                        ->subject('Teste de E-mail — '.PlatformSettings::appName());
                 }
             );
 
             return response()->json([
-                'ok'       => true,
+                'ok' => true,
                 'mensagem' => "E-mail de teste enviado para {$dados['destinatario']} com sucesso.",
             ]);
 
         } catch (\Throwable $e) {
             return response()->json([
-                'ok'  => false,
+                'ok' => false,
                 'erro' => $e->getMessage(),
             ], 422);
         }
@@ -240,7 +254,7 @@ class ConfiguracaoPlataformaController extends Controller
         $this->authorizeAdmin($request);
 
         $request->validate([
-            'token'    => ['required', 'string'],
+            'token' => ['required', 'string'],
             'ambiente' => ['required', 'in:sandbox,producao'],
         ]);
 
@@ -250,28 +264,28 @@ class ConfiguracaoPlataformaController extends Controller
 
         try {
             $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $request->input('token'),
-                'Content-Type'  => 'application/json',
+                'Authorization' => 'Bearer '.$request->input('token'),
+                'Content-Type' => 'application/json',
             ])->post("{$baseUrl}/oauth2/application", [
-                'name'         => PlatformSettings::appName(),
-                'description'  => 'Aplicação Connect da plataforma',
-                'redirect_uris' => [config('app.url') . '/pagbank/callback'],
-                'scope'        => ['payments.read', 'payments.create', 'accounts.read', 'accounts.create'],
+                'name' => PlatformSettings::appName(),
+                'description' => 'Aplicação Connect da plataforma',
+                'redirect_uris' => [config('app.url').'/pagbank/callback'],
+                'scope' => ['payments.read', 'payments.create', 'accounts.read', 'accounts.create'],
             ]);
 
             if ($response->successful()) {
                 $data = $response->json();
 
                 return response()->json([
-                    'ok'            => true,
-                    'client_id'     => $data['client_id'] ?? $data['id'] ?? null,
+                    'ok' => true,
+                    'client_id' => $data['client_id'] ?? $data['id'] ?? null,
                     'client_secret' => $data['client_secret'] ?? null,
                 ]);
             }
 
             return response()->json([
-                'ok'    => false,
-                'erro'  => $response->json('error_messages.0.description')
+                'ok' => false,
+                'erro' => $response->json('error_messages.0.description')
                     ?? $response->json('error_messages.0')
                     ?? $response->json('message')
                     ?? "Erro HTTP {$response->status()}",

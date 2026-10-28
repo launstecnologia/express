@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Estabelecimento;
 use App\Services\AceiteContratacaoService;
 use App\Services\KycDocumentoSyncService;
+use App\Services\LiberacaoEstabelecimentoService;
 use App\Services\LogService;
 use App\Support\AceiteContratacao;
 use App\Support\DocumentoBrasil;
+use App\Support\MarketplaceCadastro;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Schema;
@@ -201,9 +203,18 @@ class EnvioDocumentoController extends Controller
             ]);
         }
 
-        return redirect()
+        $extra = '';
+        $aviso = null;
+
+        if (MarketplaceCadastro::exigeAssinatura($estabelecimento)) {
+            [$extra, $aviso] = app(LiberacaoEstabelecimentoService::class)->liberar($estabelecimento->fresh());
+        }
+
+        $redirect = redirect()
             ->to(route('documentos.public.create', $token).'#comprovante')
-            ->with('status', 'Aceite registrado. Guarde o código de confirmação.');
+            ->with('status', 'Aceite registrado. O estabelecimento foi aprovado e segue para a PagBank.'.$extra);
+
+        return $aviso ? $redirect->with('aviso', $aviso) : $redirect;
     }
 
     public function assinatura(string $token)

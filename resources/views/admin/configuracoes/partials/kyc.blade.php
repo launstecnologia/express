@@ -1,7 +1,46 @@
 <div x-show="aba === 'kyc'" x-cloak class="space-y-5">
     <p class="text-sm text-gray-500 dark:text-gray-400">
-        A validação automática de RG, CNH e comprovante de endereço usa a <strong>Didit</strong>. A chave fica na variável <code class="text-xs">DIDIT_API_KEY</code> do servidor.
+        A validação automática de RG, CNH e comprovante de endereço usa a <strong>Didit</strong>. A chave salva aqui vale no lugar da variável <code class="text-xs">DIDIT_API_KEY</code> do servidor.
     </p>
+
+    <label class="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+        <input type="hidden" name="didit_ativo" value="0">
+        <input type="checkbox" name="didit_ativo" value="1" @checked(old('didit_ativo', $config->didit_ativo ?? true)) class="h-4 w-4 rounded border-gray-300 text-blue-600">
+        <span class="text-sm font-medium text-gray-700 dark:text-gray-200">Didit ativa</span>
+    </label>
+
+    <div class="grid gap-4 sm:grid-cols-2">
+        <label class="block space-y-1">
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Chave da API Didit</span>
+            <input
+                type="password"
+                name="didit_api_key"
+                value=""
+                autocomplete="new-password"
+                placeholder="{{ $diditConfigurado ? '••••••••  (deixe em branco para manter)' : 'Cole a chave da Didit' }}"
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+            >
+        </label>
+        <label class="block space-y-1">
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">URL da API Didit</span>
+            <input
+                type="url"
+                name="didit_api_url"
+                value="{{ old('didit_api_url', $config->didit_api_url ?: 'https://verification.didit.me') }}"
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+            >
+        </label>
+    </div>
+
+    @if ($diditConfigurado)
+        <span class="inline-flex items-center gap-1 text-xs font-semibold text-green-600">
+            <i class="fa-solid fa-circle-check"></i> Didit habilitada
+        </span>
+    @else
+        <span class="inline-flex items-center gap-1 text-xs font-semibold text-amber-600">
+            <i class="fa-solid fa-triangle-exclamation"></i> Didit desligada ou sem chave — documentos irão para revisão manual
+        </span>
+    @endif
 
     <label class="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
         <input type="hidden" name="kyc_ativo" value="0">
@@ -58,16 +97,6 @@
         >
         <span class="text-xs text-gray-400">Padrão: 490 (margem abaixo dos 500 do plano gratuito PPID).</span>
     </label>
-
-    @if ($diditConfigurado)
-        <span class="inline-flex items-center gap-1 text-xs font-semibold text-green-600">
-            <i class="fa-solid fa-circle-check"></i> Didit configurada
-        </span>
-    @else
-        <span class="inline-flex items-center gap-1 text-xs font-semibold text-amber-600">
-            <i class="fa-solid fa-triangle-exclamation"></i> DIDIT_API_KEY ausente — documentos irão para revisão manual
-        </span>
-    @endif
 
     <label class="block space-y-1">
         <span class="text-sm font-medium text-gray-700 dark:text-gray-300">URL BrasilAPI (Receita / CNPJ)</span>

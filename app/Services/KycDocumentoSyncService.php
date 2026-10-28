@@ -177,7 +177,7 @@ class KycDocumentoSyncService
         if (! PlatformSettings::diditConfigurado()) {
             $documento->update([
                 'openai_status' => 'revisao_manual',
-                'openai_motivo_reprovacao' => 'DIDIT_API_KEY não configurada — análise manual necessária.',
+                'openai_motivo_reprovacao' => 'Didit não habilitada no painel — análise manual necessária.',
             ]);
             $this->finalizacao->verificar($documento->kyc_analise_id);
 

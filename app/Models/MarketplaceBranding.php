@@ -22,6 +22,7 @@ class MarketplaceBranding extends Model
         'ssl_provisioned_at',
         'ssl_last_error',
         'whitelabel_ativo',
+        'exige_assinatura',
         'subdominio_provisionado',
     ];
 
@@ -31,6 +32,7 @@ class MarketplaceBranding extends Model
             'custom_domain_verified_at' => 'datetime',
             'ssl_provisioned_at' => 'datetime',
             'whitelabel_ativo' => 'boolean',
+            'exige_assinatura' => 'boolean',
             'logo_oculta' => 'boolean',
             'logo_white_oculta' => 'boolean',
             'subdominio_provisionado' => 'boolean',

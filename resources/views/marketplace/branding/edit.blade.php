@@ -27,6 +27,7 @@
         <div class="flex flex-wrap gap-1 border-b border-gray-100 px-4 dark:border-gray-700">
             @foreach ([
                 'marca' => ['Marca', 'fa-palette'],
+                'cadastro' => ['Cadastro', 'fa-file-signature'],
                 'dominio' => ['Domínio', 'fa-globe'],
             ] as $key => [$label, $icon])
                 <button
@@ -120,6 +121,17 @@
                         @endif
                     </div>
                 </div>
+            </div>
+
+            <div x-show="aba === 'cadastro'" x-cloak class="space-y-4">
+                <label class="flex items-start gap-3 rounded-xl border border-gray-200 px-4 py-4 text-sm text-gray-700 dark:border-gray-700 dark:text-gray-200">
+                    <input type="hidden" name="exige_assinatura" value="0">
+                    <input type="checkbox" name="exige_assinatura" value="1" class="mt-1 h-4 w-4 rounded accent-blue-600" @checked(old('exige_assinatura', $branding->exige_assinatura ?? true))>
+                    <span>
+                        <span class="block font-semibold">Exigir assinatura</span>
+                        <span class="mt-1 block text-gray-500 dark:text-gray-400">Marcado: o estabelecimento envia os documentos, assina, e só então é aprovado e sobe para a PagBank. Desmarcado: o cadastro já aprova e sobe para a PagBank, sem assinatura.</span>
+                    </span>
+                </label>
             </div>
 
             <div x-show="aba === 'dominio'" x-cloak class="space-y-6">

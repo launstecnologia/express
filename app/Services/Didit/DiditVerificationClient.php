@@ -2,6 +2,7 @@
 
 namespace App\Services\Didit;
 
+use App\Support\PlatformSettings;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 
@@ -51,7 +52,7 @@ class DiditVerificationClient
      */
     private function enviar(string $caminho, array $arquivos, array $campos): array
     {
-        $chave = config('services.didit.key');
+        $chave = PlatformSettings::diditKey();
         if (! filled($chave)) {
             throw new DiditApiException('DIDIT_API_KEY não configurada.');
         }
@@ -113,7 +114,7 @@ class DiditVerificationClient
 
     private function url(string $caminho): string
     {
-        return rtrim((string) config('services.didit.base_url', 'https://verification.didit.me'), '/').$caminho;
+        return PlatformSettings::diditBaseUrl().$caminho;
     }
 
     private function nomeUpload(string $arquivo): string

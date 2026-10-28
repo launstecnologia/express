@@ -178,9 +178,42 @@ class PlatformSettings
             && filled(self::ppidSenha());
     }
 
+    public static function diditAtivo(): bool
+    {
+        return (self::get()->didit_ativo ?? true) === true;
+    }
+
+    public static function diditKey(): ?string
+    {
+        if (! self::diditAtivo()) {
+            return null;
+        }
+
+        $chave = self::get()->didit_api_key ?? null;
+
+        if (filled($chave)) {
+            return (string) $chave;
+        }
+
+        $env = config('services.didit.key');
+
+        return filled($env) ? (string) $env : null;
+    }
+
+    public static function diditBaseUrl(): string
+    {
+        $url = self::get()->didit_api_url ?? null;
+
+        if (! filled($url)) {
+            $url = config('services.didit.base_url', 'https://verification.didit.me');
+        }
+
+        return rtrim((string) $url, '/');
+    }
+
     public static function diditConfigurado(): bool
     {
-        return filled(config('services.didit.key'));
+        return filled(self::diditKey());
     }
 
     public static function pagbankAmbiente(): string
@@ -295,12 +328,14 @@ class PlatformSettings
 
         // fallback .env / config
         $env = config('pagseguro.edi_token');
+
         return filled($env) ? (string) $env : null;
     }
 
     public static function ediUrl(): string
     {
         $override = config('pagseguro.edi_url');
+
         return filled($override) ? rtrim((string) $override, '/') : 'https://edi.api.pagbank.com.br';
     }
 
