@@ -462,9 +462,11 @@
             const cpf = formAceite.querySelector('[name="cpf_responsavel"]');
             const erro = document.getElementById('erro-aceite');
             const canvas = document.getElementById('quadro-assinatura');
-            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            const ctx = canvas.getContext('2d');
             let desenhando = false;
             let desenhou = false;
+            let tracos = [];
+            let tracoAtual = null;
 
             const atualizarDeclaracao = () => {
                 const marcada = formAceite.querySelector('[name="condicao_representacao"]:checked');
@@ -492,6 +494,7 @@
             mascararCpf();
 
             const chaveAssinatura = 'aceite-assinatura:' + formAceite.action;
+            const chaveTracos = 'aceite-tracos:' + formAceite.action;
             let ratio = 1;
             let pronto = false;
 
@@ -523,22 +526,64 @@
                 return true;
             };
 
+            const guardarTracos = () => {
+                try { sessionStorage.setItem(chaveTracos, JSON.stringify(tracos)); } catch (e) {}
+            };
+
+            const desenharTracosNoQuadro = () => {
+                estiloTraco();
+                tracos.forEach((traco) => {
+                    if (!traco.length) return;
+                    ctx.beginPath();
+                    ctx.moveTo(traco[0].x, traco[0].y);
+                    if (traco.length === 1) {
+                        ctx.lineTo(traco[0].x + 0.6, traco[0].y + 0.6);
+                    } else {
+                        traco.slice(1).forEach((p) => ctx.lineTo(p.x, p.y));
+                    }
+                    ctx.stroke();
+                });
+            };
+
             const restaurarAssinatura = () => {
-                let salva = '';
-                try { salva = sessionStorage.getItem(chaveAssinatura) || ''; } catch (e) { return; }
-                if (!salva.startsWith('data:image/png')) return;
-                const imagem = new Image();
-                imagem.onload = () => {
-                    if (!pronto && !prepararQuadro(false)) return;
-                    ctx.setTransform(1, 0, 0, 1, 0, 0);
-                    ctx.fillStyle = '#ffffff';
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(imagem, 0, 0, canvas.width, canvas.height);
-                    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-                    estiloTraco();
-                    desenhou = true;
-                };
-                imagem.src = salva;
+                let salvo = '';
+                try { salvo = sessionStorage.getItem(chaveTracos) || ''; } catch (e) { return; }
+                if (!salvo) return;
+                try { tracos = JSON.parse(salvo) || []; } catch (e) { tracos = []; }
+                if (!Array.isArray(tracos) || !tracos.length) return;
+                if (!pronto && !prepararQuadro(false)) return;
+                desenharTracosNoQuadro();
+                desenhou = true;
+            };
+
+            const exportarAssinatura = () => {
+                const origemLargura = Math.max(canvas.clientWidth, 1);
+                const origemAltura = Math.max(canvas.clientHeight, 1);
+                const destino = document.createElement('canvas');
+                destino.width = 640;
+                destino.height = Math.max(160, Math.round(640 * (origemAltura / origemLargura)));
+                const g = destino.getContext('2d');
+                g.fillStyle = '#ffffff';
+                g.fillRect(0, 0, destino.width, destino.height);
+                g.strokeStyle = '#111111';
+                g.fillStyle = '#111111';
+                g.lineWidth = 5;
+                g.lineCap = 'round';
+                g.lineJoin = 'round';
+                const sx = destino.width / origemLargura;
+                const sy = destino.height / origemAltura;
+                tracos.forEach((traco) => {
+                    if (!traco.length) return;
+                    g.beginPath();
+                    g.moveTo(traco[0].x * sx, traco[0].y * sy);
+                    if (traco.length === 1) {
+                        g.lineTo(traco[0].x * sx + 1, traco[0].y * sy + 1);
+                    } else {
+                        traco.slice(1).forEach((p) => g.lineTo(p.x * sx, p.y * sy));
+                    }
+                    g.stroke();
+                });
+                return destino.toDataURL('image/png');
             };
 
             let restaurou = false;
@@ -562,27 +607,40 @@
                 try { canvas.setPointerCapture(evento.pointerId); } catch (e) {}
                 desenhando = true;
                 const p = ponto(evento);
+                tracoAtual = [p];
+                tracos.push(tracoAtual);
                 ctx.beginPath();
                 ctx.moveTo(p.x, p.y);
-                ctx.lineTo(p.x + 0.4, p.y + 0.4);
+                ctx.lineTo(p.x + 0.6, p.y + 0.6);
                 ctx.stroke();
                 desenhou = true;
+                document.getElementById('erros-aceite')?.classList.add('hidden');
             };
             const continuarTraco = (evento) => {
                 if (!desenhando) return;
                 if (evento.cancelable) evento.preventDefault();
                 const p = ponto(evento);
+                tracoAtual?.push(p);
                 ctx.lineTo(p.x, p.y);
                 ctx.stroke();
                 desenhou = true;
             };
             canvas.addEventListener('pointerdown', comecarTraco, { passive: false });
             canvas.addEventListener('pointermove', continuarTraco, { passive: false });
-            const soltar = () => { desenhando = false; };
+            const soltar = () => {
+                desenhando = false;
+                tracoAtual = null;
+                if (tracos.length) guardarTracos();
+            };
             canvas.addEventListener('pointerup', soltar);
             canvas.addEventListener('pointercancel', soltar);
             document.getElementById('limpar-assinatura').addEventListener('click', () => {
-                try { sessionStorage.removeItem(chaveAssinatura); } catch (e) {}
+                try {
+                    sessionStorage.removeItem(chaveAssinatura);
+                    sessionStorage.removeItem(chaveTracos);
+                } catch (e) {}
+                tracos = [];
+                tracoAtual = null;
                 desenhou = false;
                 prepararQuadro(true);
             });
@@ -635,21 +693,9 @@
                 erro.classList.remove('hidden');
             };
 
-            const temTinta = () => {
-                try {
-                    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-                    for (let i = 0; i < pixels.length; i += 8) {
-                        if (pixels[i] < 210 || pixels[i + 1] < 210 || pixels[i + 2] < 210) return true;
-                    }
-                } catch (e) {
-                    return desenhou;
-                }
-                return false;
-            };
-
             formAceite.addEventListener('submit', (evento) => {
                 erro.classList.add('hidden');
-                if (!desenhou || !temTinta()) {
+                if (!tracos.some((traco) => traco.length)) {
                     evento.preventDefault();
                     mostrarErro('Assine no quadro antes de confirmar.');
                     return;
@@ -679,7 +725,7 @@
 
                 let imagem;
                 try {
-                    imagem = canvas.toDataURL('image/png');
+                    imagem = exportarAssinatura();
                 } catch (e) {
                     evento.preventDefault();
                     mostrarErro('Não foi possível ler a assinatura. Limpe o quadro e assine de novo.');

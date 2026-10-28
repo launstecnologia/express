@@ -234,7 +234,7 @@ class AceiteContratacao
 
         $bin = base64_decode($encontrado[1], true);
 
-        if ($bin === false || strlen($bin) < 200 || strlen($bin) > 1_500_000) {
+        if ($bin === false || strlen($bin) < 100 || strlen($bin) > 1_500_000) {
             return ['erro' => 'A assinatura está vazia ou grande demais.'];
         }
 
@@ -252,24 +252,34 @@ class AceiteContratacao
             return ['erro' => 'Não foi possível ler a assinatura.'];
         }
 
+        if (function_exists('imagepalettetotruecolor')) {
+            imagepalettetotruecolor($imagem);
+        }
+
         $largura = imagesx($imagem);
         $altura = imagesy($imagem);
+        $opaca = imagecreatetruecolor($largura, $altura);
+        $branco = imagecolorallocate($opaca, 255, 255, 255);
+        imagefilledrectangle($opaca, 0, 0, $largura, $altura, $branco);
+        imagecopy($opaca, $imagem, 0, 0, 0, 0, $largura, $altura);
+        imagedestroy($imagem);
+
         $temTraco = false;
 
         for ($y = 0; $y < $altura && ! $temTraco; $y++) {
             for ($x = 0; $x < $largura && ! $temTraco; $x++) {
-                $cor = imagecolorat($imagem, $x, $y);
+                $cor = imagecolorat($opaca, $x, $y);
                 $vermelho = ($cor >> 16) & 0xFF;
                 $verde = ($cor >> 8) & 0xFF;
                 $azul = $cor & 0xFF;
 
-                if ($vermelho < 210 || $verde < 210 || $azul < 210) {
+                if ($vermelho < 240 || $verde < 240 || $azul < 240) {
                     $temTraco = true;
                 }
             }
         }
 
-        imagedestroy($imagem);
+        imagedestroy($opaca);
 
         if (! $temTraco) {
             return ['erro' => 'Assine no quadro antes de confirmar.'];
