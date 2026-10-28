@@ -8,8 +8,8 @@
     ])
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { padding-bottom: calc(env(safe-area-inset-bottom) + 1.5rem); }
-        #quadro-assinatura { touch-action: none; }
+        body { padding-bottom: calc(env(safe-area-inset-bottom) + 8rem); }
+        #quadro-assinatura { touch-action: none; -webkit-user-select: none; user-select: none; }
         input, select, textarea, button { font-size: 16px; }
         @media print {
             .no-print { display: none !important; }
@@ -73,7 +73,7 @@
         @endif
 
         @if ($errors->any())
-            <div class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div id="erros-pagina" class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 <p class="font-semibold">Revise os campos abaixo.</p>
                 <ul class="mt-2 list-disc space-y-1 pl-5">
                     @foreach ($errors->all() as $error)
@@ -381,8 +381,18 @@
                         <input type="hidden" name="toque" id="toque">
                         <input type="hidden" name="plataforma" id="plataforma">
 
+                        @if ($errors->any())
+                            <div id="erros-aceite" class="rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
+                                <p class="font-semibold">O aceite não foi registrado.</p>
+                                <ul class="mt-2 list-disc space-y-1 pl-5">
+                                    @foreach ($errors->all() as $error)
+                                        <li>{{ $error }}</li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
                         <p id="erro-aceite" class="hidden rounded-xl bg-red-50 px-3 py-3 text-sm text-red-700"></p>
-                        <button id="confirmar-aceite" class="min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white">Assinar e confirmar aceite</button>
+                        <button type="submit" id="confirmar-aceite" class="min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white">Assinar e confirmar aceite</button>
                     </form>
                 @endif
             </section>
@@ -441,7 +451,7 @@
             const cpf = formAceite.querySelector('[name="cpf_responsavel"]');
             const erro = document.getElementById('erro-aceite');
             const canvas = document.getElementById('quadro-assinatura');
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
             let desenhando = false;
             let desenhou = false;
 
@@ -470,43 +480,101 @@
             });
             mascararCpf();
 
-            const prepararQuadro = () => {
-                const ratio = Math.max(window.devicePixelRatio || 1, 1);
-                const largura = canvas.clientWidth;
-                const altura = canvas.clientHeight;
-                canvas.width = Math.floor(largura * ratio);
-                canvas.height = Math.floor(altura * ratio);
-                ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-                ctx.lineWidth = 2.4;
+            const chaveAssinatura = 'aceite-assinatura:' + formAceite.action;
+            let ratio = 1;
+            let pronto = false;
+
+            const estiloTraco = () => {
+                ctx.lineWidth = 2.6;
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
                 ctx.strokeStyle = '#0f172a';
-                desenhou = false;
             };
-            prepararQuadro();
+
+            const prepararQuadro = (limpar) => {
+                const largura = canvas.clientWidth;
+                const altura = canvas.clientHeight;
+                if (largura < 2 || altura < 2) return false;
+                const pai = canvas.parentElement ? canvas.parentElement.clientWidth : 0;
+                if (!limpar && pai > 200 && Math.abs(largura - pai) > 16) return false;
+                ratio = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2);
+                const bitmapLargura = Math.floor(largura * ratio);
+                const bitmapAltura = Math.floor(altura * ratio);
+                if (!limpar && pronto && canvas.width === bitmapLargura && canvas.height === bitmapAltura) return true;
+                canvas.width = bitmapLargura;
+                canvas.height = bitmapAltura;
+                ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, largura, altura);
+                estiloTraco();
+                if (limpar) desenhou = false;
+                pronto = true;
+                return true;
+            };
+
+            const restaurarAssinatura = () => {
+                let salva = '';
+                try { salva = sessionStorage.getItem(chaveAssinatura) || ''; } catch (e) { return; }
+                if (!salva.startsWith('data:image/png')) return;
+                const imagem = new Image();
+                imagem.onload = () => {
+                    if (!pronto && !prepararQuadro(false)) return;
+                    ctx.setTransform(1, 0, 0, 1, 0, 0);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(imagem, 0, 0, canvas.width, canvas.height);
+                    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+                    estiloTraco();
+                    desenhou = true;
+                };
+                imagem.src = salva;
+            };
+
+            let restaurou = false;
+            const observarQuadro = () => {
+                if (desenhou) return;
+                if (!prepararQuadro(false) || restaurou) return;
+                restaurou = true;
+                restaurarAssinatura();
+            };
+            observarQuadro();
+            if (window.ResizeObserver) new ResizeObserver(observarQuadro).observe(canvas);
+            setTimeout(observarQuadro, 400);
 
             const ponto = (evento) => {
                 const caixa = canvas.getBoundingClientRect();
                 return { x: evento.clientX - caixa.left, y: evento.clientY - caixa.top };
             };
-            canvas.addEventListener('pointerdown', (evento) => {
-                canvas.setPointerCapture(evento.pointerId);
+            const comecarTraco = (evento) => {
+                if (!pronto) observarQuadro();
+                if (evento.cancelable) evento.preventDefault();
+                try { canvas.setPointerCapture(evento.pointerId); } catch (e) {}
                 desenhando = true;
                 const p = ponto(evento);
                 ctx.beginPath();
                 ctx.moveTo(p.x, p.y);
-            });
-            canvas.addEventListener('pointermove', (evento) => {
+                ctx.lineTo(p.x + 0.4, p.y + 0.4);
+                ctx.stroke();
+                desenhou = true;
+            };
+            const continuarTraco = (evento) => {
                 if (!desenhando) return;
+                if (evento.cancelable) evento.preventDefault();
                 const p = ponto(evento);
                 ctx.lineTo(p.x, p.y);
                 ctx.stroke();
                 desenhou = true;
-            });
+            };
+            canvas.addEventListener('pointerdown', comecarTraco, { passive: false });
+            canvas.addEventListener('pointermove', continuarTraco, { passive: false });
             const soltar = () => { desenhando = false; };
             canvas.addEventListener('pointerup', soltar);
             canvas.addEventListener('pointercancel', soltar);
-            document.getElementById('limpar-assinatura').addEventListener('click', prepararQuadro);
+            document.getElementById('limpar-assinatura').addEventListener('click', () => {
+                try { sessionStorage.removeItem(chaveAssinatura); } catch (e) {}
+                desenhou = false;
+                prepararQuadro(true);
+            });
 
             const relogio = document.getElementById('relogio-local');
             const fusoVisivel = document.getElementById('fuso-visivel');
@@ -526,12 +594,19 @@
                 navigator.geolocation.getCurrentPosition((posicao) => {
                     document.getElementById('latitude').value = posicao.coords.latitude.toFixed(7);
                     document.getElementById('longitude').value = posicao.coords.longitude.toFixed(7);
-                    document.getElementById('precisao_metros').value = posicao.coords.accuracy.toFixed(2);
-                    if (posicao.coords.altitude !== null && posicao.coords.altitude !== undefined) {
-                        document.getElementById('altitude').value = posicao.coords.altitude.toFixed(2);
+                    const precisao = Number(posicao.coords.accuracy);
+                    if (Number.isFinite(precisao) && precisao >= 0 && precisao <= 100000) {
+                        document.getElementById('precisao_metros').value = precisao.toFixed(2);
                     }
-                    const metros = Math.round(posicao.coords.accuracy);
-                    geoStatus.textContent = `Localização obtida (${posicao.coords.latitude.toFixed(5)}, ${posicao.coords.longitude.toFixed(5)}), precisão de ${metros} m.`;
+                    const altitude = Number(posicao.coords.altitude);
+                    if (Number.isFinite(altitude) && altitude >= -500 && altitude <= 10000) {
+                        document.getElementById('altitude').value = altitude.toFixed(2);
+                    }
+                    const metros = Number.isFinite(precisao) ? Math.round(precisao) : null;
+                    const coords = `${posicao.coords.latitude.toFixed(5)}, ${posicao.coords.longitude.toFixed(5)}`;
+                    geoStatus.textContent = metros === null
+                        ? `Localização obtida (${coords}).`
+                        : `Localização obtida (${coords}), precisão de ${metros} m.`;
                 }, (falha) => {
                     const mensagens = {
                         1: 'A localização foi negada. Ative a permissão do navegador e toque em permitir de novo.',
@@ -549,9 +624,21 @@
                 erro.classList.remove('hidden');
             };
 
+            const temTinta = () => {
+                try {
+                    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                    for (let i = 0; i < pixels.length; i += 8) {
+                        if (pixels[i] < 210 || pixels[i + 1] < 210 || pixels[i + 2] < 210) return true;
+                    }
+                } catch (e) {
+                    return desenhou;
+                }
+                return false;
+            };
+
             formAceite.addEventListener('submit', (evento) => {
                 erro.classList.add('hidden');
-                if (!desenhou) {
+                if (!desenhou || !temTinta()) {
                     evento.preventDefault();
                     mostrarErro('Assine no quadro antes de confirmar.');
                     return;
@@ -572,31 +659,53 @@
                 document.getElementById('data_hora_cliente').value = `${agora.getFullYear()}-${pad(agora.getMonth() + 1)}-${pad(agora.getDate())}T${pad(agora.getHours())}:${pad(agora.getMinutes())}:${pad(agora.getSeconds())}${sinal}${horas}:${minutos}`;
                 document.getElementById('fuso_horario').value = fuso;
                 document.getElementById('idioma').value = navigator.language || '';
-                document.getElementById('tela').value = `${screen.width}x${screen.height}`;
-                document.getElementById('pixel_ratio').value = window.devicePixelRatio || '';
+                document.getElementById('tela').value = `${Math.round(screen.width)}x${Math.round(screen.height)}`;
+                const densidade = Number(window.devicePixelRatio);
+                document.getElementById('pixel_ratio').value = Number.isFinite(densidade) ? String(Math.min(10, Math.max(0, densidade))) : '';
                 document.getElementById('conexao').value = navigator.connection?.effectiveType || '';
                 document.getElementById('toque').value = navigator.maxTouchPoints > 0 ? '1' : '0';
                 document.getElementById('plataforma').value = navigator.platform || '';
 
-                const exportado = document.createElement('canvas');
-                exportado.width = canvas.width;
-                exportado.height = canvas.height;
-                const contexto = exportado.getContext('2d');
-                contexto.fillStyle = '#ffffff';
-                contexto.fillRect(0, 0, exportado.width, exportado.height);
-                contexto.drawImage(canvas, 0, 0);
-                document.getElementById('assinatura').value = exportado.toDataURL('image/png');
+                let imagem;
+                try {
+                    imagem = canvas.toDataURL('image/png');
+                } catch (e) {
+                    evento.preventDefault();
+                    mostrarErro('Não foi possível ler a assinatura. Limpe o quadro e assine de novo.');
+                    return;
+                }
+                if (!imagem.startsWith('data:image/png') || imagem.length < 250) {
+                    evento.preventDefault();
+                    mostrarErro('A assinatura não ficou registrada. Assine de novo dentro do quadro.');
+                    return;
+                }
+                document.getElementById('assinatura').value = imagem;
+                try { sessionStorage.setItem(chaveAssinatura, imagem); } catch (e) {}
 
                 const botao = document.getElementById('confirmar-aceite');
                 botao.disabled = true;
                 botao.textContent = 'Registrando aceite...';
             });
+
+            window.addEventListener('pageshow', () => {
+                const botao = document.getElementById('confirmar-aceite');
+                if (!botao) return;
+                botao.disabled = false;
+                botao.textContent = 'Assinar e confirmar aceite';
+                restaurarAssinatura();
+            });
+        } else {
+            try {
+                Object.keys(sessionStorage).forEach((chave) => {
+                    if (chave.startsWith('aceite-assinatura:')) sessionStorage.removeItem(chave);
+                });
+            } catch (e) {}
         }
 
-        @if ($errors->hasAny(['assinatura', 'concordo', 'nome_responsavel', 'cpf_responsavel', 'latitude', 'longitude', 'condicao_representacao', 'aceite', 'documentos', 'taxas']))
-            document.getElementById('assinatura')?.scrollIntoView();
-        @elseif ($errors->has('documento') || $errors->has('tipo_documento'))
-            document.getElementById('documentos')?.scrollIntoView();
+        @if ($errors->has('documento') || $errors->has('tipo_documento'))
+            document.getElementById('documentos')?.scrollIntoView({ block: 'start' });
+        @elseif ($errors->any())
+            (document.getElementById('erros-aceite') || document.getElementById('erros-pagina'))?.scrollIntoView({ block: 'center' });
         @endif
     </script>
 </body>

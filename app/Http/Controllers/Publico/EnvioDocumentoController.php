@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -109,8 +110,9 @@ class EnvioDocumentoController extends Controller
     public function aceite(Request $request, string $token, AceiteContratacaoService $service)
     {
         $estabelecimento = $this->estabelecimento($token);
+        $request->merge($this->evidenciasSeguras($request));
 
-        $dados = $request->validate([
+        $validator = Validator::make($request->all(), [
             'nome_responsavel' => ['required', 'string', 'min:3', 'max:150'],
             'cpf_responsavel' => ['required', 'string', 'max:14', function (string $attribute, mixed $value, \Closure $fail) {
                 if (! DocumentoBrasil::cpfValido((string) $value)) {
@@ -138,6 +140,7 @@ class EnvioDocumentoController extends Controller
             'condicao_representacao.required' => 'Informe se é titular ou representante autorizado.',
             'concordo.accepted' => 'Marque que leu e concorda com as taxas e as condições, inclusive chargeback.',
             'assinatura.required' => 'Assine no quadro antes de confirmar.',
+            'assinatura.max' => 'A assinatura ficou grande demais. Limpe o quadro e assine de novo.',
             'latitude.required' => 'Autorize a localização do aparelho para registrar o aceite.',
             'longitude.required' => 'Autorize a localização do aparelho para registrar o aceite.',
             'data_hora_cliente.required' => 'Não foi possível ler a data e a hora deste aparelho.',
@@ -145,43 +148,58 @@ class EnvioDocumentoController extends Controller
             'fuso_horario.required' => 'Não foi possível ler o fuso horário deste aparelho.',
         ]);
 
+        if ($validator->fails()) {
+            return $this->voltarAssinatura($token, $request, $validator);
+        }
+
+        $dados = $validator->validated();
         $assinatura = AceiteContratacao::validarAssinatura($dados['assinatura']);
 
         if (isset($assinatura['erro'])) {
-            throw ValidationException::withMessages(['assinatura' => $assinatura['erro']]);
+            return $this->voltarAssinatura($token, $request, ['assinatura' => $assinatura['erro']]);
         }
 
         $userAgent = mb_substr((string) $request->userAgent(), 0, 1000);
 
-        $service->registrar($estabelecimento, [
-            'nome_responsavel' => $dados['nome_responsavel'],
-            'cpf_responsavel' => $dados['cpf_responsavel'],
-            'condicao_representacao' => $dados['condicao_representacao'],
-            'latitude' => $dados['latitude'],
-            'longitude' => $dados['longitude'],
-            'precisao_metros' => $dados['precisao_metros'] ?? null,
-            'data_hora_cliente' => $dados['data_hora_cliente'],
-            'fuso_horario' => $dados['fuso_horario'],
-            'idioma' => $dados['idioma'] ?? null,
-            'tela' => $dados['tela'] ?? null,
-            'ip' => $request->ip(),
-            'user_agent' => $userAgent,
-            'evidencias' => [
+        try {
+            $service->registrar($estabelecimento, [
+                'nome_responsavel' => $dados['nome_responsavel'],
+                'cpf_responsavel' => $dados['cpf_responsavel'],
+                'condicao_representacao' => $dados['condicao_representacao'],
+                'latitude' => $dados['latitude'],
+                'longitude' => $dados['longitude'],
+                'precisao_metros' => $dados['precisao_metros'] ?? null,
+                'data_hora_cliente' => $dados['data_hora_cliente'],
+                'fuso_horario' => $dados['fuso_horario'],
                 'idioma' => $dados['idioma'] ?? null,
                 'tela' => $dados['tela'] ?? null,
-                'pixel_ratio' => isset($dados['pixel_ratio']) ? number_format((float) $dados['pixel_ratio'], 2, '.', '') : null,
-                'conexao' => $dados['conexao'] ?? null,
-                'toque' => $request->boolean('toque'),
-                'plataforma' => $dados['plataforma'] ?? null,
-                'altitude' => $dados['altitude'] ?? null,
                 'ip' => $request->ip(),
-                'ip_remoto' => $request->server('REMOTE_ADDR'),
                 'user_agent' => $userAgent,
-                'sec_ch_ua_mobile' => $request->header('sec-ch-ua-mobile'),
-                'sec_ch_ua_platform' => $request->header('sec-ch-ua-platform'),
-                'accept_language' => mb_substr((string) $request->header('accept-language'), 0, 120),
-            ],
-        ], $assinatura['bin']);
+                'evidencias' => [
+                    'idioma' => $dados['idioma'] ?? null,
+                    'tela' => $dados['tela'] ?? null,
+                    'pixel_ratio' => isset($dados['pixel_ratio']) ? number_format((float) $dados['pixel_ratio'], 2, '.', '') : null,
+                    'conexao' => $dados['conexao'] ?? null,
+                    'toque' => $request->boolean('toque'),
+                    'plataforma' => $dados['plataforma'] ?? null,
+                    'altitude' => $dados['altitude'] ?? null,
+                    'ip' => $request->ip(),
+                    'ip_remoto' => $request->server('REMOTE_ADDR'),
+                    'user_agent' => $userAgent,
+                    'sec_ch_ua_mobile' => $request->header('sec-ch-ua-mobile'),
+                    'sec_ch_ua_platform' => $request->header('sec-ch-ua-platform'),
+                    'accept_language' => mb_substr((string) $request->header('accept-language'), 0, 120),
+                ],
+            ], $assinatura['bin']);
+        } catch (ValidationException $e) {
+            return $this->voltarAssinatura($token, $request, $e->errors());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return $this->voltarAssinatura($token, $request, [
+                'assinatura' => 'Não foi possível registrar o aceite. Tente assinar novamente.',
+            ]);
+        }
 
         return redirect()
             ->to(route('documentos.public.create', $token).'#comprovante')
@@ -198,6 +216,78 @@ class EnvioDocumentoController extends Controller
         return Storage::disk('local')->response($aceite->assinatura_path, 'assinatura.png', [
             'Cache-Control' => 'private, max-age=3600',
         ]);
+    }
+
+    private function voltarAssinatura(string $token, Request $request, mixed $erros)
+    {
+        return redirect()
+            ->to(route('documentos.public.create', $token).'#assinatura')
+            ->withErrors($erros)
+            ->withInput($request->except(['assinatura', '_token']));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function evidenciasSeguras(Request $request): array
+    {
+        $numero = function (mixed $valor): ?float {
+            if ($valor === null || $valor === '' || ! is_numeric($valor)) {
+                return null;
+            }
+
+            return (float) $valor;
+        };
+
+        $altitude = $numero($request->input('altitude'));
+        if ($altitude === null || $altitude < -500 || $altitude > 10000) {
+            $altitude = null;
+        }
+
+        $precisao = $numero($request->input('precisao_metros'));
+        if ($precisao === null || $precisao < 0 || $precisao > 100000) {
+            $precisao = null;
+        }
+
+        $pixel = $numero($request->input('pixel_ratio'));
+        if ($pixel !== null) {
+            $pixel = min(10, max(0, $pixel));
+        }
+
+        $tela = (string) $request->input('tela', '');
+        if (! preg_match('/^\d{2,5}x\d{2,5}$/', $tela)) {
+            $tela = null;
+        }
+
+        $fuso = preg_replace('/[^A-Za-z0-9_+\-\/]/', '', (string) $request->input('fuso_horario', '')) ?? '';
+        $fuso = mb_substr($fuso, 0, 80);
+
+        $data = (string) $request->input('data_hora_cliente', '');
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+\-]\d{2}:\d{2})$/', $data)) {
+            $data = now()->format('Y-m-d\TH:i:sP');
+        }
+
+        $texto = function (mixed $valor, int $limite): ?string {
+            $limpo = trim((string) $valor);
+            if ($limpo === '') {
+                return null;
+            }
+
+            return mb_substr($limpo, 0, $limite);
+        };
+
+        return [
+            'altitude' => $altitude,
+            'precisao_metros' => $precisao,
+            'pixel_ratio' => $pixel,
+            'tela' => $tela,
+            'idioma' => $texto($request->input('idioma'), 20),
+            'conexao' => $texto($request->input('conexao'), 20),
+            'plataforma' => $texto($request->input('plataforma'), 120),
+            'fuso_horario' => $fuso !== '' ? $fuso : 'UTC',
+            'data_hora_cliente' => $data,
+            'toque' => $request->boolean('toque') ? '1' : '0',
+        ];
     }
 
     private function estabelecimento(string $token): Estabelecimento
