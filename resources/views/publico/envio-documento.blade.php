@@ -377,7 +377,7 @@
                             <p class="mt-1 text-xs text-slate-400">Assine com o dedo dentro do quadro.</p>
                         </div>
 
-                        <input type="hidden" name="assinatura" id="assinatura">
+                        <input type="hidden" name="assinatura" id="assinatura-imagem">
                         <input type="hidden" name="latitude" id="latitude">
                         <input type="hidden" name="longitude" id="longitude">
                         <input type="hidden" name="precisao_metros" id="precisao_metros">
@@ -736,7 +736,7 @@
                     mostrarErro('A assinatura não ficou registrada. Assine de novo dentro do quadro.');
                     return;
                 }
-                document.getElementById('assinatura').value = imagem;
+                formAceite.elements.assinatura.value = imagem;
                 try { sessionStorage.setItem(chaveAssinatura, imagem); } catch (e) {}
 
                 const botao = document.getElementById('confirmar-aceite');
