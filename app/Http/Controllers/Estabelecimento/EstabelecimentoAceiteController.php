@@ -12,7 +12,7 @@ class EstabelecimentoAceiteController extends Controller
     {
         $aceite = $estabelecimento->aceite;
 
-        abort_unless($aceite && Storage::disk('local')->exists($aceite->assinatura_path), 404);
+        abort_unless($aceite && filled($aceite->assinatura_path) && Storage::disk('local')->exists($aceite->assinatura_path), 404);
 
         return Storage::disk('local')->response($aceite->assinatura_path, 'assinatura.png', [
             'Cache-Control' => 'private, max-age=3600',

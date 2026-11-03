@@ -3,14 +3,14 @@
 <head>
     @include('partials.head-meta', [
         'pageTitle' => 'Documentos e aceite',
-        'description' => 'Envie os documentos do estabelecimento, confira as taxas e assine o aceite.',
+        'description' => 'Envie os documentos do estabelecimento, confira as taxas e confirme o aceite.',
         'robots' => 'noindex, nofollow',
     ])
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { padding-bottom: calc(env(safe-area-inset-bottom) + 8rem); }
-        #quadro-assinatura { touch-action: none; -webkit-user-select: none; user-select: none; }
         input, select, textarea, button { font-size: 16px; }
+        #confirmar-aceite { font-size: 2.25rem; line-height: 1.15; }
         @media print {
             .no-print { display: none !important; }
             body { background: white; }
@@ -26,17 +26,11 @@
     $taxasOk = count($resumo['taxas']) > 0;
     $podeAssinar = $faltando->isEmpty() && $taxasOk && ! $aceite;
     $exigeAssinatura = \App\Support\MarketplaceCadastro::exigeAssinatura($estabelecimento);
+    $aceiteDispensado = \Illuminate\Support\Facades\Schema::hasColumn('estabelecimentos', 'aceite_dispensado_em')
+        && filled($estabelecimento->aceite_dispensado_em);
     $primeiroFaltando = $faltando->first();
     $proximoTipo = is_array($primeiroFaltando) ? ($primeiroFaltando['tipo'] ?? null) : null;
     $fmtTaxa = fn ($valor) => number_format((float) $valor, 2, ',', '.').'%';
-    $declaracaoModelo = \App\Support\AceiteContratacao::declaracao(
-        $resumo['estabelecimento'],
-        $resumo['documento'],
-        $resumo['plano_nome'],
-        '__NOME__',
-        '__CPF__',
-        '__CONDICAO__',
-    );
 @endphp
 
     <header class="bg-white px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))] shadow-sm">
@@ -64,7 +58,7 @@
             @else
                 <a href="#condicoes" class="px-2 py-3 text-slate-700">Taxas</a>
                 @if ($exigeAssinatura)
-                    <a href="#assinatura" class="px-2 py-3 text-slate-700">Assinatura</a>
+                    <a href="#assinatura" class="px-2 py-3 text-slate-700">Aceite</a>
                 @endif
             @endif
         </div>
@@ -116,16 +110,17 @@
                             <dd class="text-slate-500">Fuso do aparelho: {{ $aceite->fuso_horario }}</dd>
                         </div>
                         <div class="rounded-xl bg-slate-50 px-3 py-3">
-                            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-400">Localização e rede</dt>
-                            <dd class="mt-1">{{ $aceite->latitude }}, {{ $aceite->longitude }}</dd>
-                            @if ($aceite->precisao_metros)
-                                <dd class="text-slate-500">Precisão de {{ $aceite->precisao_metros }} m</dd>
-                            @endif
+                            <dt class="text-xs font-semibold uppercase tracking-wide text-slate-400">Rede</dt>
                             <dd class="mt-1">IP {{ $aceite->ip ?: '—' }}</dd>
-                            <a class="mt-2 inline-block font-semibold text-blue-700" target="_blank" rel="noopener" href="https://www.google.com/maps?q={{ $aceite->latitude }},{{ $aceite->longitude }}">Ver no mapa</a>
+                            @if ($aceite->latitude !== null && $aceite->longitude !== null)
+                                <dd class="mt-1">{{ $aceite->latitude }}, {{ $aceite->longitude }}</dd>
+                                <a class="mt-2 inline-block font-semibold text-blue-700" target="_blank" rel="noopener" href="https://www.google.com/maps?q={{ $aceite->latitude }},{{ $aceite->longitude }}">Ver no mapa</a>
+                            @endif
                         </div>
                     </dl>
-                    <img src="{{ route('documentos.public.assinatura', $estabelecimento->documento_token_publico) }}" alt="Assinatura registrada" class="max-h-40 w-full rounded-xl border border-slate-200 bg-white object-contain">
+                    @if ($aceite->assinatura_path)
+                        <img src="{{ route('documentos.public.assinatura', $estabelecimento->documento_token_publico) }}" alt="Assinatura registrada" class="max-h-40 w-full rounded-xl border border-slate-200 bg-white object-contain">
+                    @endif
                     <details class="rounded-xl border border-slate-200 px-3 py-3">
                         <summary class="cursor-pointer font-semibold">Taxas aceitas e dados do aparelho</summary>
                         <div class="mt-3 space-y-2">
@@ -283,9 +278,9 @@
                     @else
                         <p class="mt-4 rounded-xl bg-amber-50 px-3 py-3 text-sm text-amber-800">
                             @if (! $resumo['plano_nome'])
-                                Este estabelecimento ainda não tem um plano vinculado. A assinatura abre quando o plano e as taxas estiverem definidos.
+                                Este estabelecimento ainda não tem um plano vinculado. O aceite abre quando o plano e as taxas estiverem definidos.
                             @else
-                                O plano {{ $resumo['plano_nome'] }} ainda não tem taxas cadastradas. A assinatura abre quando elas forem lançadas.
+                                O plano {{ $resumo['plano_nome'] }} ainda não tem taxas cadastradas. O aceite abre quando elas forem lançadas.
                             @endif
                         </p>
                     @endif
@@ -304,84 +299,27 @@
             </section>
 
             @unless ($exigeAssinatura)
-                <p class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-600 shadow-sm">Este marketplace não pede assinatura. O cadastro segue para a PagBank sem aceite nesta página.</p>
+                <p class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-600 shadow-sm">Este marketplace não pede aceite nesta página. O cadastro segue para a PagBank.</p>
             @endunless
             @if ($exigeAssinatura)
             <section id="assinatura" class="scroll-mt-16 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 class="text-lg font-bold">Assinatura do aceite</h2>
-                @if (! $podeAssinar)
+                <h2 class="text-lg font-bold">Aceite do termo</h2>
+                @if ($aceiteDispensado)
+                    <p class="mt-3 rounded-xl bg-emerald-50 px-3 py-3 text-sm leading-6 text-emerald-900">Este cadastro foi liberado pela empresa sem o aceite do termo nesta página.</p>
+                @elseif (! $podeAssinar)
                     <p class="mt-3 rounded-xl bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-900">
                         @if (! $taxasOk)
-                            A assinatura fica disponível quando o plano tiver taxas cadastradas.
+                            O aceite fica disponível quando o plano tiver taxas cadastradas.
                         @else
-                            Envie os documentos pendentes para liberar a assinatura:
+                            Envie os documentos pendentes para liberar o aceite:
                             {{ $faltando->pluck('titulo')->join(', ') }}.
                         @endif
                     </p>
                     <a href="#documentos" class="no-print mt-3 inline-flex min-h-12 items-center font-bold text-blue-700">Voltar aos documentos</a>
                 @else
-                    <p class="mt-2 text-sm leading-6 text-slate-500">Ao confirmar, registramos a assinatura, o IP, a data e a hora do aparelho e do servidor, o fuso, a localização e os dados deste celular ou computador. O código de confirmação amarra esses dados às taxas e aos arquivos enviados.</p>
-
                     <form id="form-aceite" method="POST" action="{{ route('documentos.public.aceite', $estabelecimento->documento_token_publico) }}" class="mt-4 space-y-4">
                         @csrf
-                        <label class="block">
-                            <span class="text-sm font-bold">Nome de quem assina</span>
-                            <input name="nome_responsavel" value="{{ old('nome_responsavel', $resumo['responsavel']) }}" required autocomplete="name" class="mt-1 min-h-12 w-full rounded-xl border border-slate-300 px-3">
-                        </label>
-                        <label class="block">
-                            <span class="text-sm font-bold">CPF de quem assina</span>
-                            <input name="cpf_responsavel" inputmode="numeric" autocomplete="off" value="{{ old('cpf_responsavel', $resumo['cpf_sugerido']) }}" required placeholder="000.000.000-00" class="mt-1 min-h-12 w-full rounded-xl border border-slate-300 px-3">
-                        </label>
-
-                        @php $condicaoAtual = old('condicao_representacao', $estabelecimento->pessoa_tipo === 'juridica' ? 'representante' : 'titular'); @endphp
-                        <fieldset class="space-y-2">
-                            <legend class="text-sm font-bold">Condição</legend>
-                            @foreach (\App\Support\AceiteContratacao::CONDICOES as $valor => $rotulo)
-                                <label class="flex min-h-12 items-center gap-3 rounded-xl border px-3 py-3 {{ $condicaoAtual === $valor ? 'border-blue-400 bg-blue-50' : 'border-slate-200' }}">
-                                    <input type="radio" name="condicao_representacao" value="{{ $valor }}" class="h-5 w-5" @checked($condicaoAtual === $valor) required>
-                                    <span class="font-semibold">{{ $rotulo }}</span>
-                                </label>
-                            @endforeach
-                        </fieldset>
-
-                        <div class="rounded-xl bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-700">
-                            <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Texto que será registrado</p>
-                            <p id="texto-declaracao" class="mt-2" data-modelo="{{ $declaracaoModelo }}">{{ $declaracaoModelo }}</p>
-                        </div>
-
-                        <label class="flex items-start gap-3 rounded-xl border border-slate-300 px-3 py-3">
-                            <input type="checkbox" name="concordo" value="1" class="mt-1 h-5 w-5" @checked(old('concordo')) required>
-                            <span class="text-sm leading-5">Li e concordo com as taxas, os prazos e as condições desta contratação, incluindo as regras de chargeback. Confirmo que os dados e os documentos são verdadeiros.</span>
-                        </label>
-
-                        <div class="rounded-xl border border-slate-200 px-3 py-3">
-                            <div class="flex items-center justify-between gap-3">
-                                <p class="text-sm font-bold">Localização</p>
-                                <button type="button" id="pedir-localizacao" class="rounded-full bg-slate-900 px-3 py-2 text-sm font-bold text-white">Permitir</button>
-                            </div>
-                            <p id="geo-status" class="mt-2 text-sm text-slate-500">Toque em permitir para registrar onde este aceite foi assinado.</p>
-                        </div>
-
-                        <div class="rounded-xl bg-slate-50 px-3 py-3 text-sm">
-                            <p class="font-bold">Data e hora deste aparelho</p>
-                            <p id="relogio-local" class="mt-1 text-base font-semibold"></p>
-                            <p class="text-slate-500">Fuso: <span id="fuso-visivel"></span></p>
-                        </div>
-
-                        <div>
-                            <div class="flex items-center justify-between">
-                                <p class="text-sm font-bold">Assinatura</p>
-                                <button type="button" id="limpar-assinatura" class="text-sm font-semibold text-blue-700">Limpar</button>
-                            </div>
-                            <canvas id="quadro-assinatura" class="mt-2 h-44 w-full rounded-xl border border-slate-300 bg-white" aria-label="Quadro para assinar com o dedo"></canvas>
-                            <p class="mt-1 text-xs text-slate-400">Assine com o dedo dentro do quadro.</p>
-                        </div>
-
-                        <input type="hidden" name="assinatura" id="assinatura-imagem">
-                        <input type="hidden" name="latitude" id="latitude">
-                        <input type="hidden" name="longitude" id="longitude">
-                        <input type="hidden" name="precisao_metros" id="precisao_metros">
-                        <input type="hidden" name="altitude" id="altitude">
+                        <input type="hidden" name="concordo" value="1">
                         <input type="hidden" name="data_hora_cliente" id="data_hora_cliente">
                         <input type="hidden" name="fuso_horario" id="fuso_horario">
                         <input type="hidden" name="idioma" id="idioma">
@@ -401,8 +339,10 @@
                                 </ul>
                             </div>
                         @endif
-                        <p id="erro-aceite" class="hidden rounded-xl bg-red-50 px-3 py-3 text-sm text-red-700"></p>
-                        <button type="submit" id="confirmar-aceite" class="min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white">Assinar e confirmar aceite</button>
+                        <button type="submit" id="confirmar-aceite" class="min-h-28 w-full rounded-2xl bg-blue-600 px-4 text-3xl font-black tracking-tight text-white shadow-sm hover:bg-blue-700">
+                            Li e aceito
+                        </button>
+                        <p class="text-center text-sm leading-5 text-slate-500">Ao tocar, você confirma as taxas, os prazos e as condições desta contratação, inclusive chargeback.</p>
                     </form>
                 @endif
             </section>
@@ -455,308 +395,44 @@
 
         const formAceite = document.getElementById('form-aceite');
         if (formAceite) {
-            const condicoes = @json(\App\Support\AceiteContratacao::CONDICOES);
-            const texto = document.getElementById('texto-declaracao');
-            const modelo = texto.dataset.modelo;
-            const nome = formAceite.querySelector('[name="nome_responsavel"]');
-            const cpf = formAceite.querySelector('[name="cpf_responsavel"]');
-            const erro = document.getElementById('erro-aceite');
-            const canvas = document.getElementById('quadro-assinatura');
-            const ctx = canvas.getContext('2d');
-            let desenhando = false;
-            let desenhou = false;
-            let tracos = [];
-            let tracoAtual = null;
-
-            const atualizarDeclaracao = () => {
-                const marcada = formAceite.querySelector('[name="condicao_representacao"]:checked');
-                texto.textContent = modelo
-                    .replace('__NOME__', nome.value.trim() || 'seu nome')
-                    .replace('__CPF__', cpf.value.trim() || 'seu CPF')
-                    .replace('__CONDICAO__', condicoes[marcada?.value] || 'sua condição');
-            };
-
-            const mascararCpf = () => {
-                let digitos = cpf.value.replace(/\D/g, '').slice(0, 11);
-                digitos = digitos
-                    .replace(/(\d{3})(\d)/, '$1.$2')
-                    .replace(/(\d{3})(\d)/, '$1.$2')
-                    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-                cpf.value = digitos;
-                atualizarDeclaracao();
-            };
-
-            nome.addEventListener('input', atualizarDeclaracao);
-            cpf.addEventListener('input', mascararCpf);
-            formAceite.querySelectorAll('[name="condicao_representacao"]').forEach((radio) => {
-                radio.addEventListener('change', atualizarDeclaracao);
-            });
-            mascararCpf();
-
-            const chaveAssinatura = 'aceite-assinatura:' + formAceite.action;
-            const chaveTracos = 'aceite-tracos:' + formAceite.action;
-            let ratio = 1;
-            let pronto = false;
-
-            const estiloTraco = () => {
-                ctx.lineWidth = 2.6;
-                ctx.lineCap = 'round';
-                ctx.lineJoin = 'round';
-                ctx.strokeStyle = '#0f172a';
-            };
-
-            const prepararQuadro = (limpar) => {
-                const largura = canvas.clientWidth;
-                const altura = canvas.clientHeight;
-                if (largura < 2 || altura < 2) return false;
-                const pai = canvas.parentElement ? canvas.parentElement.clientWidth : 0;
-                if (!limpar && pai > 200 && Math.abs(largura - pai) > 16) return false;
-                ratio = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2);
-                const bitmapLargura = Math.floor(largura * ratio);
-                const bitmapAltura = Math.floor(altura * ratio);
-                if (!limpar && pronto && canvas.width === bitmapLargura && canvas.height === bitmapAltura) return true;
-                canvas.width = bitmapLargura;
-                canvas.height = bitmapAltura;
-                ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, largura, altura);
-                estiloTraco();
-                if (limpar) desenhou = false;
-                pronto = true;
-                return true;
-            };
-
-            const guardarTracos = () => {
-                try { sessionStorage.setItem(chaveTracos, JSON.stringify(tracos)); } catch (e) {}
-            };
-
-            const desenharTracosNoQuadro = () => {
-                estiloTraco();
-                tracos.forEach((traco) => {
-                    if (!traco.length) return;
-                    ctx.beginPath();
-                    ctx.moveTo(traco[0].x, traco[0].y);
-                    if (traco.length === 1) {
-                        ctx.lineTo(traco[0].x + 0.6, traco[0].y + 0.6);
-                    } else {
-                        traco.slice(1).forEach((p) => ctx.lineTo(p.x, p.y));
-                    }
-                    ctx.stroke();
-                });
-            };
-
-            const restaurarAssinatura = () => {
-                let salvo = '';
-                try { salvo = sessionStorage.getItem(chaveTracos) || ''; } catch (e) { return; }
-                if (!salvo) return;
-                try { tracos = JSON.parse(salvo) || []; } catch (e) { tracos = []; }
-                if (!Array.isArray(tracos) || !tracos.length) return;
-                if (!pronto && !prepararQuadro(false)) return;
-                desenharTracosNoQuadro();
-                desenhou = true;
-            };
-
-            const exportarAssinatura = () => {
-                const origemLargura = Math.max(canvas.clientWidth, 1);
-                const origemAltura = Math.max(canvas.clientHeight, 1);
-                const destino = document.createElement('canvas');
-                destino.width = 640;
-                destino.height = Math.max(160, Math.round(640 * (origemAltura / origemLargura)));
-                const g = destino.getContext('2d');
-                g.fillStyle = '#ffffff';
-                g.fillRect(0, 0, destino.width, destino.height);
-                g.strokeStyle = '#111111';
-                g.fillStyle = '#111111';
-                g.lineWidth = 5;
-                g.lineCap = 'round';
-                g.lineJoin = 'round';
-                const sx = destino.width / origemLargura;
-                const sy = destino.height / origemAltura;
-                tracos.forEach((traco) => {
-                    if (!traco.length) return;
-                    g.beginPath();
-                    g.moveTo(traco[0].x * sx, traco[0].y * sy);
-                    if (traco.length === 1) {
-                        g.lineTo(traco[0].x * sx + 1, traco[0].y * sy + 1);
-                    } else {
-                        traco.slice(1).forEach((p) => g.lineTo(p.x * sx, p.y * sy));
-                    }
-                    g.stroke();
-                });
-                return destino.toDataURL('image/png');
-            };
-
-            let restaurou = false;
-            const observarQuadro = () => {
-                if (desenhou) return;
-                if (!prepararQuadro(false) || restaurou) return;
-                restaurou = true;
-                restaurarAssinatura();
-            };
-            observarQuadro();
-            if (window.ResizeObserver) new ResizeObserver(observarQuadro).observe(canvas);
-            setTimeout(observarQuadro, 400);
-
-            const ponto = (evento) => {
-                const caixa = canvas.getBoundingClientRect();
-                return { x: evento.clientX - caixa.left, y: evento.clientY - caixa.top };
-            };
-            const comecarTraco = (evento) => {
-                if (!pronto) observarQuadro();
-                if (evento.cancelable) evento.preventDefault();
-                try { canvas.setPointerCapture(evento.pointerId); } catch (e) {}
-                desenhando = true;
-                const p = ponto(evento);
-                tracoAtual = [p];
-                tracos.push(tracoAtual);
-                ctx.beginPath();
-                ctx.moveTo(p.x, p.y);
-                ctx.lineTo(p.x + 0.6, p.y + 0.6);
-                ctx.stroke();
-                desenhou = true;
-                document.getElementById('erros-aceite')?.classList.add('hidden');
-            };
-            const continuarTraco = (evento) => {
-                if (!desenhando) return;
-                if (evento.cancelable) evento.preventDefault();
-                const p = ponto(evento);
-                tracoAtual?.push(p);
-                ctx.lineTo(p.x, p.y);
-                ctx.stroke();
-                desenhou = true;
-            };
-            canvas.addEventListener('pointerdown', comecarTraco, { passive: false });
-            canvas.addEventListener('pointermove', continuarTraco, { passive: false });
-            const soltar = () => {
-                desenhando = false;
-                tracoAtual = null;
-                if (tracos.length) guardarTracos();
-            };
-            canvas.addEventListener('pointerup', soltar);
-            canvas.addEventListener('pointercancel', soltar);
-            document.getElementById('limpar-assinatura').addEventListener('click', () => {
-                try {
-                    sessionStorage.removeItem(chaveAssinatura);
-                    sessionStorage.removeItem(chaveTracos);
-                } catch (e) {}
-                tracos = [];
-                tracoAtual = null;
-                desenhou = false;
-                prepararQuadro(true);
-            });
-
-            const relogio = document.getElementById('relogio-local');
-            const fusoVisivel = document.getElementById('fuso-visivel');
-            const fuso = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
-            fusoVisivel.textContent = fuso;
-            const tick = () => { relogio.textContent = new Date().toLocaleString('pt-BR'); };
-            tick();
-            setInterval(tick, 1000);
-
-            const geoStatus = document.getElementById('geo-status');
-            const pedirLocal = () => {
-                if (!navigator.geolocation) {
-                    geoStatus.textContent = 'Este aparelho não informa localização. Use um celular ou um navegador que permita a localização.';
-                    return;
-                }
-                geoStatus.textContent = 'Obtendo localização...';
-                navigator.geolocation.getCurrentPosition((posicao) => {
-                    document.getElementById('latitude').value = posicao.coords.latitude.toFixed(7);
-                    document.getElementById('longitude').value = posicao.coords.longitude.toFixed(7);
-                    const precisao = Number(posicao.coords.accuracy);
-                    if (Number.isFinite(precisao) && precisao >= 0 && precisao <= 100000) {
-                        document.getElementById('precisao_metros').value = precisao.toFixed(2);
-                    }
-                    const altitude = Number(posicao.coords.altitude);
-                    if (Number.isFinite(altitude) && altitude >= -500 && altitude <= 10000) {
-                        document.getElementById('altitude').value = altitude.toFixed(2);
-                    }
-                    const metros = Number.isFinite(precisao) ? Math.round(precisao) : null;
-                    const coords = `${posicao.coords.latitude.toFixed(5)}, ${posicao.coords.longitude.toFixed(5)}`;
-                    geoStatus.textContent = metros === null
-                        ? `Localização obtida (${coords}).`
-                        : `Localização obtida (${coords}), precisão de ${metros} m.`;
-                }, (falha) => {
-                    const mensagens = {
-                        1: 'A localização foi negada. Ative a permissão do navegador e toque em permitir de novo.',
-                        2: 'Não foi possível obter a localização. Tente de novo em um lugar com sinal.',
-                        3: 'A localização demorou demais. Toque em permitir de novo.',
-                    };
-                    geoStatus.textContent = mensagens[falha.code] || 'Não foi possível obter a localização.';
-                }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
-            };
-            document.getElementById('pedir-localizacao').addEventListener('click', pedirLocal);
-            pedirLocal();
-
-            const mostrarErro = (mensagem) => {
-                erro.textContent = mensagem;
-                erro.classList.remove('hidden');
-            };
-
-            formAceite.addEventListener('submit', (evento) => {
-                erro.classList.add('hidden');
-                if (!tracos.some((traco) => traco.length)) {
-                    evento.preventDefault();
-                    mostrarErro('Assine no quadro antes de confirmar.');
-                    return;
-                }
-                if (!document.getElementById('latitude').value || !document.getElementById('longitude').value) {
-                    evento.preventDefault();
-                    mostrarErro('Autorize a localização do aparelho para registrar o aceite.');
-                    pedirLocal();
-                    return;
-                }
-
+            const preencherAparelho = () => {
                 const agora = new Date();
                 const pad = (n) => String(n).padStart(2, '0');
                 const deslocamento = -agora.getTimezoneOffset();
                 const sinal = deslocamento >= 0 ? '+' : '-';
                 const horas = pad(Math.floor(Math.abs(deslocamento) / 60));
                 const minutos = pad(Math.abs(deslocamento) % 60);
-                document.getElementById('data_hora_cliente').value = `${agora.getFullYear()}-${pad(agora.getMonth() + 1)}-${pad(agora.getDate())}T${pad(agora.getHours())}:${pad(agora.getMinutes())}:${pad(agora.getSeconds())}${sinal}${horas}:${minutos}`;
-                document.getElementById('fuso_horario').value = fuso;
-                document.getElementById('idioma').value = navigator.language || '';
-                document.getElementById('tela').value = `${Math.round(screen.width)}x${Math.round(screen.height)}`;
+                const set = (id, valor) => {
+                    const campo = document.getElementById(id);
+                    if (campo) campo.value = valor;
+                };
+                set('data_hora_cliente', `${agora.getFullYear()}-${pad(agora.getMonth() + 1)}-${pad(agora.getDate())}T${pad(agora.getHours())}:${pad(agora.getMinutes())}:${pad(agora.getSeconds())}${sinal}${horas}:${minutos}`);
+                set('fuso_horario', Intl.DateTimeFormat().resolvedOptions().timeZone || '');
+                set('idioma', navigator.language || '');
+                set('tela', `${Math.round(screen.width)}x${Math.round(screen.height)}`);
                 const densidade = Number(window.devicePixelRatio);
-                document.getElementById('pixel_ratio').value = Number.isFinite(densidade) ? String(Math.min(10, Math.max(0, densidade))) : '';
-                document.getElementById('conexao').value = navigator.connection?.effectiveType || '';
-                document.getElementById('toque').value = navigator.maxTouchPoints > 0 ? '1' : '0';
-                document.getElementById('plataforma').value = navigator.platform || '';
+                set('pixel_ratio', Number.isFinite(densidade) ? String(Math.min(10, Math.max(0, densidade))) : '');
+                set('conexao', navigator.connection?.effectiveType || '');
+                set('toque', navigator.maxTouchPoints > 0 ? '1' : '0');
+                set('plataforma', navigator.platform || '');
+            };
 
-                let imagem;
-                try {
-                    imagem = exportarAssinatura();
-                } catch (e) {
-                    evento.preventDefault();
-                    mostrarErro('Não foi possível ler a assinatura. Limpe o quadro e assine de novo.');
-                    return;
-                }
-                if (!imagem.startsWith('data:image/png') || imagem.length < 250) {
-                    evento.preventDefault();
-                    mostrarErro('A assinatura não ficou registrada. Assine de novo dentro do quadro.');
-                    return;
-                }
-                formAceite.elements.assinatura.value = imagem;
-                try { sessionStorage.setItem(chaveAssinatura, imagem); } catch (e) {}
-
+            formAceite.addEventListener('submit', () => {
+                preencherAparelho();
                 const botao = document.getElementById('confirmar-aceite');
-                botao.disabled = true;
-                botao.textContent = 'Registrando aceite...';
+                if (!botao) return;
+                window.setTimeout(() => {
+                    botao.disabled = true;
+                    botao.textContent = 'Registrando aceite...';
+                }, 0);
             });
 
             window.addEventListener('pageshow', () => {
                 const botao = document.getElementById('confirmar-aceite');
                 if (!botao) return;
                 botao.disabled = false;
-                botao.textContent = 'Assinar e confirmar aceite';
-                restaurarAssinatura();
+                botao.textContent = 'Li e aceito';
             });
-        } else {
-            try {
-                Object.keys(sessionStorage).forEach((chave) => {
-                    if (chave.startsWith('aceite-assinatura:')) sessionStorage.removeItem(chave);
-                });
-            } catch (e) {}
         }
 
         @if ($errors->has('documento') || $errors->has('tipo_documento'))

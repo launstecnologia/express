@@ -19,7 +19,7 @@ class AceiteContratacaoService
     /**
      * @param  array<string, mixed>  $dados
      */
-    public function registrar(Estabelecimento $estabelecimento, array $dados, string $assinaturaBin): EstabelecimentoAceite
+    public function registrar(Estabelecimento $estabelecimento, array $dados, ?string $assinaturaBin = null): EstabelecimentoAceite
     {
         $resumo = AceiteContratacao::resumo($estabelecimento);
         $this->garantirPodeAssinar($estabelecimento, $resumo);
@@ -38,9 +38,15 @@ class AceiteContratacaoService
         );
 
         $aceiteEm = now();
-        $assinaturaSha = hash('sha256', $assinaturaBin);
+        $assinaturaSha = $assinaturaBin !== null && $assinaturaBin !== '' ? hash('sha256', $assinaturaBin) : null;
         $precisao = $dados['precisao_metros'] !== null && $dados['precisao_metros'] !== ''
             ? number_format((float) $dados['precisao_metros'], 2, '.', '')
+            : null;
+        $latitude = $dados['latitude'] !== null && $dados['latitude'] !== ''
+            ? number_format((float) $dados['latitude'], 7, '.', '')
+            : null;
+        $longitude = $dados['longitude'] !== null && $dados['longitude'] !== ''
+            ? number_format((float) $dados['longitude'], 7, '.', '')
             : null;
 
         $payload = [
@@ -60,8 +66,8 @@ class AceiteContratacaoService
             'data_hora_cliente' => $dados['data_hora_cliente'],
             'data_hora_servidor' => $aceiteEm->toIso8601String(),
             'fuso_horario' => $dados['fuso_horario'],
-            'latitude' => number_format((float) $dados['latitude'], 7, '.', ''),
-            'longitude' => number_format((float) $dados['longitude'], 7, '.', ''),
+            'latitude' => $latitude,
+            'longitude' => $longitude,
             'precisao_metros' => $precisao,
             'idioma' => $dados['idioma'] ?: null,
             'tela' => $dados['tela'] ?: null,
@@ -69,7 +75,9 @@ class AceiteContratacaoService
 
         $ordenado = AceiteContratacao::ordenar($payload);
         $hash = AceiteContratacao::hashDoCanonico($ordenado);
-        $caminho = "estabelecimentos/{$estabelecimento->id}/aceite/assinatura.png";
+        $caminho = $assinaturaSha
+            ? "estabelecimentos/{$estabelecimento->id}/aceite/assinatura.png"
+            : null;
 
         try {
             $aceite = DB::transaction(function () use (
@@ -82,6 +90,8 @@ class AceiteContratacaoService
                 $declaracao,
                 $assinaturaSha,
                 $precisao,
+                $latitude,
+                $longitude,
                 $ordenado,
                 $hash,
                 $caminho,
@@ -98,9 +108,9 @@ class AceiteContratacaoService
                     ]);
                 }
 
-                if (! Storage::disk('local')->put($caminho, $assinaturaBin)) {
+                if ($caminho && ! Storage::disk('local')->put($caminho, $assinaturaBin)) {
                     throw ValidationException::withMessages([
-                        'assinatura' => 'Não foi possível guardar a assinatura. Tente novamente.',
+                        'aceite' => 'Não foi possível guardar o aceite. Tente novamente.',
                     ]);
                 }
 
@@ -120,8 +130,8 @@ class AceiteContratacaoService
                     'user_agent' => $dados['user_agent'],
                     'fuso_horario' => $dados['fuso_horario'],
                     'data_hora_cliente' => $dados['data_hora_cliente'],
-                    'latitude' => $dados['latitude'],
-                    'longitude' => $dados['longitude'],
+                    'latitude' => $latitude,
+                    'longitude' => $longitude,
                     'precisao_metros' => $precisao,
                     'hash_confirmacao' => $hash,
                     'payload_hash' => $ordenado,
@@ -129,7 +139,7 @@ class AceiteContratacaoService
                 ]);
             });
         } catch (UniqueConstraintViolationException) {
-            if (! EstabelecimentoAceite::query()->where('estabelecimento_id', $estabelecimento->id)->exists()) {
+            if ($caminho && ! EstabelecimentoAceite::query()->where('estabelecimento_id', $estabelecimento->id)->exists()) {
                 Storage::disk('local')->delete($caminho);
             }
 
@@ -137,18 +147,20 @@ class AceiteContratacaoService
                 'aceite' => 'Este estabelecimento já registrou o aceite.',
             ]);
         } catch (ValidationException $e) {
-            if (isset($e->errors()['assinatura'])) {
+            if ($caminho && isset($e->errors()['aceite'])) {
                 Storage::disk('local')->delete($caminho);
             }
 
             throw $e;
         } catch (\Throwable $e) {
-            Storage::disk('local')->delete($caminho);
+            if ($caminho) {
+                Storage::disk('local')->delete($caminho);
+            }
 
             throw $e;
         }
 
-        $this->log->registrar('Estabelecimento', $estabelecimento->id, 'aceite_registrado', 'Aceite das taxas assinado pelo link público', null, [
+        $this->log->registrar('Estabelecimento', $estabelecimento->id, 'aceite_registrado', 'Aceite das taxas confirmado pelo link público', null, [
             'aceite_id' => $aceite->id,
             'hash_confirmacao' => $aceite->hash_confirmacao,
             'ip' => $aceite->ip,
@@ -170,13 +182,13 @@ class AceiteContratacaoService
 
         if (! $estabelecimento->plano_id) {
             throw ValidationException::withMessages([
-                'taxas' => 'Este estabelecimento ainda não tem um plano vinculado. A assinatura fica disponível depois que o plano for definido.',
+                'taxas' => 'Este estabelecimento ainda não tem um plano vinculado. O aceite fica disponível depois que o plano for definido.',
             ]);
         }
 
         if ($resumo['taxas'] === []) {
             throw ValidationException::withMessages([
-                'taxas' => 'O plano deste estabelecimento ainda não tem taxas cadastradas. A assinatura fica disponível depois que as taxas forem lançadas.',
+                'taxas' => 'O plano deste estabelecimento ainda não tem taxas cadastradas. O aceite fica disponível depois que as taxas forem lançadas.',
             ]);
         }
 

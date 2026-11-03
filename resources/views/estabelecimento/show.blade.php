@@ -92,6 +92,11 @@
         <button type="button" data-modal-open="status" class="{{ $navActionClass }} bg-sky-500 text-white hover:bg-sky-600">
             <i class="fa-solid fa-sliders"></i> Alterar status
         </button>
+        @if (auth()->user()?->tipo === 'admin' && ! in_array($estabelecimento->fv_status, ['em_andamento', 'concluido'], true))
+            <button type="button" data-modal-open="liberar-sem-termo" class="{{ $navActionClass }} border border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50">
+                <i class="fa-solid fa-unlock"></i> Liberar sem termo
+            </button>
+        @endif
         @if (auth()->user()?->tipo === 'admin' && $estabelecimento->ativo)
             <button type="button" data-modal-open="inativar-sistema" class="{{ $navActionClass }} border border-red-200 bg-white text-red-700 hover:bg-red-50">
                 <i class="fa-solid fa-trash-can"></i> Inativar cadastro
@@ -403,7 +408,7 @@
 
         {{-- Detalhes da execução --}}
         @php
-            $emailPagBank = $estabelecimento->webmail_email ?: $estabelecimento->email;
+            $emailPagBank = \App\Support\EmailPagBank::daPlataforma($estabelecimento->webmail_email);
         @endphp
         <dl class="grid gap-4 sm:grid-cols-2">
             <div class="rounded-lg border border-gray-100 bg-gray-50 p-4">
@@ -1140,7 +1145,7 @@
             <div class="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
                 <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <p class="text-sm font-bold text-emerald-800">Aceite assinado</p>
+                        <p class="text-sm font-bold text-emerald-800">Aceite confirmado</p>
                         <p class="mt-1 text-xs text-gray-500">{{ $aceite->nome_responsavel }} · {{ $aceite->condicaoLabel() }} · {{ $aceite->aceite_em?->format('d/m/Y H:i:s') }}</p>
                     </div>
                     <button type="button" data-copy-text="{{ $aceite->hash_confirmacao }}" class="rounded-lg border border-emerald-700 px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100">Copiar código</button>
@@ -1155,22 +1160,26 @@
                         <dt class="text-xs font-bold uppercase tracking-wide text-gray-400">IP</dt>
                         <dd>{{ $aceite->ip ?: '—' }}</dd>
                     </div>
+                    @if ($aceite->latitude !== null && $aceite->longitude !== null)
+                        <div>
+                            <dt class="text-xs font-bold uppercase tracking-wide text-gray-400">Localização</dt>
+                            <dd>
+                                {{ $aceite->latitude }}, {{ $aceite->longitude }}
+                                @if ($aceite->precisao_metros)
+                                    <span class="text-gray-500">(± {{ $aceite->precisao_metros }} m)</span>
+                                @endif
+                                <a href="https://www.google.com/maps?q={{ $aceite->latitude }},{{ $aceite->longitude }}" target="_blank" rel="noopener" class="ml-1 font-semibold text-blue-700">Mapa</a>
+                            </dd>
+                        </div>
+                    @endif
                     <div>
-                        <dt class="text-xs font-bold uppercase tracking-wide text-gray-400">Localização</dt>
-                        <dd>
-                            {{ $aceite->latitude }}, {{ $aceite->longitude }}
-                            @if ($aceite->precisao_metros)
-                                <span class="text-gray-500">(± {{ $aceite->precisao_metros }} m)</span>
-                            @endif
-                            <a href="https://www.google.com/maps?q={{ $aceite->latitude }},{{ $aceite->longitude }}" target="_blank" rel="noopener" class="ml-1 font-semibold text-blue-700">Mapa</a>
-                        </dd>
-                    </div>
-                    <div>
-                        <dt class="text-xs font-bold uppercase tracking-wide text-gray-400">CPF do signatário</dt>
+                        <dt class="text-xs font-bold uppercase tracking-wide text-gray-400">CPF do responsável</dt>
                         <dd>{{ \App\Support\DocumentoBrasil::formatarCpf($aceite->cpf_responsavel) }}</dd>
                     </div>
                 </dl>
-                <img src="{{ route('estabelecimentos.aceite.assinatura', $estabelecimento) }}" alt="Assinatura do aceite" class="mt-4 max-h-36 rounded-lg border border-emerald-100 bg-white">
+                @if ($aceite->assinatura_path)
+                    <img src="{{ route('estabelecimentos.aceite.assinatura', $estabelecimento) }}" alt="Assinatura do aceite" class="mt-4 max-h-36 rounded-lg border border-emerald-100 bg-white">
+                @endif
                 <details class="mt-4 text-sm text-gray-600">
                     <summary class="cursor-pointer font-semibold text-gray-800">Declaração, taxas aceitas e aparelho</summary>
                     <p class="mt-2 leading-6">{{ $aceite->declaracao }}</p>
@@ -1538,6 +1547,54 @@
         </div>
     </div>
 
+    @if (auth()->user()?->tipo === 'admin' && ! in_array($estabelecimento->fv_status, ['em_andamento', 'concluido'], true))
+    <div data-modal="liberar-sem-termo" class="modal-overlay fixed inset-0 z-[100] items-center justify-center bg-black/40 px-4">
+        <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <div class="mb-5 flex items-start justify-between">
+                <div>
+                    <h3 class="text-lg font-bold text-emerald-800">Liberar sem termo</h3>
+                    <p class="mt-1 text-xs text-gray-500">Uso pontual, quando o cliente não vai assinar o aceite.</p>
+                </div>
+                <button type="button" data-modal-close="liberar-sem-termo" class="text-2xl leading-none text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+
+            <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                <p class="font-semibold">O que acontece:</p>
+                <ul class="mt-2 list-inside list-disc space-y-1">
+                    <li>O KYC é aprovado sem esperar a análise</li>
+                    <li>O cliente não precisa assinar o termo</li>
+                    <li>É criado o e-mail {{ '@'.\App\Support\EmailPagBank::dominio() }}</li>
+                    <li>A automação da PagBank começa com esse e-mail, nunca com o e-mail do cliente</li>
+                </ul>
+            </div>
+
+            <form method="POST" action="{{ route('estabelecimentos.liberar-sem-termo', $estabelecimento) }}" class="space-y-4">
+                @csrf
+                <label class="block space-y-1">
+                    <span class="text-sm font-medium text-gray-700">Sua senha de administrador</span>
+                    <input type="password" name="senha_admin_liberar" autocomplete="current-password" required
+                           class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm @error('senha_admin_liberar') border-red-500 @enderror">
+                    @error('senha_admin_liberar')
+                        <p class="text-xs text-red-600">{{ $message }}</p>
+                    @enderror
+                </label>
+                <label class="flex items-start gap-2 text-sm text-gray-700">
+                    <input type="hidden" name="confirmacao_liberar" value="0">
+                    <input type="checkbox" name="confirmacao_liberar" value="1" required class="mt-0.5 h-4 w-4 rounded accent-emerald-700">
+                    <span>Confirmo a liberação de <strong>{{ $nome }}</strong> sem a assinatura do termo.</span>
+                </label>
+                @error('confirmacao_liberar')
+                    <p class="text-xs text-red-600">{{ $message }}</p>
+                @enderror
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="button" data-modal-close="liberar-sem-termo" class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancelar</button>
+                    <button type="submit" class="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800">Liberar e iniciar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    @endif
+
     @if (auth()->user()?->tipo === 'admin' && $estabelecimento->ativo)
     <div data-modal="inativar-sistema" class="modal-overlay fixed inset-0 z-[100] items-center justify-center bg-black/40 px-4">
         <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
@@ -1663,6 +1720,9 @@
         @if ($errors->has('destino'))
             document.querySelector('[data-modal="webmail-forwarder"]')?.classList.add('is-open');
             showTab('email-plataforma');
+        @endif
+        @if ($errors->has('senha_admin_liberar') || $errors->has('confirmacao_liberar') || session('abrir_modal_liberar'))
+            document.querySelector('[data-modal="liberar-sem-termo"]')?.classList.add('is-open');
         @endif
         @if ($errors->has('senha_admin') || $errors->has('confirmacao') || session('abrir_modal_inativar'))
             document.querySelector('[data-modal="inativar-sistema"]')?.classList.add('is-open');

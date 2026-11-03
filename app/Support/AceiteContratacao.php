@@ -19,7 +19,7 @@ class AceiteContratacao
 
     public const TEXTO_CHARGEBACK = 'Uma transação pode ser contestada pelo titular do cartão e resultar em chargeback, isto é, na reversão do pagamento. O tratamento da contestação, a apresentação de documentos e o eventual ajuste de valores seguem o contrato aplicável e a legislação, com apuração das circunstâncias e responsabilidades. A aprovação da venda não afasta a possibilidade de contestação posterior. Mantenha os comprovantes de venda, entrega ou prestação do serviço e apresente-os quando solicitados.';
 
-    public const TEXTO_CONFERENCIA = 'Confira se este resumo corresponde ao que foi oferecido. Em caso de divergência, fale com a empresa parceira antes de assinar. Este registro complementa os documentos da contratação e não substitui os contratos aplicáveis do PagBank. O silêncio ou o simples recebimento destas condições não constituem aceite. A concordância ocorre somente com a assinatura nesta página.';
+    public const TEXTO_CONFERENCIA = 'Confira se este resumo corresponde ao que foi oferecido. Em caso de divergência, fale com a empresa parceira antes de aceitar. Este registro complementa os documentos da contratação e não substitui os contratos aplicáveis do PagBank. O silêncio ou o simples recebimento destas condições não constituem aceite. A concordância ocorre somente ao tocar em Li e aceito nesta página.';
 
     public const CONDICOES = [
         'titular' => 'Titular do cadastro',

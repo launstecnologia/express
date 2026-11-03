@@ -7,6 +7,7 @@ use App\Models\Estabelecimento;
 use App\Models\KycAnalise;
 use App\Models\KycDocumento;
 use App\Models\Usuario;
+use App\Support\EmailPagBank;
 use App\Support\EstabelecimentoEtapaListagem;
 use App\Support\EstabelecimentoSchema;
 use App\Support\KycDocumentosObrigatorios;
@@ -71,9 +72,6 @@ class KycFinalizacaoService
         $estab = $kyc->estabelecimento;
         $estab->update(['status' => EstabelecimentoSchema::statusParaBanco(EstabelecimentoEtapaListagem::PENDENTE)]);
 
-        $this->pagBankCadastro->enfileirar($estab->fresh());
-        $this->dispararAutomacaoFv($estab->fresh());
-
         $this->historico->registrar(
             $kyc,
             'admin_aprovado',
@@ -83,6 +81,8 @@ class KycFinalizacaoService
         );
 
         $this->notificarKyc($kyc->fresh(), 'kyc.aprovado', $motivo);
+
+        app(LiberacaoEstabelecimentoService::class)->iniciarEmailEPagBank($estab->fresh());
     }
 
     public function enfileirarAutomacaoAposAprovacao(Estabelecimento $estab): bool
@@ -90,7 +90,7 @@ class KycFinalizacaoService
         $estab = $estab->fresh();
         $this->pagBankCadastro->enfileirar($estab);
 
-        return $this->dispararAutomacaoFv($estab, exigirWebmail: true);
+        return $this->dispararAutomacaoFv($estab);
     }
 
     public function aprovarAutomaticoNoCadastro(Estabelecimento $estab, ?Usuario $usuario = null): bool
@@ -101,7 +101,7 @@ class KycFinalizacaoService
         );
 
         if ($kyc->status === 'aprovado') {
-            return $this->dispararAutomacaoFv($estab->fresh(), exigirWebmail: true);
+            return $this->dispararAutomacaoFv($estab->fresh());
         }
 
         $kyc->update([
@@ -122,12 +122,12 @@ class KycFinalizacaoService
             $usuario,
         );
 
-        return $this->dispararAutomacaoFv($estab->fresh(), exigirWebmail: true);
+        return $this->dispararAutomacaoFv($estab->fresh());
     }
 
-    private function dispararAutomacaoFv(Estabelecimento $estab, bool $exigirWebmail = false): bool
+    private function dispararAutomacaoFv(Estabelecimento $estab): bool
     {
-        if ($exigirWebmail && (! filled($estab->webmail_email) || ! filled($estab->webmail_senha))) {
+        if (EmailPagBank::daPlataforma($estab->webmail_email) === null || blank($estab->webmail_senha)) {
             return false;
         }
 

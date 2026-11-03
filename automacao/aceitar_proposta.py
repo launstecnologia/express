@@ -261,9 +261,6 @@ class AceitadorProposta:
         except Exception:
             pass
 
-        if self.email:
-            return self.email
-
         raise Exception(
             f'E-mail @{self.email_suffix} não encontrado na tela de seleção.'
         )

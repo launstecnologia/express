@@ -137,6 +137,8 @@ Route::middleware(['auth', 'usuario.ativo', 'trocar.senha', 'tenant.access'])->g
     Route::delete('kyc/documentos/{documento}', [KycController::class, 'removerDocumento'])->name('kyc.documentos.destroy');
     Route::post('estabelecimentos/{estabelecimento}/inativar-sistema', [EstabelecimentoController::class, 'inativarSistema'])
         ->name('estabelecimentos.inativar-sistema');
+    Route::post('estabelecimentos/{estabelecimento}/liberar-sem-termo', [EstabelecimentoController::class, 'liberarSemTermo'])
+        ->name('estabelecimentos.liberar-sem-termo');
     Route::get('pesquisar-documento', [FvDocumentoConsultaController::class, 'index'])->name('fv-documento.index');
     Route::post('pesquisar-documento/consultar', [FvDocumentoConsultaController::class, 'consultar'])->name('fv-documento.consultar');
     Route::get('pesquisar-documento/status/{jobId}', [FvDocumentoConsultaController::class, 'status'])->name('fv-documento.status');

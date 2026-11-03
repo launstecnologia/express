@@ -112,20 +112,23 @@ class EnvioDocumentoController extends Controller
     public function aceite(Request $request, string $token, AceiteContratacaoService $service)
     {
         $estabelecimento = $this->estabelecimento($token);
+        $resumo = AceiteContratacao::resumo($estabelecimento);
+        $request->merge([
+            'nome_responsavel' => $resumo['responsavel'],
+            'cpf_responsavel' => $resumo['cpf_sugerido'],
+            'condicao_representacao' => $estabelecimento->pessoa_tipo === 'juridica' ? 'representante' : 'titular',
+        ]);
         $request->merge($this->evidenciasSeguras($request));
 
         $validator = Validator::make($request->all(), [
             'nome_responsavel' => ['required', 'string', 'min:3', 'max:150'],
             'cpf_responsavel' => ['required', 'string', 'max:14', function (string $attribute, mixed $value, \Closure $fail) {
                 if (! DocumentoBrasil::cpfValido((string) $value)) {
-                    $fail('Informe um CPF válido de quem está assinando.');
+                    $fail('O CPF do responsável no cadastro é inválido. Corrija o cadastro antes de aceitar.');
                 }
             }],
             'condicao_representacao' => ['required', Rule::in(array_keys(AceiteContratacao::CONDICOES))],
             'concordo' => ['accepted'],
-            'assinatura' => ['required', 'string', 'max:2000000'],
-            'latitude' => ['required', 'numeric', 'between:-90,90'],
-            'longitude' => ['required', 'numeric', 'between:-180,180'],
             'precisao_metros' => ['nullable', 'numeric', 'between:0,100000'],
             'altitude' => ['nullable', 'numeric', 'between:-500,10000'],
             'data_hora_cliente' => ['required', 'string', 'max:40', 'regex:/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+\-]\d{2}:\d{2})$/'],
@@ -137,14 +140,11 @@ class EnvioDocumentoController extends Controller
             'toque' => ['nullable', 'boolean'],
             'plataforma' => ['nullable', 'string', 'max:120'],
         ], [
-            'nome_responsavel.required' => 'Informe o nome de quem está assinando.',
-            'nome_responsavel.min' => 'Informe o nome completo de quem está assinando.',
-            'condicao_representacao.required' => 'Informe se é titular ou representante autorizado.',
-            'concordo.accepted' => 'Marque que leu e concorda com as taxas e as condições, inclusive chargeback.',
-            'assinatura.required' => 'Assine no quadro antes de confirmar.',
-            'assinatura.max' => 'A assinatura ficou grande demais. Limpe o quadro e assine de novo.',
-            'latitude.required' => 'Autorize a localização do aparelho para registrar o aceite.',
-            'longitude.required' => 'Autorize a localização do aparelho para registrar o aceite.',
+            'nome_responsavel.required' => 'O cadastro não tem o nome de quem responde pelo estabelecimento.',
+            'nome_responsavel.min' => 'O nome de quem responde pelo estabelecimento está incompleto.',
+            'cpf_responsavel.required' => 'O cadastro não tem o CPF de quem responde pelo estabelecimento.',
+            'condicao_representacao.required' => 'Não foi possível identificar se é titular ou representante.',
+            'concordo.accepted' => 'Toque em Li e aceito para confirmar as taxas e as condições.',
             'data_hora_cliente.required' => 'Não foi possível ler a data e a hora deste aparelho.',
             'data_hora_cliente.regex' => 'A data e a hora deste aparelho vieram em um formato inválido.',
             'fuso_horario.required' => 'Não foi possível ler o fuso horário deste aparelho.',
@@ -155,11 +155,6 @@ class EnvioDocumentoController extends Controller
         }
 
         $dados = $validator->validated();
-        $assinatura = AceiteContratacao::validarAssinatura($dados['assinatura']);
-
-        if (isset($assinatura['erro'])) {
-            return $this->voltarAssinatura($token, $request, ['assinatura' => $assinatura['erro']]);
-        }
 
         $userAgent = mb_substr((string) $request->userAgent(), 0, 1000);
 
@@ -168,8 +163,8 @@ class EnvioDocumentoController extends Controller
                 'nome_responsavel' => $dados['nome_responsavel'],
                 'cpf_responsavel' => $dados['cpf_responsavel'],
                 'condicao_representacao' => $dados['condicao_representacao'],
-                'latitude' => $dados['latitude'],
-                'longitude' => $dados['longitude'],
+                'latitude' => null,
+                'longitude' => null,
                 'precisao_metros' => $dados['precisao_metros'] ?? null,
                 'data_hora_cliente' => $dados['data_hora_cliente'],
                 'fuso_horario' => $dados['fuso_horario'],
@@ -191,15 +186,16 @@ class EnvioDocumentoController extends Controller
                     'sec_ch_ua_mobile' => $request->header('sec-ch-ua-mobile'),
                     'sec_ch_ua_platform' => $request->header('sec-ch-ua-platform'),
                     'accept_language' => mb_substr((string) $request->header('accept-language'), 0, 120),
+                    'aceite' => 'li_e_aceito',
                 ],
-            ], $assinatura['bin']);
+            ], null);
         } catch (ValidationException $e) {
             return $this->voltarAssinatura($token, $request, $e->errors());
         } catch (\Throwable $e) {
             report($e);
 
             return $this->voltarAssinatura($token, $request, [
-                'assinatura' => 'Não foi possível registrar o aceite. Tente assinar novamente.',
+                'aceite' => 'Não foi possível registrar o aceite. Toque em Li e aceito novamente.',
             ]);
         }
 
@@ -222,7 +218,7 @@ class EnvioDocumentoController extends Controller
         $estabelecimento = $this->estabelecimento($token);
         $aceite = Schema::hasTable('estabelecimento_aceites') ? $estabelecimento->aceite : null;
 
-        abort_unless($aceite && Storage::disk('local')->exists($aceite->assinatura_path), 404);
+        abort_unless($aceite && filled($aceite->assinatura_path) && Storage::disk('local')->exists($aceite->assinatura_path), 404);
 
         return Storage::disk('local')->response($aceite->assinatura_path, 'assinatura.png', [
             'Cache-Control' => 'private, max-age=3600',

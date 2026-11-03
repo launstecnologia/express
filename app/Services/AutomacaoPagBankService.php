@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Estabelecimento;
 use App\Support\DocumentoBrasil;
+use App\Support\EmailPagBank;
 use App\Support\PlatformSettings;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
@@ -306,7 +307,7 @@ class AutomacaoPagBankService
         }
 
         $documento = $this->documentoEstabelecimento($estab);
-        $email = $estab->webmail_email ?: $estab->email;
+        $email = EmailPagBank::obrigatorio($estab);
 
         $response = Http::timeout(15)
             ->withHeaders(['X-Api-Key' => $this->apiKey])
@@ -387,12 +388,12 @@ class AutomacaoPagBankService
     {
         $estab->loadMissing('plano');
 
-        $payload = $this->montarPayload($estab, '000000');
+        $payload = $this->montarPayload($estab, '000000', false);
         $dados   = $payload['dados'];
         $avisos  = [];
 
-        if (blank($estab->webmail_email)) {
-            $avisos[] = 'E-mail da plataforma (@express.app.br) não configurado.';
+        if (EmailPagBank::daPlataforma($estab->webmail_email) === null) {
+            $avisos[] = 'E-mail da plataforma (@'.EmailPagBank::dominio().') não configurado. O e-mail do cliente não entra no PagBank.';
         }
 
         if (blank($estab->webmail_senha)) {
@@ -516,15 +517,17 @@ class AutomacaoPagBankService
     // ----------------------------------------------------------------
     // Monta o payload com os dados do estabelecimento
     // ----------------------------------------------------------------
-    private function montarPayload(Estabelecimento $estab, string $senha6): array
+    private function montarPayload(Estabelecimento $estab, string $senha6, bool $exigirEmailPlataforma = true): array
     {
         $cpfCnpj = $estab->pessoa_tipo === 'juridica'
             ? $this->formatarCnpj($estab->cnpj)
             : $this->formatarCpf($estab->cpf);
 
-        // Usa o e-mail da plataforma (@express.app.br) para o cadastro no PagBank.
-        // O e-mail original do cliente (hotmail/gmail) é só para redirecionamento interno.
-        $emailPagBank = $estab->webmail_email ?: $estab->email;
+        // Só o e-mail criado na plataforma (@express.app.br). O e-mail do cliente
+        // fica restrito ao redirecionamento da caixa e nunca vai para o PagBank.
+        $emailPagBank = $exigirEmailPlataforma
+            ? EmailPagBank::obrigatorio($estab)
+            : (EmailPagBank::daPlataforma($estab->webmail_email) ?? '');
 
         $dados = [
             'cpf_cnpj'        => $cpfCnpj,

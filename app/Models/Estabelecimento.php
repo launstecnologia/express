@@ -58,6 +58,8 @@ class Estabelecimento extends Model
         'plano_id',
         'subdominio',
         'documento_token_publico',
+        'aceite_dispensado_em',
+        'aceite_dispensado_por',
         'cadastrado_por_id',
         'cadastrado_por_nivel',
         'master_id',
@@ -83,6 +85,7 @@ class Estabelecimento extends Model
             'fv_iniciado_em' => 'datetime',
             'fv_concluido_em' => 'datetime',
             'fv_proposta_concluido_em' => 'datetime',
+            'aceite_dispensado_em' => 'datetime',
             // webmail_senha usa accessor próprio para tratamento seguro de descriptografia
             'data_abertura' => 'date',
             'data_nascimento' => 'date',

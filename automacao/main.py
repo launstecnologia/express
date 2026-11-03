@@ -97,6 +97,7 @@ class CadastradorFV:
     def executar(self) -> dict:
         """Executa o fluxo completo. Retorna dict com resultado."""
         try:
+            self._exigir_email_plataforma()
             self._etapa('Iniciando navegador...')
             self.driver = self._iniciar_browser()
             self.wait = WebDriverWait(self.driver, 20)
@@ -1849,6 +1850,16 @@ class CadastradorFV:
         log.info('Pagina Cadastrar Cliente carregada')
         time.sleep(1)
         self._descartar_cadastro_em_andamento()
+
+    def _exigir_email_plataforma(self) -> None:
+        """O cadastro no PagBank só pode usar a caixa criada na plataforma."""
+        email = (self.dados.get('email') or '').strip().lower()
+        confirmar = (self.dados.get('email_confirmar') or '').strip().lower()
+        if not email.endswith('@express.app.br') or confirmar != email:
+            raise Exception(
+                'Cadastro recusado: só é permitido o e-mail da plataforma @express.app.br. '
+                f'O e-mail recebido foi "{email or "vazio"}". O e-mail do cliente não pode ser usado.'
+            )
 
     def _descartar_cadastro_em_andamento(self) -> None:
         """Se o FV exibir o modal 'Cadastro em andamento' (cadastro de um

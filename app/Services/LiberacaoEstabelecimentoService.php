@@ -3,8 +3,12 @@
 namespace App\Services;
 
 use App\Models\Estabelecimento;
+use App\Models\KycAnalise;
+use App\Models\Usuario;
+use App\Support\EmailPagBank;
 use App\Support\EstabelecimentoEtapaListagem;
 use App\Support\EstabelecimentoSchema;
+use Illuminate\Support\Facades\Schema;
 
 class LiberacaoEstabelecimentoService
 {
@@ -34,7 +38,7 @@ class LiberacaoEstabelecimentoService
     public function iniciarEmailEPagBank(Estabelecimento $estabelecimento): array
     {
         $aviso = null;
-        $emailOk = filled($estabelecimento->webmail_email);
+        $emailOk = EmailPagBank::daPlataforma($estabelecimento->webmail_email) !== null;
         $criouAgora = false;
 
         if (! $emailOk && config('directadmin.criar_email_ao_habilitar') && filled($estabelecimento->email)) {
@@ -68,6 +72,48 @@ class LiberacaoEstabelecimentoService
         }
 
         return ['', $aviso ?: 'O e-mail da plataforma não foi criado, então a PagBank não foi iniciada.'];
+    }
+
+    /**
+     * Aprova o KYC, dispensa a assinatura do termo, cria o e-mail da plataforma e inicia a automação.
+     *
+     * @return array{0: string, 1: ?string}
+     */
+    public function liberarSemTermo(Estabelecimento $estabelecimento, Usuario $admin): array
+    {
+        $kyc = KycAnalise::firstOrCreate(
+            ['estabelecimento_id' => $estabelecimento->id],
+            ['status' => 'pendente'],
+        );
+
+        $kyc->update([
+            'status' => 'aprovado',
+            'admin_id' => $admin->id,
+            'admin_decisao' => 'aprovado',
+            'admin_motivo' => 'Liberado pelo administrador sem assinatura do termo e sem aguardar o KYC.',
+            'admin_decidido_em' => now(),
+        ]);
+
+        app(KycHistoricoService::class)->registrar(
+            $kyc,
+            'admin_liberado_sem_termo',
+            'KYC dispensado e cadastro aprovado sem assinatura do termo',
+            null,
+            $admin,
+        );
+
+        $dados = [
+            'status' => EstabelecimentoSchema::statusParaBanco(EstabelecimentoEtapaListagem::APROVADO),
+        ];
+
+        if (Schema::hasColumn('estabelecimentos', 'aceite_dispensado_em')) {
+            $dados['aceite_dispensado_em'] = now();
+            $dados['aceite_dispensado_por'] = $admin->id;
+        }
+
+        $estabelecimento->update($dados);
+
+        return $this->iniciarEmailEPagBank($estabelecimento->fresh());
     }
 
     private function jaAprovado(Estabelecimento $estabelecimento): bool

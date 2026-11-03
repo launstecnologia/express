@@ -477,6 +477,52 @@ class EstabelecimentoController extends Controller
             ->with('status', 'Cadastro inativado no sistema. O registro foi preservado e não aparece mais nas listagens.');
     }
 
+    public function liberarSemTermo(Request $request, Estabelecimento $estabelecimento, LogService $log)
+    {
+        abort_unless($request->user()?->tipo === 'admin', 403);
+
+        if (in_array($estabelecimento->fv_status, ['em_andamento', 'concluido'], true)) {
+            return redirect()
+                ->route('estabelecimentos.show', $estabelecimento)
+                ->with('aviso', 'A automação deste cadastro já está em andamento ou foi concluída.');
+        }
+
+        $dados = $request->validate([
+            'senha_admin_liberar' => ['required', 'string'],
+            'confirmacao_liberar' => ['accepted'],
+        ], [
+            'senha_admin_liberar.required' => 'Informe sua senha de administrador.',
+            'confirmacao_liberar.accepted' => 'Confirme que deseja liberar este cadastro sem a assinatura do termo.',
+        ]);
+
+        if (! Hash::check($dados['senha_admin_liberar'], $request->user()->password)) {
+            return redirect()
+                ->route('estabelecimentos.show', $estabelecimento)
+                ->withErrors(['senha_admin_liberar' => 'Senha de administrador incorreta.'])
+                ->with('abrir_modal_liberar', true);
+        }
+
+        $statusAnterior = $estabelecimento->status;
+
+        [$mensagemExtra, $aviso] = app(LiberacaoEstabelecimentoService::class)
+            ->liberarSemTermo($estabelecimento, $request->user());
+
+        $log->registrar(
+            'Estabelecimento',
+            $estabelecimento->id,
+            'liberar_sem_termo',
+            'Cadastro liberado sem assinatura do termo',
+            ['status' => $statusAnterior],
+            ['status' => 'aprovado', 'kyc' => 'aprovado'],
+        );
+
+        $redirect = redirect()
+            ->route('estabelecimentos.show', $estabelecimento)
+            ->with('status', 'Cadastro liberado sem assinatura do termo.'.$mensagemExtra);
+
+        return $aviso ? $redirect->with('aviso', $aviso) : $redirect;
+    }
+
     private function autorizarMutacaoEstabelecimento(): void
     {
         abort_unless(UsuarioComercial::podeCadastrarEstabelecimento(), 403, 'Seu perfil não pode cadastrar ou alterar estabelecimentos.');
