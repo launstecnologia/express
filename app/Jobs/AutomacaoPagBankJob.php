@@ -162,8 +162,23 @@ class AutomacaoPagBankJob implements ShouldQueue
                     ];
                 }
 
+                $safepayId = $service->extrairSafepayIdDoResultado(is_array($resultado) ? $resultado : null);
+                if (filled($safepayId)) {
+                    $update['token_pagseguro'] = $safepayId;
+                }
+
                 if ($update !== []) {
                     $estab->update($update);
+                }
+
+                if (filled($safepayId)) {
+                    $automacaoLog->registrar(
+                        $estab->id,
+                        "Safepay ID {$safepayId} salvo mesmo com falha no e-mail.",
+                        'info',
+                        $jobId,
+                        'Safepay ID',
+                    );
                 }
 
                 $automacaoLog->registrarErro(

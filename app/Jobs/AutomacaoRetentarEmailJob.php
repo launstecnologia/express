@@ -21,8 +21,8 @@ class AutomacaoRetentarEmailJob implements ShouldQueue
 
     public int $tries = 1;
 
-    /** 10 minutos: aguardar e-mail + criar senha */
-    public int $timeout = 600;
+    /** 15 minutos: e-mail + busca do Safepay ID */
+    public int $timeout = 900;
 
     public function __construct(
         public readonly int $estabelecimentoId,
@@ -58,7 +58,7 @@ class AutomacaoRetentarEmailJob implements ShouldQueue
 
             // Polling
             $intervalo     = (int) config('automacao.polling_intervalo_seg', 20);
-            $maxTentativas = (int) config('automacao.polling_max_tentativas', 25);
+            $maxTentativas = (int) config('automacao.polling_max_tentativas', 40);
             $statusFinal   = null;
             $status        = [];
 
@@ -83,15 +83,27 @@ class AutomacaoRetentarEmailJob implements ShouldQueue
             }
 
             if ($statusFinal === 'concluido') {
-                $estab->update([
+                $resultado = is_array($status['resultado'] ?? null) ? $status['resultado'] : null;
+                $safepayId = $service->extrairSafepayIdDoResultado($resultado);
+                $update = [
                     'fv_status'       => 'concluido',
                     'fv_senha_6'      => $this->senha6,
                     'fv_concluido_em' => now(),
                     'fv_erro'         => null,
                     'status'          => EstabelecimentoSchema::statusParaBanco(EstabelecimentoEtapaListagem::APROVADO),
-                ]);
+                ];
 
-                $automacaoLog->registrarConclusao($estab->id, 'Retentativa de e-mail concluída com sucesso', $jobId);
+                if (filled($safepayId)) {
+                    $update['token_pagseguro'] = $safepayId;
+                }
+
+                $estab->update($update);
+
+                $automacaoLog->registrarConclusao(
+                    $estab->id,
+                    'Retentativa de e-mail concluída com sucesso'.(filled($safepayId) ? " — Safepay ID: {$safepayId}" : ''),
+                    $jobId,
+                );
 
                 // Reativa o forwarder
                 try {
@@ -118,6 +130,7 @@ class AutomacaoRetentarEmailJob implements ShouldQueue
 
             } elseif (in_array($statusFinal, ['erro', 'erro_email', 'erro_proposta'], true)) {
                 $erro = $status['erro'] ?? 'Erro na retentativa de e-mail';
+                $resultado = is_array($status['resultado'] ?? null) ? $status['resultado'] : null;
 
                 if ($statusFinal === 'erro_proposta') {
                     $update = AutomacaoSchema::atualizacaoErroProposta($estab, $erro);
@@ -128,11 +141,26 @@ class AutomacaoRetentarEmailJob implements ShouldQueue
                     ];
                 }
 
+                $safepayId = $service->extrairSafepayIdDoResultado(is_array($resultado) ? $resultado : null);
+                if (filled($safepayId)) {
+                    $update['token_pagseguro'] = $safepayId;
+                }
+
                 if ($update !== []) {
                     $estab->update($update);
                 }
 
                 $automacaoLog->registrarErro($estab->id, $erro, $jobId, $statusFinal);
+
+                if (filled($safepayId)) {
+                    $automacaoLog->registrar(
+                        $estab->id,
+                        "Safepay ID {$safepayId} salvo mesmo com falha no e-mail.",
+                        'info',
+                        $jobId,
+                        'Safepay ID',
+                    );
+                }
 
                 Log::error('AutomacaoRetentarEmailJob: retentativa falhou', [
                     'estabelecimento_id' => $estab->id,

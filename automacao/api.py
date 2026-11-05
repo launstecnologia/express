@@ -304,6 +304,9 @@ class BuscarSafepayRequest(BaseModel):
 class RetentarEmailRequest(BaseModel):
     estabelecimento_id: int = Field(..., description='ID do estabelecimento no Laravel')
     documento: str = Field(default='', description='CPF ou CNPJ para aceite de proposta após senha')
+    fv_usuario: str = Field(default='', description='Usuário do Força de Vendas para buscar o Safepay ID')
+    fv_senha: str = Field(default='', description='Senha do Força de Vendas para buscar o Safepay ID')
+    email_suffix: str = Field(default='express.app.br', description='Domínio do e-mail a localizar')
     webmail_url: str = Field(..., description='URL do Roundcube')
     webmail_usuario: str = Field(..., description='Email para login no webmail')
     webmail_senha: str = Field(..., description='Senha do webmail')
@@ -343,6 +346,41 @@ def _autenticar(x_api_key: str) -> None:
         raise HTTPException(status_code=401, detail='Chave de API inválida')
 
 
+def _anexar_busca_safepay(job_id: str, req: dict, screenshot_dir: str, resultado_final: dict) -> None:
+    """Entra no Força de Vendas e grava o Safepay ID, mesmo se o e-mail falhou."""
+    documento = (req.get('dados') or {}).get('cpf_cnpj') or req.get('documento') or ''
+    fv_usuario = req.get('fv_usuario') or ''
+    fv_senha = req.get('fv_senha') or ''
+
+    if not documento or not fv_usuario or not fv_senha:
+        log.warning(f'[{job_id}] Busca do Safepay ID ignorada: faltam documento ou acesso ao FV')
+        return
+
+    _set_etapa(job_id, 'Buscando Safepay ID no portal FV...')
+    from main import buscar_safepay_id_fv
+
+    email_suffix = req.get('email_suffix') or 'express.app.br'
+    if not str(email_suffix).startswith('@'):
+        email_suffix = f'@{email_suffix}'
+
+    safepay_resultado = buscar_safepay_id_fv(
+        documento=documento,
+        fv_usuario=fv_usuario,
+        fv_senha=fv_senha,
+        email_suffix=email_suffix,
+        headless=req.get('headless', True),
+        screenshot_dir=screenshot_dir,
+        job_id=job_id,
+    )
+    resultado_final['etapa_safepay'] = safepay_resultado
+
+    if safepay_resultado.get('sucesso'):
+        resultado_final['safepay_id'] = safepay_resultado.get('safepay_id')
+        log.info(f'[{job_id}] Safepay ID encontrado: {safepay_resultado.get("safepay_id")}')
+    else:
+        log.warning(f'[{job_id}] Safepay ID não encontrado: {safepay_resultado.get("erro")}')
+
+
 # ----------------------------------------------------------------
 # Lógica de execução (roda em thread separada)
 # ----------------------------------------------------------------
@@ -379,15 +417,23 @@ def _executar_somente_email(job_id: str, req: dict) -> None:
             'senha_6': req['senha_6'],
         }
 
+        if not email_resultado.get('sucesso'):
+            log.warning(f'[{job_id}] E-mail falhou — seguindo para o Safepay ID no PagBank')
+
+        _anexar_busca_safepay(job_id, req, screenshot_dir, resultado_final)
+
         if email_resultado.get('sucesso'):
             _update_job(job_id, 'concluido', resultado=resultado_final, etapa_atual='Concluído com sucesso')
             log.info(f'[{job_id}] E-mail concluído com sucesso (proposta comercial fica para ação manual)')
         else:
+            etapa = 'Erro na etapa de e-mail'
+            if resultado_final.get('safepay_id'):
+                etapa = 'E-mail falhou — Safepay ID encontrado'
             _update_job(
                 job_id, 'erro_email',
                 resultado=resultado_final,
                 erro=email_resultado.get('erro', 'Erro na validação de email'),
-                etapa_atual='Erro na etapa de e-mail',
+                etapa_atual=etapa,
             )
 
     except Exception as e:
@@ -558,35 +604,23 @@ def _executar_job(job_id: str, req: dict) -> None:
             'senha_6': req['senha_6'],
         }
 
+        if not email_resultado.get('sucesso'):
+            log.warning(f'[{job_id}] E-mail falhou — seguindo para o Safepay ID no PagBank')
+
+        _anexar_busca_safepay(job_id, req, screenshot_dir, resultado_final)
+
         if email_resultado.get('sucesso'):
-            _set_etapa(job_id, 'Buscando Safepay ID no portal FV...')
-            from main import buscar_safepay_id_fv
-
-            email_suffix = '@express.app.br'
-            safepay_resultado = buscar_safepay_id_fv(
-                documento=req['dados']['cpf_cnpj'],
-                fv_usuario=req['fv_usuario'],
-                fv_senha=req['fv_senha'],
-                email_suffix=email_suffix,
-                headless=req.get('headless', True),
-                screenshot_dir=screenshot_dir,
-                job_id=job_id,
-            )
-            resultado_final['etapa_safepay'] = safepay_resultado
-            if safepay_resultado.get('sucesso'):
-                resultado_final['safepay_id'] = safepay_resultado.get('safepay_id')
-                log.info(f'[{job_id}] Safepay ID encontrado: {safepay_resultado.get("safepay_id")}')
-            else:
-                log.warning(f'[{job_id}] Safepay ID não encontrado: {safepay_resultado.get("erro")}')
-
             _update_job(job_id, 'concluido', resultado=resultado_final, etapa_atual='Concluído com sucesso')
             log.info(f'[{job_id}] Cadastro concluído (proposta comercial fica para ação manual)')
         else:
+            etapa = 'Erro na etapa de e-mail'
+            if resultado_final.get('safepay_id'):
+                etapa = 'E-mail falhou — Safepay ID encontrado'
             _update_job(
                 job_id, 'erro_email',
                 resultado=resultado_final,
                 erro=email_resultado.get('erro', 'Erro na validação de email'),
-                etapa_atual='Erro na etapa de e-mail',
+                etapa_atual=etapa,
             )
 
     except Exception as e:

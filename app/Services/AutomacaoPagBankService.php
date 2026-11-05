@@ -90,6 +90,8 @@ class AutomacaoPagBankService
         $payload = [
             'estabelecimento_id'  => $estab->id,
             'documento'           => $this->documentoEstabelecimento($estab),
+            'fv_usuario'          => PlatformSettings::automacaoFvUsuario() ?? '',
+            'fv_senha'            => PlatformSettings::automacaoFvSenha() ?? '',
             'webmail_url'         => PlatformSettings::automacaoWebmailUrl() ?? '',
             'webmail_usuario'     => $estab->webmail_email ?? '',
             'webmail_senha'       => $estab->webmail_senha ?? '',
