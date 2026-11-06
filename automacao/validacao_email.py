@@ -12,15 +12,12 @@ import logging
 import argparse
 import os
 from urllib.parse import urlsplit
-from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
-from webdriver_manager.chrome import ChromeDriverManager
 
+from browser import criar_driver_resiliente
 from progresso import reportar as reportar_etapa
 
 logging.basicConfig(
@@ -107,28 +104,7 @@ class ValidadorEmail:
     # Browser
     # ----------------------------------------------------------------
     def _iniciar_browser(self):
-        opcoes = Options()
-        # Flags obrigatórias para Docker (sempre ativas)
-        opcoes.add_argument('--no-sandbox')
-        opcoes.add_argument('--disable-dev-shm-usage')
-        opcoes.add_argument('--disable-gpu')
-        opcoes.add_argument('--no-zygote')
-        opcoes.add_argument('--disable-software-rasterizer')
-        opcoes.add_argument('--disable-extensions')
-
-        if self.headless:
-            opcoes.add_argument('--headless')
-
-        opcoes.add_argument('--window-size=1366,768')
-        opcoes.add_argument('--disable-blink-features=AutomationControlled')
-        opcoes.add_experimental_option('excludeSwitches', ['enable-automation'])
-        opcoes.add_experimental_option('useAutomationExtension', False)
-
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=opcoes)
-        driver.execute_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-        )
+        driver = criar_driver_resiliente(headless=self.headless)
         log.info('Browser iniciado')
         return driver
 

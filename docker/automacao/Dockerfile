@@ -11,6 +11,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
     && apt-get install -y ./google-chrome-stable_current_amd64.deb \
     && rm -f google-chrome-stable_current_amd64.deb \
+    && CHROME_VERSION="$(google-chrome --product-version)" \
+    && echo "Chrome ${CHROME_VERSION}" \
+    && ( wget -q -O /tmp/chromedriver.zip "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chromedriver-linux64.zip" \
+         && unzip -q /tmp/chromedriver.zip -d /tmp/chromedriver \
+         && mv /tmp/chromedriver/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver \
+         && chmod +x /usr/local/bin/chromedriver \
+         && rm -rf /tmp/chromedriver /tmp/chromedriver.zip \
+         || echo "chromedriver exato indisponivel; o Selenium Manager baixa em runtime" ) \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

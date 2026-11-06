@@ -10,17 +10,14 @@ import time
 import argparse
 import json
 
-from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, StaleElementReferenceException
-from webdriver_manager.chrome import ChromeDriverManager
 
+from browser import criar_driver_resiliente
 from progresso import reportar as reportar_etapa
 
 logging.basicConfig(
@@ -127,27 +124,7 @@ class PipefyEdiSolicitador:
                 log.info('Browser fechado')
 
     def _iniciar_browser(self):
-        opcoes = Options()
-        opcoes.add_argument('--no-sandbox')
-        opcoes.add_argument('--disable-dev-shm-usage')
-        opcoes.add_argument('--disable-gpu')
-        opcoes.add_argument('--no-zygote')
-        opcoes.add_argument('--disable-software-rasterizer')
-        opcoes.add_argument('--disable-extensions')
-        opcoes.add_argument('--lang=pt-BR')
-        if self.headless:
-            opcoes.add_argument('--headless=new')
-        opcoes.add_argument('--window-size=1440,1100')
-        opcoes.add_argument('--disable-blink-features=AutomationControlled')
-        opcoes.add_experimental_option('excludeSwitches', ['enable-automation'])
-        opcoes.add_experimental_option('useAutomationExtension', False)
-
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=opcoes)
-        driver.execute_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-        )
-        return driver
+        return criar_driver_resiliente(headless=self.headless, window='1440,1100', lang='pt-BR')
 
     def _salvar_screenshot(self, nome: str) -> str:
         caminho = os.path.join(self.screenshot_dir, f'pipefy_{nome}_{int(time.time())}.png')

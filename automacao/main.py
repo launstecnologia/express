@@ -10,14 +10,12 @@ import time
 import logging
 import argparse
 import os
-from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import ElementClickInterceptedException, TimeoutException
-from webdriver_manager.chrome import ChromeDriverManager
+
+from browser import criar_driver_resiliente
 
 from pathlib import Path
 
@@ -347,17 +345,6 @@ class CadastradorFV:
         self._liberar_perfil()
 
     def _iniciar_browser(self):
-        opcoes = Options()
-        # Flags obrigatórias para Docker (sempre ativas)
-        opcoes.add_argument('--no-sandbox')
-        opcoes.add_argument('--disable-dev-shm-usage')
-        opcoes.add_argument('--disable-gpu')
-        opcoes.add_argument('--no-zygote')
-        opcoes.add_argument('--disable-software-rasterizer')
-        opcoes.add_argument('--no-first-run')
-        opcoes.add_argument('--no-default-browser-check')
-        opcoes.add_argument('--password-store=basic')
-
         ext_path = self._preparar_extensao_capsolver()
         tem_display = bool(os.environ.get('DISPLAY'))
         self._usou_extensao_capsolver = bool(ext_path)
@@ -365,33 +352,19 @@ class CadastradorFV:
             not self.headless or tem_display
         )
         if ext_path:
-            opcoes.add_argument(f'--disable-extensions-except={ext_path}')
-            opcoes.add_argument(f'--load-extension={ext_path}')
             log.info(f'Extensão Capsolver carregada: {ext_path}')
-        else:
-            opcoes.add_argument('--disable-extensions')
-
-        # Extensão precisa de janela real. No Docker o xvfb define DISPLAY.
-        if self.headless and not (ext_path and os.environ.get('DISPLAY')):
-            opcoes.add_argument('--headless=new')
-        elif self.headless and ext_path:
+        if self.headless and ext_path and tem_display:
             log.info('Chrome com display virtual para a extensão Capsolver')
-
-        opcoes.add_argument('--window-size=1366,768')
-        opcoes.add_argument('--disable-blink-features=AutomationControlled')
-        opcoes.add_experimental_option('excludeSwitches', ['enable-automation'])
-        opcoes.add_experimental_option('useAutomationExtension', False)
 
         perfil = self._dir_perfil_chrome()
         self._bloquear_perfil(perfil)
         self._limpar_locks_stale_chrome(perfil)
-        opcoes.add_argument(f'--user-data-dir={perfil}')
 
         try:
-            service = Service(ChromeDriverManager().install())
-            driver = webdriver.Chrome(service=service, options=opcoes)
-            driver.execute_script(
-                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+            driver = criar_driver_resiliente(
+                headless=self.headless,
+                extensao=ext_path,
+                user_data_dir=perfil,
             )
             if ext_path:
                 time.sleep(2)
