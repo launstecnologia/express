@@ -267,6 +267,7 @@ Route::middleware(['auth', 'usuario.ativo', 'trocar.senha', 'tenant.access'])->g
         Route::post('/marketplace/whitelabel/verificar-dominio', [MarketplaceBrandingController::class, 'verificarDominio'])->name('marketplace.branding.verificar-dominio');
     });
 
+    Route::put('/usuarios/{usuario}/aceite-clientes', [MarketplaceBrandingAdminController::class, 'atualizarAceiteClientes'])->name('usuarios.aceite-clientes.update');
     Route::put('/usuarios/{usuario}/whitelabel', [MarketplaceBrandingAdminController::class, 'update'])->name('usuarios.whitelabel.update');
     Route::post('/usuarios/{usuario}/whitelabel/ssl', [MarketplaceBrandingAdminController::class, 'provisionarSsl'])->name('usuarios.whitelabel.provisionar-ssl');
 });

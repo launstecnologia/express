@@ -40,6 +40,26 @@ class MarketplaceBrandingAdminController extends Controller
             ->with('status', 'Whitelabel do marketplace atualizado.');
     }
 
+    public function atualizarAceiteClientes(Request $request, Usuario $usuario, MarketplaceBrandingService $service)
+    {
+        abort_unless($request->user()?->tipo === 'admin', 403);
+        abort_unless($usuario->tipo === 'marketplace', 404);
+
+        $branding = $usuario->marketplaceBranding ?? $service->criarPara($usuario);
+        $request->validate([
+            'exige_assinatura' => ['required', 'boolean'],
+        ]);
+
+        $ligado = $request->boolean('exige_assinatura');
+        $branding->update(['exige_assinatura' => $ligado]);
+
+        return redirect()
+            ->route('usuarios.show', $usuario)
+            ->with('status', $ligado
+                ? 'Os estabelecimentos deste marketplace passam a confirmar o aceite.'
+                : 'Os estabelecimentos deste marketplace seguem sem o aceite do termo.');
+    }
+
     public function provisionarSsl(Request $request, Usuario $usuario, TenantSslProvisionerService $ssl)
     {
         abort_unless($request->user()?->tipo === 'admin', 403);

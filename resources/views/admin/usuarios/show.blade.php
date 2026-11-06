@@ -93,6 +93,38 @@
         @endif
     </div>
 
+    @if ($usuario->tipo === 'marketplace' && $whitelabel && \Illuminate\Support\Facades\Schema::hasColumn('marketplace_brandings', 'exige_assinatura'))
+        @php $exigeAceite = (bool) ($whitelabel['branding']->exige_assinatura ?? true); @endphp
+        <div class="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border {{ $exigeAceite ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50' }} px-4 py-4">
+            <div>
+                <p class="text-sm font-bold text-gray-800">Aceite dos clientes</p>
+                <p class="mt-1 max-w-xl text-sm text-gray-600">
+                    @if ($exigeAceite)
+                        Os estabelecimentos deste marketplace confirmam o termo em Li e aceito antes de seguir para a PagBank.
+                    @else
+                        Os estabelecimentos deste marketplace seguem para a PagBank sem o aceite do termo.
+                    @endif
+                </p>
+            </div>
+            <form method="POST" action="{{ route('usuarios.aceite-clientes.update', $usuario) }}" class="flex items-center gap-3">
+                @csrf
+                @method('PUT')
+                <input type="hidden" name="exige_assinatura" value="0">
+                <label class="inline-flex cursor-pointer items-center gap-3 text-sm font-semibold text-gray-800">
+                    <input
+                        type="checkbox"
+                        name="exige_assinatura"
+                        value="1"
+                        class="h-5 w-5 rounded accent-emerald-600"
+                        @checked($exigeAceite)
+                        onchange="this.form.submit()"
+                    >
+                    Exigir aceite
+                </label>
+            </form>
+        </div>
+    @endif
+
     @if ($usuario->tipo === 'marketplace' && \App\Support\UsuarioComercial::podeLiberarPlanosMarketplace($usuario))
         @php $planosHabilitados = $usuario->planosHabilitados; @endphp
         <div class="mt-4 border-t border-dashed border-gray-200 pt-4" @if ($planosHabilitados->count() > 6) x-data="{ verTodos: false }" @endif>
