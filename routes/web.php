@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\ConsultaCnpjTransacoesController;
 use App\Http\Controllers\Admin\EstabelecimentoPendenciasController;
 use App\Http\Controllers\Admin\EdiTransacaoRelatorioController;
 use App\Http\Controllers\Admin\EstabelecimentoTransacaoRelatorioController;
+use App\Http\Controllers\Admin\EstabelecimentoUsoComparacaoController;
 use App\Http\Controllers\Admin\EdiPipefyController;
 use App\Http\Controllers\Admin\EstabelecimentoAutomacaoController;
 use App\Http\Controllers\Admin\EstabelecimentoPagBankController;
@@ -241,6 +242,8 @@ Route::middleware(['auth', 'usuario.ativo', 'trocar.senha', 'tenant.access'])->g
         Route::prefix('admin/relatorios')->name('admin.relatorios.')->middleware('financeiro.visivel')->group(function () {
             Route::get('/estabelecimentos-transacoes', [EstabelecimentoTransacaoRelatorioController::class, 'index'])->name('estabelecimentos-transacoes');
             Route::get('/estabelecimentos-transacoes/excel', [EstabelecimentoTransacaoRelatorioController::class, 'excel'])->name('estabelecimentos-transacoes.excel');
+            Route::get('/uso-comparacao', [EstabelecimentoUsoComparacaoController::class, 'index'])->name('uso-comparacao');
+            Route::get('/uso-comparacao/excel', [EstabelecimentoUsoComparacaoController::class, 'excel'])->name('uso-comparacao.excel');
         });
         Route::prefix('admin/conciliacoes')->name('admin.conciliacoes.')->group(function () {
             Route::get('/', [ConciliacaoController::class, 'index'])->name('index');

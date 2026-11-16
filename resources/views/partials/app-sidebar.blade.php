@@ -151,6 +151,12 @@
                         <span>Transações MKT</span>
                     </a>
                 @endif
+                @if (\App\Support\FinanceiroUi::visivel() && Route::has('admin.relatorios.uso-comparacao'))
+                    <a href="{{ route('admin.relatorios.uso-comparacao') }}" class="{{ $navClass('admin.relatorios.uso-comparacao*') }}">
+                        <i class="fa-solid fa-chart-column w-5 text-center text-[15px]"></i>
+                        <span>Comparação de uso</span>
+                    </a>
+                @endif
                 <a href="{{ route('admin.edi-pipefy.index') }}" class="{{ $navClass('admin.edi-pipefy.*') }}">
                     <i class="fa-solid fa-right-left w-5 text-center text-[15px]"></i>
                     <span>EDI Pipefy</span>
