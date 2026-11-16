@@ -23,9 +23,22 @@
     </div>
 @endif
 
+@php
+    $nomesMeses = [1 => 'Janeiro', 2 => 'Fevereiro', 3 => 'Março', 4 => 'Abril', 5 => 'Maio', 6 => 'Junho', 7 => 'Julho', 8 => 'Agosto', 9 => 'Setembro', 10 => 'Outubro', 11 => 'Novembro', 12 => 'Dezembro'];
+    $anos = range((int) now()->format('Y'), 2020);
+    [$anoBase, $numeroBase] = array_pad(explode('-', (string) $filtros['mes_base']), 2, '');
+    [$anoComparado, $numeroComparado] = array_pad(explode('-', (string) $filtros['mes_comparado']), 2, '');
+    foreach ([(int) $anoBase, (int) $anoComparado] as $anoSelecionado) {
+        if ($anoSelecionado > 0 && ! in_array($anoSelecionado, $anos, true)) {
+            $anos[] = $anoSelecionado;
+        }
+    }
+    rsort($anos);
+@endphp
+
 <form method="GET" action="{{ route('admin.relatorios.uso-comparacao') }}" class="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
     <input type="hidden" name="consultar" value="1">
-    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
         <label class="block space-y-1">
             <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Fonte</span>
             <select name="fonte" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">
@@ -42,15 +55,37 @@
                 @endforeach
             </select>
         </label>
-        <label class="block space-y-1">
+        <div class="space-y-1 lg:col-span-2">
             <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Do mês</span>
-            <input type="month" name="mes_base" value="{{ $filtros['mes_base'] }}" required class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">
-        </label>
-        <label class="block space-y-1">
+            <div class="flex gap-2">
+                <select name="mes_base_mes" required class="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">
+                    @foreach ($nomesMeses as $numero => $nomeMes)
+                        <option value="{{ $numero }}" @selected((int) $numeroBase === $numero)>{{ $nomeMes }}</option>
+                    @endforeach
+                </select>
+                <select name="mes_base_ano" required class="w-24 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm tabular-nums dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">
+                    @foreach ($anos as $ano)
+                        <option value="{{ $ano }}" @selected((int) $anoBase === (int) $ano)>{{ $ano }}</option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
+        <div class="space-y-1 lg:col-span-2">
             <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Até o mês</span>
-            <input type="month" name="mes_comparado" value="{{ $filtros['mes_comparado'] }}" required class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">
-        </label>
-        <label class="block space-y-1">
+            <div class="flex gap-2">
+                <select name="mes_comparado_mes" required class="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">
+                    @foreach ($nomesMeses as $numero => $nomeMes)
+                        <option value="{{ $numero }}" @selected((int) $numeroComparado === $numero)>{{ $nomeMes }}</option>
+                    @endforeach
+                </select>
+                <select name="mes_comparado_ano" required class="w-24 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm tabular-nums dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">
+                    @foreach ($anos as $ano)
+                        <option value="{{ $ano }}" @selected((int) $anoComparado === (int) $ano)>{{ $ano }}</option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
+        <label class="block space-y-1 lg:col-span-2">
             <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Situação</span>
             <select name="situacao" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">
                 <option value="mudancas" @selected($filtros['situacao'] === 'mudancas')>Parou, baixou, aumentou ou começou</option>

@@ -12,6 +12,7 @@ class EstabelecimentoUsoComparacaoController extends Controller
 {
     public function index(Request $request, EstabelecimentoUsoComparacaoService $relatorio)
     {
+        $this->comporMeses($request);
         $filtros = $this->filtros($request);
         $linhas = collect();
         $resumo = null;
@@ -56,6 +57,7 @@ class EstabelecimentoUsoComparacaoController extends Controller
 
     public function excel(Request $request, EstabelecimentoUsoComparacaoService $relatorio)
     {
+        $this->comporMeses($request);
         $validado = $this->validar($request);
         $filtros = $this->filtros($request);
         $meses = $relatorio->mesesDoIntervalo($validado['mes_base'], $validado['mes_comparado']);
@@ -140,6 +142,8 @@ class EstabelecimentoUsoComparacaoController extends Controller
             'situacao' => ['nullable', 'string'],
         ], [
             'mes_comparado.different' => 'Escolha dois meses diferentes para comparar.',
+            'mes_base.date_format' => 'Escolha um mês e um ano válidos.',
+            'mes_comparado.date_format' => 'Escolha um mês e um ano válidos.',
         ]);
 
         $quantidade = count(app(EstabelecimentoUsoComparacaoService::class)->mesesDoIntervalo(
@@ -159,6 +163,22 @@ class EstabelecimentoUsoComparacaoController extends Controller
             'mes_comparado' => $validado['mes_comparado'],
             'situacao' => (string) ($validado['situacao'] ?? 'mudancas'),
         ];
+    }
+
+    private function comporMeses(Request $request): void
+    {
+        foreach (['mes_base', 'mes_comparado'] as $campo) {
+            $mes = $request->input($campo.'_mes');
+            $ano = $request->input($campo.'_ano');
+
+            if (! filled($mes) || ! filled($ano)) {
+                continue;
+            }
+
+            $request->merge([
+                $campo => sprintf('%04d-%02d', (int) $ano, (int) $mes),
+            ]);
+        }
     }
 
     private function marketplaces()
