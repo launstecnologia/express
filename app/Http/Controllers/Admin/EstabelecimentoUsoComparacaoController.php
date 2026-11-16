@@ -19,18 +19,24 @@ class EstabelecimentoUsoComparacaoController extends Controller
 
         $avisos = [];
 
+        $meses = [];
+
         if ($consultou) {
             $this->validar($request);
-            $avisos = $this->avisosPlanilha($relatorio, $filtros);
+            $meses = $relatorio->mesesDoIntervalo($filtros['mes_base'], $filtros['mes_comparado']);
+            $mesInicio = $meses[0];
+            $mesFim = $meses[array_key_last($meses)];
+            $avisos = $this->avisosPlanilha($relatorio, $meses);
 
             if ($avisos === []) {
                 $todas = $relatorio->consultar(
                     $filtros['marketplace_id'],
-                    $filtros['mes_base'],
-                    $filtros['mes_comparado'],
+                    $meses,
+                    $mesInicio,
+                    $mesFim,
                     $filtros['fonte'],
                 );
-                $resumo = $relatorio->resumo($todas);
+                $resumo = $relatorio->resumo($todas, $meses);
                 $linhas = $relatorio->filtrar($todas, $filtros['situacao']);
             }
         }
@@ -38,6 +44,7 @@ class EstabelecimentoUsoComparacaoController extends Controller
         return view('admin.relatorios.uso-comparacao', [
             'marketplaces' => $this->marketplaces(),
             'filtros' => $filtros,
+            'meses' => $meses,
             'linhas' => $linhas,
             'resumo' => $resumo,
             'consultou' => $consultou,
@@ -51,18 +58,25 @@ class EstabelecimentoUsoComparacaoController extends Controller
     {
         $validado = $this->validar($request);
         $filtros = $this->filtros($request);
-        $avisos = $this->avisosPlanilha($relatorio, $filtros);
+        $meses = $relatorio->mesesDoIntervalo($validado['mes_base'], $validado['mes_comparado']);
+        $avisos = $this->avisosPlanilha($relatorio, $meses);
 
         if ($avisos !== []) {
             return back()->withErrors(['fonte' => implode(' ', $avisos)]);
         }
 
         $linhas = $relatorio->filtrar(
-            $relatorio->consultar($filtros['marketplace_id'], $validado['mes_base'], $validado['mes_comparado'], $filtros['fonte']),
+            $relatorio->consultar(
+                $filtros['marketplace_id'],
+                $meses,
+                $meses[0],
+                $meses[array_key_last($meses)],
+                $filtros['fonte'],
+            ),
             $filtros['situacao'],
         );
 
-        return response($relatorio->gerarXlsx($linhas, $validado['mes_base'], $validado['mes_comparado']), 200, [
+        return response($relatorio->gerarXlsx($linhas, $meses), 200, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'Content-Disposition' => 'attachment; filename="'.$relatorio->nomeArquivo($validado['mes_base'], $validado['mes_comparado'], $filtros['marketplace_id'], $filtros['fonte']).'"',
         ]);
@@ -94,20 +108,20 @@ class EstabelecimentoUsoComparacaoController extends Controller
     }
 
     /**
-     * @param  array{fonte: string, mes_base: string, mes_comparado: string}  $filtros
+     * @param  list<string>  $meses
      * @return list<string>
      */
-    private function avisosPlanilha(EstabelecimentoUsoComparacaoService $relatorio, array $filtros): array
+    private function avisosPlanilha(EstabelecimentoUsoComparacaoService $relatorio, array $meses): array
     {
-        if ($filtros['fonte'] !== 'planilha') {
+        if (request()->input('fonte') !== 'planilha') {
             return [];
         }
 
         $avisos = [];
 
-        foreach (['mes_base' => 'de referência', 'mes_comparado' => 'comparado'] as $chave => $rotulo) {
-            if (! $relatorio->temPlanilha($filtros[$chave])) {
-                $avisos[] = 'Não há planilha PagBank importada para o mês '.$rotulo.' ('.$relatorio->rotuloMes($filtros[$chave]).').';
+        foreach ($meses as $mes) {
+            if (! $relatorio->temPlanilha($mes)) {
+                $avisos[] = 'Não há planilha PagBank importada para '.$relatorio->rotuloMes($mes).'.';
             }
         }
 
@@ -127,6 +141,17 @@ class EstabelecimentoUsoComparacaoController extends Controller
         ], [
             'mes_comparado.different' => 'Escolha dois meses diferentes para comparar.',
         ]);
+
+        $quantidade = count(app(EstabelecimentoUsoComparacaoService::class)->mesesDoIntervalo(
+            $validado['mes_base'],
+            $validado['mes_comparado'],
+        ));
+
+        if ($quantidade > 12) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'mes_comparado' => 'O intervalo pode ter no máximo 12 meses.',
+            ]);
+        }
 
         return [
             'marketplace_id' => filled($validado['marketplace_id'] ?? null) ? (int) $validado['marketplace_id'] : null,

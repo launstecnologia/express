@@ -28,6 +28,31 @@ class EstabelecimentoUsoComparacaoService
         return [$inicio->toDateString(), $inicio->copy()->endOfMonth()->toDateString()];
     }
 
+    /**
+     * Meses do intervalo, em ordem cronológica, incluindo as duas pontas.
+     *
+     * @return list<string>
+     */
+    public function mesesDoIntervalo(string $mesInicio, string $mesFim): array
+    {
+        $inicio = Carbon::createFromFormat('Y-m', $mesInicio)->startOfMonth();
+        $fim = Carbon::createFromFormat('Y-m', $mesFim)->startOfMonth();
+
+        if ($fim->lt($inicio)) {
+            [$inicio, $fim] = [$fim, $inicio];
+        }
+
+        $meses = [];
+        $cursor = $inicio->copy();
+
+        while ($cursor->lte($fim)) {
+            $meses[] = $cursor->format('Y-m');
+            $cursor->addMonthNoOverflow();
+        }
+
+        return $meses;
+    }
+
     public function situacao(float $tpvBase, float $tpvComparado): string
     {
         $base = round($tpvBase, 2);
@@ -74,52 +99,79 @@ class EstabelecimentoUsoComparacaoService
             ->exists();
     }
 
-    public function consultar(?int $marketplaceId, string $mesBase, string $mesComparado, string $fonte = 'edi'): Collection
+    /**
+     * @param  list<string>  $meses
+     */
+    public function consultar(?int $marketplaceId, array $meses, string $mesBase, string $mesComparado, string $fonte = 'edi'): Collection
     {
-        [$inicioBase, $fimBase] = $this->intervaloDoMes($mesBase);
-        [$inicioComparado, $fimComparado] = $this->intervaloDoMes($mesComparado);
         $agregar = $fonte === 'planilha'
             ? fn (string $inicio, string $fim) => $this->agregadoPlanilha($inicio, $fim)
             : fn (string $inicio, string $fim) => $this->agregadoEdi($inicio, $fim);
 
         $query = DB::table('estabelecimentos as e')
-            ->leftJoin('usuarios as m', 'm.id', '=', 'e.marketplace_id')
-            ->leftJoinSub($agregar($inicioBase, $fimBase), 'base', 'base.estabelecimento_id', '=', 'e.id')
-            ->leftJoinSub($agregar($inicioComparado, $fimComparado), 'comp', 'comp.estabelecimento_id', '=', 'e.id')
-            ->where(function ($query) {
-                $query->whereNotNull('base.estabelecimento_id')
-                    ->orWhereNotNull('comp.estabelecimento_id');
-            });
+            ->leftJoin('usuarios as m', 'm.id', '=', 'e.marketplace_id');
+
+        $aliases = [];
+
+        foreach (array_values($meses) as $indice => $mes) {
+            [$inicio, $fim] = $this->intervaloDoMes($mes);
+            $alias = 'mes'.$indice;
+            $aliases[$mes] = $alias;
+            $query->leftJoinSub($agregar($inicio, $fim), $alias, $alias.'.estabelecimento_id', '=', 'e.id');
+        }
+
+        $query->where(function ($query) use ($aliases) {
+            foreach ($aliases as $alias) {
+                $query->orWhereNotNull($alias.'.estabelecimento_id');
+            }
+        });
 
         if ($marketplaceId) {
             $query->where('e.marketplace_id', $marketplaceId);
         }
 
+        $colunas = [
+            'e.id',
+            'e.nome_fantasia',
+            'e.razao_social',
+            'e.nome_completo',
+            'e.cnpj',
+            'e.cpf',
+            'e.token_pagseguro',
+            'e.marketplace_id',
+            'm.nome_fantasia as marketplace_fantasia',
+            'm.razao_social as marketplace_razao',
+            'm.nome_completo as marketplace_nome',
+        ];
+
+        foreach (array_values($meses) as $indice => $mes) {
+            $alias = $aliases[$mes];
+            $colunas[] = DB::raw('COALESCE('.$alias.'.qtd, 0) as qtd_'.$indice);
+            $colunas[] = DB::raw('COALESCE('.$alias.'.tpv, 0) as tpv_'.$indice);
+        }
+
+        $aliasBase = $aliases[$mesBase];
+        $aliasComparado = $aliases[$mesComparado];
+
         return $query
-            ->orderByDesc(DB::raw('ABS(COALESCE(comp.tpv, 0) - COALESCE(base.tpv, 0))'))
+            ->orderByDesc(DB::raw('ABS(COALESCE('.$aliasComparado.'.tpv, 0) - COALESCE('.$aliasBase.'.tpv, 0))'))
             ->orderBy('e.id')
-            ->get([
-                'e.id',
-                'e.nome_fantasia',
-                'e.razao_social',
-                'e.nome_completo',
-                'e.cnpj',
-                'e.cpf',
-                'e.token_pagseguro',
-                'e.marketplace_id',
-                'm.nome_fantasia as marketplace_fantasia',
-                'm.razao_social as marketplace_razao',
-                'm.nome_completo as marketplace_nome',
-                DB::raw('COALESCE(base.qtd, 0) as qtd_base'),
-                DB::raw('COALESCE(base.tpv, 0) as tpv_base'),
-                DB::raw('COALESCE(comp.qtd, 0) as qtd_comparado'),
-                DB::raw('COALESCE(comp.tpv, 0) as tpv_comparado'),
-            ])
-            ->map(function ($linha) {
-                $linha->tpv_base = (float) $linha->tpv_base;
-                $linha->tpv_comparado = (float) $linha->tpv_comparado;
-                $linha->qtd_base = (int) $linha->qtd_base;
-                $linha->qtd_comparado = (int) $linha->qtd_comparado;
+            ->get($colunas)
+            ->map(function ($linha) use ($meses, $mesBase, $mesComparado) {
+                $tpvs = [];
+                $qtds = [];
+
+                foreach (array_values($meses) as $indice => $mes) {
+                    $tpvs[$mes] = (float) $linha->{'tpv_'.$indice};
+                    $qtds[$mes] = (int) $linha->{'qtd_'.$indice};
+                }
+
+                $linha->tpvs = $tpvs;
+                $linha->qtds = $qtds;
+                $linha->tpv_base = $tpvs[$mesBase];
+                $linha->tpv_comparado = $tpvs[$mesComparado];
+                $linha->qtd_base = $qtds[$mesBase];
+                $linha->qtd_comparado = $qtds[$mesComparado];
                 $linha->variacao = $linha->tpv_comparado - $linha->tpv_base;
                 $linha->variacao_percentual = $this->variacaoPercentual($linha->tpv_base, $linha->tpv_comparado);
                 $linha->situacao = $this->situacao($linha->tpv_base, $linha->tpv_comparado);
@@ -146,11 +198,17 @@ class EstabelecimentoUsoComparacaoService
     }
 
     /**
-     * @return array<string, int|float>
+     * @param  list<string>  $meses
+     * @return array<string, int|float|array<string, float>>
      */
-    public function resumo(Collection $linhas): array
+    public function resumo(Collection $linhas, array $meses = []): array
     {
         $contar = fn (string $situacao) => $linhas->filter(fn ($linha) => $linha->situacao === $situacao)->count();
+        $tpvPorMes = [];
+
+        foreach ($meses as $mes) {
+            $tpvPorMes[$mes] = (float) $linhas->sum(fn ($linha) => $linha->tpvs[$mes] ?? 0);
+        }
 
         return [
             'total' => $linhas->count(),
@@ -162,10 +220,14 @@ class EstabelecimentoUsoComparacaoService
             'tpv_base' => (float) $linhas->sum('tpv_base'),
             'tpv_comparado' => (float) $linhas->sum('tpv_comparado'),
             'variacao' => (float) $linhas->sum('variacao'),
+            'tpv_por_mes' => $tpvPorMes,
         ];
     }
 
-    public function gerarXlsx(Collection $linhas, string $mesBase, string $mesComparado): string
+    /**
+     * @param  list<string>  $meses
+     */
+    public function gerarXlsx(Collection $linhas, array $meses): string
     {
         $cabecalhos = [
             'ID',
@@ -174,29 +236,36 @@ class EstabelecimentoUsoComparacaoService
             'Marketplace',
             'Safepay ID',
             'Situação',
-            'Qtd '.$this->rotuloMes($mesBase),
-            'TPV '.$this->rotuloMes($mesBase),
-            'Qtd '.$this->rotuloMes($mesComparado),
-            'TPV '.$this->rotuloMes($mesComparado),
-            'Variação R$',
-            'Variação %',
         ];
 
-        $dados = $linhas->map(function ($linha) {
-            return [
+        foreach ($meses as $mes) {
+            $rotulo = $this->rotuloMes($mes);
+            $cabecalhos[] = 'Qtd '.$rotulo;
+            $cabecalhos[] = 'TPV '.$rotulo;
+        }
+
+        $cabecalhos[] = 'Variação R$';
+        $cabecalhos[] = 'Variação %';
+
+        $dados = $linhas->map(function ($linha) use ($meses) {
+            $registro = [
                 (int) $linha->id,
                 $this->nome($linha),
                 $linha->cnpj ?: $linha->cpf ?: '',
                 $this->marketplace($linha),
                 (string) ($linha->token_pagseguro ?: ''),
                 self::SITUACOES[$linha->situacao] ?? $linha->situacao,
-                (int) $linha->qtd_base,
-                round((float) $linha->tpv_base, 2),
-                (int) $linha->qtd_comparado,
-                round((float) $linha->tpv_comparado, 2),
-                round((float) $linha->variacao, 2),
-                $linha->variacao_percentual === null ? '' : round((float) $linha->variacao_percentual, 2),
             ];
+
+            foreach ($meses as $mes) {
+                $registro[] = (int) ($linha->qtds[$mes] ?? 0);
+                $registro[] = round((float) ($linha->tpvs[$mes] ?? 0), 2);
+            }
+
+            $registro[] = round((float) $linha->variacao, 2);
+            $registro[] = $linha->variacao_percentual === null ? '' : round((float) $linha->variacao_percentual, 2);
+
+            return $registro;
         })->all();
 
         return SimpleXlsxWriter::binary($cabecalhos, $dados, 'Comparacao de uso');

@@ -36,4 +36,16 @@ class EstabelecimentoUsoComparacaoServiceTest extends TestCase
     {
         $this->assertSame(['2026-02-01', '2026-02-28'], $this->servico->intervaloDoMes('2026-02'));
     }
+
+    public function test_intervalo_inclui_os_meses_do_meio(): void
+    {
+        $this->assertSame(
+            ['2026-08', '2026-09', '2026-10'],
+            $this->servico->mesesDoIntervalo('2026-08', '2026-10'),
+        );
+        $this->assertSame(
+            ['2026-08', '2026-09', '2026-10', '2026-11'],
+            $this->servico->mesesDoIntervalo('2026-11', '2026-08'),
+        );
+    }
 }

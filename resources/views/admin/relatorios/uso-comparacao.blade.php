@@ -5,7 +5,7 @@
 @section('content')
 <div class="mb-5">
     <h1 class="text-lg font-semibold text-gray-800 dark:text-gray-100">Comparação de uso</h1>
-    <p class="mt-1 text-sm text-gray-500">Compare dois meses pelo EDI ou pela planilha da PagBank. O mês de referência é a base. O mês comparado mostra quem parou, baixou ou aumentou o uso.</p>
+    <p class="mt-1 text-sm text-gray-500">Escolha o primeiro e o último mês. O intervalo entra inteiro: agosto até outubro são 3 meses, até novembro são 4. A situação compara o primeiro mês com o último.</p>
 </div>
 
 @if ($errors->any())
@@ -43,11 +43,11 @@
             </select>
         </label>
         <label class="block space-y-1">
-            <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Mês de referência</span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Do mês</span>
             <input type="month" name="mes_base" value="{{ $filtros['mes_base'] }}" required class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">
         </label>
         <label class="block space-y-1">
-            <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Mês comparado</span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-gray-500">Até o mês</span>
             <input type="month" name="mes_comparado" value="{{ $filtros['mes_comparado'] }}" required class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">
         </label>
         <label class="block space-y-1">
@@ -105,23 +105,26 @@
         @endforeach
     </div>
     <p class="mb-3 text-xs text-gray-500">
-        TPV {{ $relatorio->rotuloMes($filtros['mes_base']) }}: R$ {{ number_format($resumo['tpv_base'], 2, ',', '.') }}
-        · TPV {{ $relatorio->rotuloMes($filtros['mes_comparado']) }}: R$ {{ number_format($resumo['tpv_comparado'], 2, ',', '.') }}
+        @foreach ($resumo['tpv_por_mes'] as $mes => $tpv)
+            TPV {{ $relatorio->rotuloMes($mes) }}: R$ {{ number_format($tpv, 2, ',', '.') }}
+            @if (! $loop->last) · @endif
+        @endforeach
         · {{ number_format($linhas->count(), 0, ',', '.') }} estabelecimento(s) neste filtro
+        · {{ count($meses) }} meses
     </p>
 
     <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
         <div class="overflow-x-auto">
-            <table class="w-full min-w-[1100px] text-sm">
+            <table class="w-full text-sm" style="min-width: {{ 760 + (count($meses) * 130) }}px">
                 <thead class="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                     <tr>
                         <th class="px-4 py-3">Estabelecimento</th>
                         <th class="px-4 py-3">Marketplace</th>
                         <th class="px-4 py-3">Situação</th>
-                        <th class="px-4 py-3 text-right">TPV {{ $relatorio->rotuloMes($filtros['mes_base']) }}</th>
-                        <th class="px-4 py-3 text-right">TPV {{ $relatorio->rotuloMes($filtros['mes_comparado']) }}</th>
+                        @foreach ($meses as $mes)
+                            <th class="px-4 py-3 text-right">TPV {{ $relatorio->rotuloMes($mes) }}</th>
+                        @endforeach
                         <th class="px-4 py-3 text-right">Variação</th>
-                        <th class="px-4 py-3 text-right">{{ $filtros['fonte'] === 'planilha' ? 'Linhas' : 'Tx' }}</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
@@ -144,19 +147,22 @@
                             <td class="px-4 py-3">
                                 <span class="rounded-full px-2 py-1 text-xs font-bold {{ $cor }}">{{ $situacoes[$linha->situacao] ?? $linha->situacao }}</span>
                             </td>
-                            <td class="px-4 py-3 text-right tabular-nums">R$ {{ number_format($linha->tpv_base, 2, ',', '.') }}</td>
-                            <td class="px-4 py-3 text-right tabular-nums">R$ {{ number_format($linha->tpv_comparado, 2, ',', '.') }}</td>
+                            @foreach ($meses as $mes)
+                                <td class="px-4 py-3 text-right tabular-nums">
+                                    R$ {{ number_format($linha->tpvs[$mes] ?? 0, 2, ',', '.') }}
+                                    <span class="block text-xs text-gray-400">{{ number_format($linha->qtds[$mes] ?? 0, 0, ',', '.') }} {{ $filtros['fonte'] === 'planilha' ? 'linhas' : 'tx' }}</span>
+                                </td>
+                            @endforeach
                             <td class="px-4 py-3 text-right tabular-nums font-semibold {{ $linha->variacao < 0 ? 'text-red-600' : ($linha->variacao > 0 ? 'text-emerald-600' : 'text-gray-600') }}">
                                 R$ {{ number_format($linha->variacao, 2, ',', '.') }}
                                 @if ($linha->variacao_percentual !== null)
                                     <span class="block text-xs font-medium">{{ number_format($linha->variacao_percentual, 1, ',', '.') }}%</span>
                                 @endif
                             </td>
-                            <td class="px-4 py-3 text-right tabular-nums text-gray-600">{{ number_format($linha->qtd_base, 0, ',', '.') }} → {{ number_format($linha->qtd_comparado, 0, ',', '.') }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="px-4 py-10 text-center text-gray-500">Nenhum estabelecimento nesta comparação.</td>
+                            <td colspan="{{ 4 + count($meses) }}" class="px-4 py-10 text-center text-gray-500">Nenhum estabelecimento nesta comparação.</td>
                         </tr>
                     @endforelse
                 </tbody>
